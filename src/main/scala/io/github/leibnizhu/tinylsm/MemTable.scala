@@ -23,7 +23,7 @@ case class MemTable(
    * 按key获取
    *
    * @param key key
-   * @return 可能为None
+   * @return 不存在Key则为None，如果put进来是空Array返回也是空Array，注意区分两种
    */
   def get(key: Array[Byte]): Option[Array[Byte]] = {
     Option(map.get(key.toList))

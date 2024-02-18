@@ -2,16 +2,26 @@ package io.github.leibnizhu.tinylsm
 
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.locks.{ReadWriteLock, ReentrantReadWriteLock}
+import java.util.concurrent.locks.{Lock, ReadWriteLock, ReentrantLock, ReentrantReadWriteLock}
 import scala.util.boundary
 
 class LsmStorageState(
-                       //当前Memtable
+                       // 当前Memtable
                        var memTable: MemTable,
                        // 不可变的Memtable，从最近到最早的
                        var immutableMemTables: List[MemTable]) {
+  // 对 MemTable 做 freeze 操作的读写锁
   val rwLock: ReadWriteLock = ReentrantReadWriteLock()
+  // MemTable 做 freeze 时，保证只有一个线程执行 freeze 的锁
+  val stateLock: Lock = ReentrantLock()
 
+  /**
+   * 封装只读操作
+   *
+   * @param f 只读的操作
+   * @tparam T 只读的响应类型
+   * @return 只读的结果
+   */
   def read[T](f: LsmStorageState => T): T = {
     val readLock = rwLock.readLock()
     try {
@@ -22,6 +32,13 @@ class LsmStorageState(
     }
   }
 
+  /**
+   * 封装写操作
+   *
+   * @param f 写的操作
+   * @tparam T 写操作的响应类型
+   * @return 写的结果
+   */
   def write[T](f: LsmStorageState => T): T = {
     val writeLock = rwLock.writeLock()
     try {
@@ -39,10 +56,12 @@ object LsmStorageState {
   }
 }
 
-private[tinylsm] class LsmStorageInner(path: File,
-                                       val state: LsmStorageState,
-                                       options: LsmStorageOptions,
-                                       nextSstId: AtomicInteger) {
+private[tinylsm] class LsmStorageInner(
+                                        // wal的根目录
+                                        path: File,
+                                        val state: LsmStorageState,
+                                        options: LsmStorageOptions,
+                                        nextSstId: AtomicInteger) {
   /**
    * 按key获取
    *
@@ -51,15 +70,21 @@ private[tinylsm] class LsmStorageInner(path: File,
    */
   def get(key: Array[Byte]): Option[Array[Byte]] = {
     assert(key != null && !key.isEmpty, "key cannot be empty")
+
+    // 先判断当前未 freeze 的MemTable是否有需要读取的值
     val inMemTable = state.read(_.memTable.get(key))
     if (inMemTable.isDefined) {
+      // 如果读取出来是墓碑（空Array）需要过滤返回None
       return inMemTable.filter(!_.sameElements(LsmStorageInner.DELETE_TOMBSTONE))
     }
+
+    // 由新到旧遍历已 freeze 的MemTable，找到直接返回
     state.read(st => {
       boundary:
         for mt <- st.immutableMemTables do
           val curValue = mt.get(key)
           if (curValue.isDefined) {
+            // 如果读取出来是墓碑（空Array）需要过滤返回None
             boundary.break(curValue.filter(!_.sameElements(LsmStorageInner.DELETE_TOMBSTONE)))
           }
         None
@@ -88,6 +113,7 @@ private[tinylsm] class LsmStorageInner(path: File,
   }
 
   private def doPut(key: Array[Byte], value: Array[Byte]): Unit = {
+    // 这里 MemTable 自己的线程安全由 ConcurrentHashMap 保证，所以只要读锁
     val estimatedSize = state.read(st => {
       st.memTable.put(key, value)
       st.memTable.approximateSize.get()
@@ -97,10 +123,16 @@ private[tinylsm] class LsmStorageInner(path: File,
 
   private def tryFreezeMemTable(estimatedSize: Int): Unit = {
     if (estimatedSize >= options.targetSstSize) {
-      // 双重校验
-      val canFreeze = state.read(st => st.memTable.approximateSize.get() >= this.options.targetSstSize)
-      if (canFreeze) {
-        this.forceFreezeMemTable()
+      try {
+        state.stateLock.lock()
+        // 双重校验，因为前面是用读锁进来的，当多个线程同时在 doPut() 读取都是超了targetSstSize大小的时候
+        // 还需要一个普通锁限制只能有一个线程做 freeze 的操作，同时进来的其他线程需要等待 stateLock
+        // 而 freeze 操作会上写锁，其他线程会在 doPut() 等待读锁
+        if (state.read(st => st.memTable.approximateSize.get() >= this.options.targetSstSize)) {
+          this.forceFreezeMemTable()
+        }
+      } finally {
+        state.stateLock.unlock()
       }
     }
   }
@@ -151,7 +183,7 @@ case class LsmStorageOptions
   numMemTableLimit: Int,
   // Compaction配置
   compactionOptions: CompactionOptions,
-  //是否启用WAL
+  // 是否启用WAL
   enableWal: Boolean,
   // 是否可序列化
   serializable: Boolean
