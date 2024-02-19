@@ -6,7 +6,7 @@ import java.io.File
 
 class MemTableTest extends AnyFunSuite {
 
-  test("test_task1_memtable_get") {
+  test("week1_day1_task1_memtable_get") {
     val memTable = MemTable(0)
     memTable.put("key1".getBytes, "value1".getBytes)
     memTable.put("key2".getBytes, "value2".getBytes)
@@ -16,7 +16,7 @@ class MemTableTest extends AnyFunSuite {
     assertResult("value3".getBytes)(memTable.get("key3".getBytes).get)
   }
 
-  test("test_task1_memtable_overwrite") {
+  test("week1_day1_task1_memtable_overwrite") {
     val memTable = MemTable(0)
     memTable.put("key1".getBytes, "value1".getBytes)
     memTable.put("key2".getBytes, "value2".getBytes)
@@ -29,87 +29,65 @@ class MemTableTest extends AnyFunSuite {
     assertResult("value33".getBytes)(memTable.get("key3".getBytes).get)
   }
 
-  test("test_task2_storage_integration") {
-    val tempDir = System.getProperty("java.io.tmpdir") + File.pathSeparator + "MemTableTest"
-    val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
-    val storage = LsmStorageInner(new File(tempDir), options)
+  test("week1_day2_task1_memtable_iter") {
+    val memTable = MemTable(0)
+    memTable.put("key2".getBytes, "value2".getBytes)
+    memTable.put("key1".getBytes, "value1".getBytes)
+    memTable.put("key3".getBytes, "value3".getBytes)
 
-    assert(storage.get("0".getBytes).isEmpty)
-
-    storage.put("1".getBytes, "233".getBytes)
-    storage.put("2".getBytes, "2333".getBytes)
-    storage.put("3".getBytes, "23333".getBytes)
-    assertResult("233".getBytes)(storage.get("1".getBytes).get)
-    assertResult("2333".getBytes)(storage.get("2".getBytes).get)
-    assertResult("23333".getBytes)(storage.get("3".getBytes).get)
-
-    storage.delete("2".getBytes)
-    assert(storage.get("2".getBytes).isEmpty);
-    // should NOT report any error
-    storage.delete("0".getBytes)
-  }
-
-  test("test_task3_storage_integration") {
-    val tempDir = System.getProperty("java.io.tmpdir") + File.pathSeparator + "MemTableTest"
-    val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
-    val storage = LsmStorageInner(new File(tempDir), options)
-
-    storage.put("1".getBytes, "233".getBytes)
-    storage.put("2".getBytes, "2333".getBytes)
-    storage.put("3".getBytes, "23333".getBytes)
-    storage.forceFreezeMemTable()
-    assertResult(1)(storage.state.read(_.immutableMemTables.length))
-    val previousApproximateSize = storage.state.read(_.immutableMemTables.head.approximateSize.get)
-    assert(previousApproximateSize >= 15)
-
-    storage.put("1".getBytes, "2333".getBytes)
-    storage.put("2".getBytes, "23333".getBytes)
-    storage.put("3".getBytes, "233333".getBytes)
-    storage.forceFreezeMemTable()
-    assertResult(2)(storage.state.read(_.immutableMemTables.length))
-    assertResult(previousApproximateSize)(storage.state.read(_.immutableMemTables(1).approximateSize.get))
-    assert(storage.state.read(_.immutableMemTables.head.approximateSize.get) > previousApproximateSize)
-  }
-
-  test("test_task3_freeze_on_capacity") {
-    val tempDir = System.getProperty("java.io.tmpdir") + File.pathSeparator + "MemTableTest"
-    val options = LsmStorageOptions(4096, 1024, 1000, NoCompaction(), false, false)
-    val storage = LsmStorageInner(new File(tempDir), options)
-
-    for (i <- 0 until 1000) {
-      storage.put("1".getBytes, "2333".getBytes)
+    {
+      val iter = memTable.scan(Unbounded(), Unbounded())
+      assert(iter.isValid)
+      iter.next()
+      assertResult("key1".getBytes)(iter.key())
+      assertResult("value1".getBytes)(iter.value())
+      assert(iter.isValid)
+      iter.next()
+      assertResult("key2".getBytes)(iter.key())
+      assertResult("value2".getBytes)(iter.value())
+      assert(iter.isValid)
+      iter.next()
+      assertResult("key3".getBytes)(iter.key())
+      assertResult("value3".getBytes)(iter.value())
+      assert(!iter.isValid)
     }
-    val numImmMemTables = storage.state.read(_.immutableMemTables.length)
-    assert(numImmMemTables >= 1)
-
-    for (i <- 0 until 1000) {
-      storage.delete("1".getBytes)
+    
+    {
+      val iter = memTable.scan(Included("key1".getBytes), Included("key2".getBytes))
+      assert(iter.isValid)
+      iter.next()
+      assertResult("key1".getBytes)(iter.key())
+      assertResult("value1".getBytes)(iter.value())
+      assert(iter.isValid)
+      iter.next()
+      assertResult("key2".getBytes)(iter.key())
+      assertResult("value2".getBytes)(iter.value())
+      assert(!iter.isValid)
     }
-    assert(storage.state.read(_.immutableMemTables.length) > numImmMemTables)
+    
+    {
+      val iter = memTable.scan(Excluded("key1".getBytes), Excluded("key3".getBytes))
+      assert(iter.isValid)
+      iter.next()
+      assertResult("key2".getBytes)(iter.key())
+      assertResult("value2".getBytes)(iter.value())
+      assert(!iter.isValid)
+    }
   }
 
-  test("test_task4_storage_integration") {
-    val tempDir = System.getProperty("java.io.tmpdir") + File.pathSeparator + "MemTableTest"
-    val options = LsmStorageOptions(4096, 1024, 1000, NoCompaction(), false, false)
-    val storage = LsmStorageInner(new File(tempDir), options)
-
-    assert(storage.get("0".getBytes).isEmpty)
-
-    storage.put("1".getBytes, "233".getBytes)
-    storage.put("2".getBytes, "2333".getBytes)
-    storage.put("3".getBytes, "23333".getBytes)
-    storage.forceFreezeMemTable()
-    storage.delete("1".getBytes)
-    storage.delete("2".getBytes)
-    storage.put("3".getBytes, "2333".getBytes)
-    storage.put("4".getBytes, "23333".getBytes)
-    storage.forceFreezeMemTable()
-    storage.put("1".getBytes, "233333".getBytes)
-    storage.put("3".getBytes, "233333".getBytes)
-    assertResult(2)(storage.state.read(_.immutableMemTables.length))
-    assertResult("233333".getBytes)(storage.get("1".getBytes).get)
-    assert(storage.get("2".getBytes).isEmpty)
-    assertResult("233333".getBytes)(storage.get("3".getBytes).get)
-    assertResult("23333".getBytes)(storage.get("4".getBytes).get)
+  test("week1_day2_task1_empty_memtable_iter"){
+    val memTable = MemTable(0)
+    {
+      val iter = memTable.scan(Excluded("key1".getBytes), Excluded("key3".getBytes))
+      assert(!iter.isValid)
+    }
+    {
+      val iter = memTable.scan(Included("key1".getBytes), Included("key2".getBytes))
+      assert(!iter.isValid)
+    }
+    {
+      val iter = memTable.scan(Unbounded(), Unbounded())
+      assert(!iter.isValid)
+    }
   }
 }

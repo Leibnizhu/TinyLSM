@@ -1,23 +1,28 @@
 package io.github.leibnizhu.tinylsm
 
+
 import java.io.File
-import java.util.concurrent.ConcurrentHashMap
+import java.util
+import java.util.concurrent.ConcurrentSkipListMap
 import java.util.concurrent.atomic.AtomicInteger
+import scala.jdk.CollectionConverters.*
+import scala.runtime.Arrays
+import scala.util.hashing.MurmurHash3
 
 /**
  * MemTable。
  * 其大小增长到 LsmStorageOptions.targetSstSize 之后，需要冻结，并flush到磁盘
  *
  * @param id              MemTable唯一标识，应该是自增的，或至少是单调增的
- * @param map             内部存储的Map，Key用了List[Byte]，是为了利用List有效的equals方法；否则如果用Array[Byte]，equals和hashCode使用的是对象ID
+ * @param map             内部存储的Map，Key用了ByteArrayKey，自定义了有效的equals方法；否则如果用Array[Byte]，equals和hashCode使用的是对象ID
  * @param wal             可选的WriteAheadLog
  * @param approximateSize 记录当前的预估大小
  */
 case class MemTable(
                      id: Int,
-                     map: ConcurrentHashMap[List[Byte], Array[Byte]],
+                     map: ConcurrentSkipListMap[ByteArrayKey, MemTableValue],
                      wal: Option[WriteAheadLog],
-                     val approximateSize: AtomicInteger) {
+                     approximateSize: AtomicInteger) {
 
   /**
    * 按key获取
@@ -25,8 +30,8 @@ case class MemTable(
    * @param key key
    * @return 不存在Key则为None，如果put进来是空Array返回也是空Array，注意区分两种
    */
-  def get(key: Array[Byte]): Option[Array[Byte]] = {
-    Option(map.get(key.toList))
+  def get(key: Array[Byte]): Option[MemTableValue] = {
+    Option(map.get(ByteArrayKey(key)))
   }
 
   /**
@@ -35,12 +40,30 @@ case class MemTable(
    * @param key   key
    * @param value 如果要执行delete操作，可以传入空Array
    */
-  def put(key: Array[Byte], value: Array[Byte]): Unit = {
+  def put(key: Array[Byte], value: MemTableValue): Unit = {
     val estimateSize = key.length + (if (value == null) 0 else value.length)
-    map.put(key.toList, value)
+    map.put(ByteArrayKey(key), value)
     approximateSize.addAndGet(estimateSize)
     wal.foreach(_wal => _wal.put(key, value))
   }
+
+  /**
+   * 按指定的上下界返回满足条件的Map迭代器
+   *
+   * @param lower 下界
+   * @param upper 上界
+   * @return MemTableIterator
+   */
+  def scan(lower: Bound, upper: Bound): MemTableIterator = (lower, upper) match
+    case (Unbounded(), Unbounded()) =>
+      new MemTableIterator(map.entrySet().iterator().asScala)
+    case (Unbounded(), Bounded(r: Array[Byte], inclusive: Boolean)) =>
+      new MemTableIterator(map.headMap(ByteArrayKey(r), inclusive).entrySet().iterator().asScala)
+    case (Bounded(l: Array[Byte], inclusive: Boolean), Unbounded()) =>
+      new MemTableIterator(map.tailMap(ByteArrayKey(l), inclusive).entrySet().iterator().asScala)
+    case (Bounded(l: Array[Byte], il: Boolean), Bounded(r: Array[Byte], ir: Boolean)) =>
+      new MemTableIterator(map.subMap(ByteArrayKey(l), il, ByteArrayKey(r), ir).entrySet().iterator().asScala)
+    case (_, _) => null
 }
 
 object MemTable {
@@ -51,7 +74,69 @@ object MemTable {
    * @return MemTable实例
    */
   def apply(id: Int, walPath: Option[File] = None): MemTable = new MemTable(id,
-    new ConcurrentHashMap[List[Byte], Array[Byte]](),
+    new ConcurrentSkipListMap[ByteArrayKey, MemTableValue](),
     walPath.map(p => WriteAheadLog(p)),
     AtomicInteger(0))
+}
+
+case class ByteArrayKey(val bytes: Array[Byte]) extends Comparable[ByteArrayKey] {
+  override def compareTo(other: ByteArrayKey): Int = {
+    val a = this.bytes
+    val b = other.bytes
+    if (a eq b) {
+      return 0
+    }
+    if (a == null || b == null) {
+      return if (a == null) -1 else 1
+    }
+
+    val i = mismatch(a, b, Math.min(a.length, b.length))
+    if (i >= 0) {
+      return java.lang.Byte.compare(a(i), b(i))
+    }
+    a.length - b.length
+  }
+
+  private def mismatch(a: Array[Byte], b: Array[Byte], length: Int): Int = {
+    var i: Int = 0
+    while (i < length) {
+      if (a(i) != b(i)) {
+        return i
+      }
+      i += 1
+    }
+    -1
+  }
+
+  override def hashCode(): Int = MurmurHash3.seqHash(this.bytes)
+
+  override def equals(other: Any): Boolean = other match
+    case ByteArrayKey(bs) => bs.sameElements(this.bytes)
+    case _ => false
+
+  override def toString: String = bytes.mkString("[", ", ", "]")
+
+  /**
+   * 如果有边界值，则大于(等于)边界
+   *
+   * @param lower 下边界
+   * @return 是否满足下边界
+   */
+  def lowerBound(lower: Bound): Boolean = lower match
+    case Unbounded() => true
+    case Excluded(bound: Array[Byte]) => this.compareTo(ByteArrayKey(bound)) > 0
+    case Included(bound: Array[Byte]) => this.compareTo(ByteArrayKey(bound)) >= 0
+    case _ => false
+
+  /**
+   * 如果有边界值，则小于(等于)边界
+   *
+   * @param upper 上边界
+   * @return 是否满足上边界
+   */
+  def upperBound(upper: Bound): Boolean = upper match
+    case Unbounded() => true
+    case Excluded(bound: Array[Byte]) => this.compareTo(ByteArrayKey(bound)) < 0
+    case Included(bound: Array[Byte]) => this.compareTo(ByteArrayKey(bound)) <= 0
+    case _ => false
 }
