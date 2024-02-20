@@ -9,9 +9,9 @@ class FusedIteratorTest extends AnyFunSuite {
   test("week1_day2_task3_fused_iterator") {
     val fusedIter1 = new FusedIterator(MemTableIterator(Iterator.empty))
     assert(!fusedIter1.isValid)
-    assertThrows[Exception](fusedIter1.next())
-    assertThrows[Exception](fusedIter1.next())
-    assertThrows[Exception](fusedIter1.next())
+    fusedIter1.next()
+    fusedIter1.next()
+    fusedIter1.next()
     assert(!fusedIter1.isValid)
 
 

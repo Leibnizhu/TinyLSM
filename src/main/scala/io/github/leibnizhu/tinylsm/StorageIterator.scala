@@ -224,15 +224,43 @@ class LsmIterator extends MemTableStorageIterator {
   override def next(): Unit = ???
 }
 
-class FusedIterator[K,V](val iter: StorageIterator[K,V])
-  extends StorageIterator[K,V] {
-  override def key(): K = ???
+class FusedIterator[K, V](val iter: StorageIterator[K, V],
+                          var errorThrown: Boolean = false)
+  extends StorageIterator[K, V] {
+  override def key(): K = {
+    if (!isValid) {
+      throw new IllegalStateException("Iterator is invalid")
+    }
+    iter.key()
+  }
 
-  override def value(): V = ???
+  override def value(): V = {
+    if (!isValid) {
+      throw new IllegalStateException("Iterator is invalid")
+    }
+    iter.value()
 
-  override def isValid: Boolean = ???
+  }
 
-  override def next(): Unit = ???
+  override def isValid: Boolean = {
+    !errorThrown && iter.isValid
+  }
+
+  override def next(): Unit = {
+    if (errorThrown) {
+      throw new IllegalStateException(" This Iterator threw exception...")
+    }
+    if (iter.isValid) {
+      try {
+        iter.next()
+      } catch {
+        case t: Throwable => {
+          errorThrown = true
+          throw t
+        }
+      }
+    }
+  }
 
   override def numActiveIterators(): Int = iter.numActiveIterators()
 }
