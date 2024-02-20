@@ -7,62 +7,72 @@ import org.scalatest.funsuite.AnyFunSuite
 class MergeIteratorTest extends AnyFunSuite {
 
   test("week_day2_task2_merge_1") {
-    val i1 = MemTableIterator(List(
+    val i1 = List(
       entry("a", "1.1"),
       entry("b", "2.1"),
       entry("c", "3.1"),
       entry("e", "")
-    ).iterator)
-    val i2 = MemTableIterator(List(
+    )
+    val i2 = List(
       entry("a", "1.2"),
       entry("b", "2.2"),
       entry("c", "3.2"),
       entry("d", "4.2")
-    ).iterator)
-    val i3 = MemTableIterator(List(
+    )
+    val i3 = List(
       entry("b", "2.3"),
       entry("c", "3.3"),
       entry("d", "4.3")
-    ).iterator)
-    val iter = MergeIterator(List(i1, i2, i3))
+    )
+    val iter = MergeIterator(List(
+      MemTableIterator(i1.iterator), 
+      MemTableIterator(i2.iterator), 
+      MemTableIterator(i3.iterator)))
     checkIterator(List(
       entry("a", "1.1"),
       entry("b", "2.1"),
       entry("c", "3.1"),
       entry("d", "4.2"),
       entry("e", "")
-    ).iterator, iter)
+    ), iter)
 
-    val iter2 = MergeIterator(List(i3, i1, i2))
+    val iter2 = MergeIterator(List(
+      MemTableIterator(i3.iterator),
+      MemTableIterator(i1.iterator),
+      MemTableIterator(i2.iterator)))
     checkIterator(List(
       entry("a", "1.1"),
       entry("b", "2.3"),
       entry("c", "3.3"),
       entry("d", "4.3"),
       entry("e", "")
-    ).iterator, iter2)
+    ), iter2)
   }
 
   test("week_day2_task2_merge_2") {
-    val i1 = MemTableIterator(List(
+    val i1 = List(
       entry("a", "1.1"),
       entry("b", "2.1"),
       entry("c", "3.1")
-    ).iterator)
-    val i2 = MemTableIterator(List(
+    )
+    val i2 = List(
       entry("d", "1.2"),
       entry("e", "2.2"),
       entry("f", "3.2"),
       entry("g", "4.2")
-    ).iterator)
-    val i3 = MemTableIterator(List(
+    )
+    val i3 = List(
       entry("h", "1.3"),
       entry("i", "2.3"),
       entry("j", "3.3"),
       entry("k", "4.3")
-    ).iterator)
-    val i4 = MemTableIterator(List().iterator)
-    val iter = MergeIterator(List(i1, i2, i3, i4))
+    )
+    val i4 = List()
+    val iter = MergeIterator(List(
+      MemTableIterator(i1.iterator), 
+      MemTableIterator(i2.iterator), 
+      MemTableIterator(i3.iterator), 
+      MemTableIterator(i4.iterator)))
     val expect = List(
       entry("a", "1.1"),
       entry("b", "2.1"),
@@ -75,21 +85,29 @@ class MergeIteratorTest extends AnyFunSuite {
       entry("i", "2.3"),
       entry("j", "3.3"),
       entry("k", "4.3"),
-    ).iterator
+    )
     checkIterator(expect, iter)
 
     // key都唯一，没有覆盖过所以顺序不变
-    val iter2 = MergeIterator(List(i2, i4, i3, i1))
+    val iter2 = MergeIterator(List(
+      MemTableIterator(i2.iterator),
+      MemTableIterator(i4.iterator),
+      MemTableIterator(i3.iterator),
+      MemTableIterator(i1.iterator)))
     checkIterator(expect, iter2)
 
     // key都唯一，没有覆盖过所以顺序不变
-    val iter3 = MergeIterator(List(i4, i3, i2, i1))
+    val iter3 = MergeIterator(List(
+      MemTableIterator(i4.iterator),
+      MemTableIterator(i3.iterator),
+      MemTableIterator(i2.iterator),
+      MemTableIterator(i1.iterator)))
     checkIterator(expect, iter3)
   }
 
   test("week_day2_task2_merge_empty") {
     val iter1 = MergeIterator(List())
-    checkIterator(List().iterator, iter1)
+    checkIterator(List(), iter1)
 
     val i1 = MemTableIterator(List(
       entry("a", "1.1"),
@@ -102,12 +120,12 @@ class MergeIteratorTest extends AnyFunSuite {
       entry("a", "1.1"),
       entry("b", "2.1"),
       entry("c", "3.1")
-    ).iterator, iter2)
+    ), iter2)
   }
 
   test("week_day2_task2_merge_error") {
     val iter1 = MergeIterator(List())
-    checkIterator(List().iterator, iter1)
+    checkIterator(List(), iter1)
 
     val i1 = MemTableIterator(List(
       entry("a", "1.1"),
@@ -129,22 +147,22 @@ class MergeIteratorTest extends AnyFunSuite {
     Entry(ByteArrayKey(k.getBytes), v.getBytes)
   }
 
-  private def checkIterator(expect: Iterator[MemTableEntry], actual: MemTableStorageIterator): Unit = {
-    while (expect.hasNext) {
-      val expectEntry = expect.next()
+  private def checkIterator(expect: List[MemTableEntry], actual: MemTableStorageIterator): Unit = {
+    for (expectEntry <- expect) {
       assert(actual.isValid)
-      actual.next()
+      println(s"Expect: ${new String(expectEntry.getKey.bytes)} => ${new String(expectEntry.getValue)}, Actual: ${new String(actual.key())} => ${new String(actual.value())}")
       assertResult(expectEntry.getKey.bytes)(actual.key())
       assertResult(expectEntry.getValue)(actual.value())
+      actual.next()
     }
     assert(!actual.isValid)
   }
 
   private def expectIteratorError(actual: MemTableStorageIterator): Unit = {
-    assertThrows[Exception](() => {
+    assertThrows[Exception] {
       while (actual.isValid) {
         actual.next()
       }
-    })
+    }
   }
 }

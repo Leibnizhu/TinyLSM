@@ -6,7 +6,6 @@ import java.util
 import java.util.concurrent.ConcurrentSkipListMap
 import java.util.concurrent.atomic.AtomicInteger
 import scala.jdk.CollectionConverters.*
-import scala.runtime.Arrays
 import scala.util.hashing.MurmurHash3
 
 /**
@@ -30,7 +29,7 @@ case class MemTable(
    * @param key key
    * @return 不存在Key则为None，如果put进来是空Array返回也是空Array，注意区分两种
    */
-  def get(key: Array[Byte]): Option[MemTableValue] = {
+  def get(key: MemTableKey): Option[MemTableValue] = {
     Option(map.get(ByteArrayKey(key)))
   }
 
@@ -40,7 +39,7 @@ case class MemTable(
    * @param key   key
    * @param value 如果要执行delete操作，可以传入空Array
    */
-  def put(key: Array[Byte], value: MemTableValue): Unit = {
+  def put(key: MemTableKey, value: MemTableValue): Unit = {
     val estimateSize = key.length + (if (value == null) 0 else value.length)
     map.put(ByteArrayKey(key), value)
     approximateSize.addAndGet(estimateSize)
@@ -57,11 +56,11 @@ case class MemTable(
   def scan(lower: Bound, upper: Bound): MemTableIterator = (lower, upper) match
     case (Unbounded(), Unbounded()) =>
       new MemTableIterator(map.entrySet().iterator().asScala)
-    case (Unbounded(), Bounded(r: Array[Byte], inclusive: Boolean)) =>
+    case (Unbounded(), Bounded(r: MemTableKey, inclusive: Boolean)) =>
       new MemTableIterator(map.headMap(ByteArrayKey(r), inclusive).entrySet().iterator().asScala)
-    case (Bounded(l: Array[Byte], inclusive: Boolean), Unbounded()) =>
+    case (Bounded(l: MemTableKey, inclusive: Boolean), Unbounded()) =>
       new MemTableIterator(map.tailMap(ByteArrayKey(l), inclusive).entrySet().iterator().asScala)
-    case (Bounded(l: Array[Byte], il: Boolean), Bounded(r: Array[Byte], ir: Boolean)) =>
+    case (Bounded(l: MemTableKey, il: Boolean), Bounded(r: MemTableKey, ir: Boolean)) =>
       new MemTableIterator(map.subMap(ByteArrayKey(l), il, ByteArrayKey(r), ir).entrySet().iterator().asScala)
     case (_, _) => null
 }
@@ -79,36 +78,12 @@ object MemTable {
     AtomicInteger(0))
 }
 
-case class ByteArrayKey(val bytes: Array[Byte]) extends Comparable[ByteArrayKey] {
+case class ByteArrayKey(val bytes: MemTableKey) extends Comparable[ByteArrayKey] {
   override def compareTo(other: ByteArrayKey): Int = {
-    val a = this.bytes
-    val b = other.bytes
-    if (a eq b) {
-      return 0
-    }
-    if (a == null || b == null) {
-      return if (a == null) -1 else 1
-    }
-
-    val i = mismatch(a, b, Math.min(a.length, b.length))
-    if (i >= 0) {
-      return java.lang.Byte.compare(a(i), b(i))
-    }
-    a.length - b.length
+    byteArrayCompare(this.bytes, other.bytes)
   }
 
-  private def mismatch(a: Array[Byte], b: Array[Byte], length: Int): Int = {
-    var i: Int = 0
-    while (i < length) {
-      if (a(i) != b(i)) {
-        return i
-      }
-      i += 1
-    }
-    -1
-  }
-
-  override def hashCode(): Int = MurmurHash3.seqHash(this.bytes)
+  override def hashCode(): Int = byteArrayHash(this.bytes)
 
   override def equals(other: Any): Boolean = other match
     case ByteArrayKey(bs) => bs.sameElements(this.bytes)
@@ -124,8 +99,8 @@ case class ByteArrayKey(val bytes: Array[Byte]) extends Comparable[ByteArrayKey]
    */
   def lowerBound(lower: Bound): Boolean = lower match
     case Unbounded() => true
-    case Excluded(bound: Array[Byte]) => this.compareTo(ByteArrayKey(bound)) > 0
-    case Included(bound: Array[Byte]) => this.compareTo(ByteArrayKey(bound)) >= 0
+    case Excluded(bound: MemTableKey) => this.compareTo(ByteArrayKey(bound)) > 0
+    case Included(bound: MemTableKey) => this.compareTo(ByteArrayKey(bound)) >= 0
     case _ => false
 
   /**
@@ -136,7 +111,7 @@ case class ByteArrayKey(val bytes: Array[Byte]) extends Comparable[ByteArrayKey]
    */
   def upperBound(upper: Bound): Boolean = upper match
     case Unbounded() => true
-    case Excluded(bound: Array[Byte]) => this.compareTo(ByteArrayKey(bound)) < 0
-    case Included(bound: Array[Byte]) => this.compareTo(ByteArrayKey(bound)) <= 0
+    case Excluded(bound: MemTableKey) => this.compareTo(ByteArrayKey(bound)) < 0
+    case Included(bound: MemTableKey) => this.compareTo(ByteArrayKey(bound)) <= 0
     case _ => false
 }

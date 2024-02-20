@@ -68,7 +68,7 @@ private[tinylsm] class LsmStorageInner(
    * @param key key
    * @return 可能为None
    */
-  def get(key: Array[Byte]): Option[MemTableValue] = {
+  def get(key: MemTableKey): Option[MemTableValue] = {
     assert(key != null && !key.isEmpty, "key cannot be empty")
 
     // 先判断当前未 freeze 的MemTable是否有需要读取的值
@@ -97,7 +97,7 @@ private[tinylsm] class LsmStorageInner(
    * @param key   key
    * @param value 如果要执行delete操作，可以传入null
    */
-  def put(key: Array[Byte], value: MemTableValue): Unit = {
+  def put(key: MemTableKey, value: MemTableValue): Unit = {
     assert(key != null && !key.isEmpty, "key cannot be empty")
     assert(value != null, "value cannot be empty")
     doPut(key, value)
@@ -108,11 +108,11 @@ private[tinylsm] class LsmStorageInner(
    *
    * @param key key
    */
-  def delete(key: Array[Byte]): Unit = {
+  def delete(key: MemTableKey): Unit = {
     put(key, LsmStorageInner.DELETE_TOMBSTONE)
   }
 
-  private def doPut(key: Array[Byte], value: MemTableValue): Unit = {
+  private def doPut(key: MemTableKey, value: MemTableValue): Unit = {
     // 这里 MemTable 自己的线程安全由 ConcurrentHashMap 保证，所以只要读锁
     val estimatedSize = state.read(st => {
       st.memTable.put(key, value)

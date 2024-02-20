@@ -29,6 +29,12 @@ class MemTableTest extends AnyFunSuite {
     assertResult("value33".getBytes)(memTable.get("key3".getBytes).get)
   }
 
+  test("week1_day2_task1_memtable_iter_empty") {
+    val memTable = MemTable(0)
+    val iter = memTable.scan(Unbounded(), Unbounded())
+    assert(!iter.isValid)
+  }
+  
   test("week1_day2_task1_memtable_iter") {
     val memTable = MemTable(0)
     memTable.put("key2".getBytes, "value2".getBytes)
@@ -38,39 +44,39 @@ class MemTableTest extends AnyFunSuite {
     {
       val iter = memTable.scan(Unbounded(), Unbounded())
       assert(iter.isValid)
-      iter.next()
       assertResult("key1".getBytes)(iter.key())
       assertResult("value1".getBytes)(iter.value())
-      assert(iter.isValid)
       iter.next()
+      assert(iter.isValid)
       assertResult("key2".getBytes)(iter.key())
       assertResult("value2".getBytes)(iter.value())
-      assert(iter.isValid)
       iter.next()
+      assert(iter.isValid)
       assertResult("key3".getBytes)(iter.key())
       assertResult("value3".getBytes)(iter.value())
+      iter.next()
       assert(!iter.isValid)
     }
     
     {
       val iter = memTable.scan(Included("key1".getBytes), Included("key2".getBytes))
       assert(iter.isValid)
-      iter.next()
       assertResult("key1".getBytes)(iter.key())
       assertResult("value1".getBytes)(iter.value())
-      assert(iter.isValid)
       iter.next()
+      assert(iter.isValid)
       assertResult("key2".getBytes)(iter.key())
       assertResult("value2".getBytes)(iter.value())
+      iter.next()
       assert(!iter.isValid)
     }
     
     {
       val iter = memTable.scan(Excluded("key1".getBytes), Excluded("key3".getBytes))
       assert(iter.isValid)
-      iter.next()
       assertResult("key2".getBytes)(iter.key())
       assertResult("value2".getBytes)(iter.value())
+      iter.next()
       assert(!iter.isValid)
     }
   }
