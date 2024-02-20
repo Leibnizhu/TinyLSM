@@ -1,5 +1,6 @@
 package io.github.leibnizhu.tinylsm
 
+import io.github.leibnizhu.tinylsm.TestUtils.*
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.Entry
 import org.scalatest.funsuite.AnyFunSuite
@@ -24,9 +25,5 @@ class FusedIteratorTest extends AnyFunSuite {
     assert(!fusedIter2.isValid)
     assertThrows[Exception](fusedIter2.next())
     assertThrows[Exception](fusedIter2.next())
-  }
-
-  private def entry(k: String, v: String): MemTableEntry = {
-    Entry(ByteArrayKey(k.getBytes), v.getBytes)
   }
 }

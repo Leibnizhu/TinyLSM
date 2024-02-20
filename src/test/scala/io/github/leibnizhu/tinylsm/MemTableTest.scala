@@ -2,8 +2,6 @@ package io.github.leibnizhu.tinylsm
 
 import org.scalatest.funsuite.AnyFunSuite
 
-import java.io.File
-
 class MemTableTest extends AnyFunSuite {
 
   test("week1_day1_task1_memtable_get") {
@@ -34,7 +32,7 @@ class MemTableTest extends AnyFunSuite {
     val iter = memTable.scan(Unbounded(), Unbounded())
     assert(!iter.isValid)
   }
-  
+
   test("week1_day2_task1_memtable_iter") {
     val memTable = MemTable(0)
     memTable.put("key2".getBytes, "value2".getBytes)
@@ -57,7 +55,7 @@ class MemTableTest extends AnyFunSuite {
       iter.next()
       assert(!iter.isValid)
     }
-    
+
     {
       val iter = memTable.scan(Included("key1".getBytes), Included("key2".getBytes))
       assert(iter.isValid)
@@ -70,7 +68,7 @@ class MemTableTest extends AnyFunSuite {
       iter.next()
       assert(!iter.isValid)
     }
-    
+
     {
       val iter = memTable.scan(Excluded("key1".getBytes), Excluded("key3".getBytes))
       assert(iter.isValid)
@@ -81,7 +79,7 @@ class MemTableTest extends AnyFunSuite {
     }
   }
 
-  test("week1_day2_task1_empty_memtable_iter"){
+  test("week1_day2_task1_empty_memtable_iter") {
     val memTable = MemTable(0)
     {
       val iter = memTable.scan(Excluded("key1".getBytes), Excluded("key3".getBytes))

@@ -1,11 +1,12 @@
 package io.github.leibnizhu.tinylsm
 
+import io.github.leibnizhu.tinylsm.TestUtils.{checkIterator, entry}
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File
 
-class LsmStorageStateTest extends AnyFunSuite {
-  
+class LsmStorageTest extends AnyFunSuite {
+
   test("week1_day1_task2_storage_integration") {
     val tempDir = System.getProperty("java.io.tmpdir") + File.pathSeparator + "MemTableTest"
     val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
@@ -88,5 +89,46 @@ class LsmStorageStateTest extends AnyFunSuite {
     assert(storage.get("2".getBytes).isEmpty)
     assertResult("233333".getBytes)(storage.get("3".getBytes).get)
     assertResult("23333".getBytes)(storage.get("4".getBytes).get)
+  }
+
+  test("week1_day2_task4_integration") {
+    val tempDir = System.getProperty("java.io.tmpdir") + File.pathSeparator + "MemTableTest"
+    val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
+    val storage = LsmStorageInner(new File(tempDir), options)
+
+    storage.put("1".getBytes, "233".getBytes)
+    storage.put("2".getBytes, "2333".getBytes)
+    storage.put("3".getBytes, "23333".getBytes)
+    storage.forceFreezeMemTable()
+    storage.delete("1".getBytes)
+    storage.delete("2".getBytes)
+    storage.put("3".getBytes, "2333".getBytes)
+    storage.put("4".getBytes, "23333".getBytes)
+    storage.forceFreezeMemTable()
+    storage.put("1".getBytes, "233333".getBytes)
+    storage.put("3".getBytes, "233333".getBytes)
+
+    {
+      val iter = storage.scan(Unbounded(), Unbounded())
+      checkIterator(List(
+        entry("1", "233333"),
+        entry("3", "233333"),
+        entry("4", "23333")), iter)
+      assert(!iter.isValid)
+      iter.next()
+      iter.next()
+      iter.next()
+      assert(!iter.isValid)
+    }
+
+    {
+      val iter = storage.scan(Included("2".getBytes), Included("3".getBytes))
+      checkIterator(List(entry("3", "233333")), iter)
+      assert(!iter.isValid)
+      iter.next()
+      iter.next()
+      iter.next()
+      assert(!iter.isValid)
+    }
   }
 }

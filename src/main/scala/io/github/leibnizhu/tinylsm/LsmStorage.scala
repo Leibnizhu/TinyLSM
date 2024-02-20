@@ -3,6 +3,7 @@ package io.github.leibnizhu.tinylsm
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.{Lock, ReadWriteLock, ReentrantLock, ReentrantReadWriteLock}
+import scala.collection.mutable.ArrayBuffer
 import scala.util.boundary
 
 class LsmStorageState(
@@ -75,7 +76,7 @@ private[tinylsm] class LsmStorageInner(
     val inMemTable = state.read(_.memTable.get(key))
     if (inMemTable.isDefined) {
       // 如果读取出来是墓碑（空Array）需要过滤返回None
-      return inMemTable.filter(!_.sameElements(LsmStorageInner.DELETE_TOMBSTONE))
+      return inMemTable.filter(!_.sameElements(DELETE_TOMBSTONE))
     }
 
     // 由新到旧遍历已 freeze 的MemTable，找到直接返回
@@ -85,7 +86,7 @@ private[tinylsm] class LsmStorageInner(
           val curValue = mt.get(key)
           if (curValue.isDefined) {
             // 如果读取出来是墓碑（空Array）需要过滤返回None
-            boundary.break(curValue.filter(!_.sameElements(LsmStorageInner.DELETE_TOMBSTONE)))
+            boundary.break(curValue.filter(!_.sameElements(DELETE_TOMBSTONE)))
           }
         None
     })
@@ -109,7 +110,7 @@ private[tinylsm] class LsmStorageInner(
    * @param key key
    */
   def delete(key: MemTableKey): Unit = {
-    put(key, LsmStorageInner.DELETE_TOMBSTONE)
+    put(key, DELETE_TOMBSTONE)
   }
 
   private def doPut(key: MemTableKey, value: MemTableValue): Unit = {
@@ -157,6 +158,16 @@ private[tinylsm] class LsmStorageInner(
   private def pathOfWal(sstId: Int): File = {
     new File(path, sstId.toString)
   }
+
+  def scan(lower: Bound, upper: Bound): FusedIterator[MemTableKey, MemTableValue] = {
+    val memTableIters = ArrayBuffer[MemTableIterator]()
+    state.read(st => {
+      memTableIters.addOne(st.memTable.scan(lower, upper))
+      st.immutableMemTables.map(mt => mt.scan(lower, upper)).foreach(memTableIters.addOne)
+    })
+    val memTableIter = MergeIterator(memTableIters.toList)
+    FusedIterator(LsmIterator(memTableIter, upper))
+  }
 }
 
 object LsmStorageInner {
@@ -164,8 +175,6 @@ object LsmStorageInner {
     val state = LsmStorageState(options)
     new LsmStorageInner(path, state, options, AtomicInteger(0))
   }
-
-  private val DELETE_TOMBSTONE = Array[Byte]()
 
 }
 

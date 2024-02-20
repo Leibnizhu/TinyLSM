@@ -1,5 +1,6 @@
 package io.github.leibnizhu.tinylsm
 
+import io.github.leibnizhu.tinylsm.TestUtils.*
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.Entry
 import org.scalatest.funsuite.AnyFunSuite
@@ -25,8 +26,8 @@ class MergeIteratorTest extends AnyFunSuite {
       entry("d", "4.3")
     )
     val iter = MergeIterator(List(
-      MemTableIterator(i1.iterator), 
-      MemTableIterator(i2.iterator), 
+      MemTableIterator(i1.iterator),
+      MemTableIterator(i2.iterator),
       MemTableIterator(i3.iterator)))
     checkIterator(List(
       entry("a", "1.1"),
@@ -69,9 +70,9 @@ class MergeIteratorTest extends AnyFunSuite {
     )
     val i4 = List()
     val iter = MergeIterator(List(
-      MemTableIterator(i1.iterator), 
-      MemTableIterator(i2.iterator), 
-      MemTableIterator(i3.iterator), 
+      MemTableIterator(i1.iterator),
+      MemTableIterator(i2.iterator),
+      MemTableIterator(i3.iterator),
       MemTableIterator(i4.iterator)))
     val expect = List(
       entry("a", "1.1"),
@@ -145,24 +146,5 @@ class MergeIteratorTest extends AnyFunSuite {
 
   private def entry(k: String, v: String): MemTableEntry = {
     Entry(ByteArrayKey(k.getBytes), v.getBytes)
-  }
-
-  private def checkIterator(expect: List[MemTableEntry], actual: MemTableStorageIterator): Unit = {
-    for (expectEntry <- expect) {
-      assert(actual.isValid)
-      println(s"Expect: ${new String(expectEntry.getKey.bytes)} => ${new String(expectEntry.getValue)}, Actual: ${new String(actual.key())} => ${new String(actual.value())}")
-      assertResult(expectEntry.getKey.bytes)(actual.key())
-      assertResult(expectEntry.getValue)(actual.value())
-      actual.next()
-    }
-    assert(!actual.isValid)
-  }
-
-  private def expectIteratorError(actual: MemTableStorageIterator): Unit = {
-    assertThrows[Exception] {
-      while (actual.isValid) {
-        actual.next()
-      }
-    }
   }
 }

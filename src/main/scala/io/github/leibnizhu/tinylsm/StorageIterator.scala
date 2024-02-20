@@ -52,7 +52,6 @@ class MemTableIterator(val iterator: Iterator[MemTableEntry])
    * 当前key
    */
   override def key(): MemTableKey = {
-    assert(currentEntry != null, "Plz call next() first")
     currentEntry.getKey.bytes
   }
 
@@ -62,7 +61,6 @@ class MemTableIterator(val iterator: Iterator[MemTableEntry])
    * @return
    */
   override def value(): MemTableValue = {
-    assert(currentEntry != null, "Plz call next() first")
     currentEntry.getValue
   }
 
@@ -213,20 +211,70 @@ object MergeIterator {
   }
 }
 
+/**
+ * LsmIterator内部包装的迭代器类型，后续可能会变
+ */
+type LsmIteratorInner = MergeIterator
 
-class LsmIterator extends MemTableStorageIterator {
-  override def key(): MemTableKey = ???
+class LsmIterator(innerIter: LsmIteratorInner, endBound: Bound) extends MemTableStorageIterator {
+  // LsmIterator本身是否可用，
+  private var isSelfValid = innerIter.isValid
+  // 跳过前面已删除的元素
+  moveToNonDeleted()
 
-  override def value(): MemTableValue = ???
+  override def key(): MemTableKey = innerIter.key()
 
-  override def isValid: Boolean = ???
+  override def value(): MemTableValue = innerIter.value()
 
-  override def next(): Unit = ???
+  override def isValid: Boolean = isSelfValid
+
+  override def next(): Unit = {
+    innerNext()
+    moveToNonDeleted()
+  }
+
+  /**
+   * 包装的迭代器继续迭代
+   */
+  private def innerNext(): Unit = {
+    innerIter.next()
+    // 如果迭代器不可用则直接跳过
+    if (!innerIter.isValid) {
+      isSelfValid = false
+      return
+    }
+    // 否则还要检查下上界，如果到达上界则当前LsmIterator不可用
+    endBound match
+      case Included(r) => isSelfValid = byteArrayCompare(key(), r) <= 0
+      case Excluded(r) => isSelfValid = byteArrayCompare(key(), r) < 0
+      case _ => {}
+  }
+
+  /**
+   * 跳过迭代器里的空值
+   */
+  private def moveToNonDeleted(): Unit = {
+    while (isSelfValid && innerIter.value().sameElements(DELETE_TOMBSTONE)) {
+      innerNext()
+    }
+  }
+
+  override def numActiveIterators(): Int = innerIter.numActiveIterators()
 }
 
-class FusedIterator[K, V](val iter: StorageIterator[K, V],
-                          var errorThrown: Boolean = false)
+/**
+ * 主要用于包装异常处理
+ * TODO 优化泛型声明
+ *
+ * @param iter 要包装的 StorageIterator 迭代器
+ * @tparam K key类型
+ * @tparam V value类型
+ */
+class FusedIterator[K, V](val iter: StorageIterator[K, V])
   extends StorageIterator[K, V] {
+  // 是否已经抛出异常
+  private var errorThrown: Boolean = false
+
   override def key(): K = {
     if (!isValid) {
       throw new IllegalStateException("Iterator is invalid")
@@ -239,7 +287,6 @@ class FusedIterator[K, V](val iter: StorageIterator[K, V],
       throw new IllegalStateException("Iterator is invalid")
     }
     iter.value()
-
   }
 
   override def isValid: Boolean = {
@@ -247,9 +294,11 @@ class FusedIterator[K, V](val iter: StorageIterator[K, V],
   }
 
   override def next(): Unit = {
+    // 已经发生过错误的禁止next()
     if (errorThrown) {
       throw new IllegalStateException(" This Iterator threw exception...")
     }
+    // 包装的迭代器不可用时禁止next()
     if (iter.isValid) {
       try {
         iter.next()

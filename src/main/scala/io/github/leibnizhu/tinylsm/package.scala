@@ -1,10 +1,9 @@
 package io.github.leibnizhu
 
-import io.github.leibnizhu.tinylsm.StorageIterator
-
 import scala.util.hashing.MurmurHash3
 
 package object tinylsm {
+  val DELETE_TOMBSTONE = Array[Byte]()
   type MemTableKey = Array[Byte]
   type MemTableValue = Array[Byte]
   type MemTableEntry = java.util.Map.Entry[ByteArrayKey, MemTableValue]
