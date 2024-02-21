@@ -6,6 +6,7 @@ import scala.jdk.CollectionConverters.*
 import scala.util.hashing.MurmurHash3
 
 /**
+ * LSM存储相关的迭代器trait
  * 调用顺序：isValid -> key/value -> next
  *
  * @tparam K key类型
@@ -44,8 +45,14 @@ trait StorageIterator[K, V] {
   def numActiveIterators(): Int = 1
 }
 
+/**
+ * 用于遍历一个MemTable的迭代器
+ *
+ * @param iterator MemTable内部数据MemTableEntry的迭代器
+ */
 class MemTableIterator(val iterator: Iterator[MemTableEntry])
   extends MemTableStorageIterator {
+  // 记录当前迭代到的Entry
   private var currentEntry: MemTableEntry = if (iterator.hasNext) iterator.next() else null
 
   /**
@@ -161,6 +168,13 @@ class MergeIterator(val iterHeap: PriorityQueue[HeapWrapper],
   }
 }
 
+/**
+ * 包装一个MemTable迭代器，用到堆中
+ * 提供了按key+MemTable层级排序的功能，实现配套方法（compareTo/hashCode/equals）
+ *
+ * @param index 当前MemTable迭代器的序号，越小越新，0对应未freeze的MemTable，1之后是已freeze的MemTable
+ * @param itr   MemTable迭代器
+ */
 case class HeapWrapper(index: Int, itr: MemTableStorageIterator)
   extends Comparable[HeapWrapper] {
 
@@ -171,6 +185,7 @@ case class HeapWrapper(index: Int, itr: MemTableStorageIterator)
   def next(): Unit = itr.next()
 
   override def compareTo(other: HeapWrapper): Int = {
+    // 先按key进行比较，同key的时候更新（index更小的）的优先
     val keyCompare = byteArrayCompare(this.itr.key(), other.itr.key())
     if (keyCompare == 0) {
       // 小的index就是更新的迭代器
@@ -216,6 +231,12 @@ object MergeIterator {
  */
 type LsmIteratorInner = MergeIterator
 
+/**
+ * 用于LSM的遍历，主要封装了已删除元素的处理逻辑
+ *
+ * @param innerIter LsmIteratorInner内部迭代器
+ * @param endBound  遍历的key上界
+ */
 class LsmIterator(innerIter: LsmIteratorInner, endBound: Bound) extends MemTableStorageIterator {
   // LsmIterator本身是否可用，
   private var isSelfValid = innerIter.isValid
