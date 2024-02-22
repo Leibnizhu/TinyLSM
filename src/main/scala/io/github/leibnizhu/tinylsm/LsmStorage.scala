@@ -184,7 +184,7 @@ class TinyLsm {
 
 case class LsmStorageOptions
 (
-  // Block大小，单位是 bytes
+  // Block大小，单位是 bytes，应该小于或等于这个值
   blockSize: Int,
   // SST大小，单位是 bytes, 同时也是MemTable容量限制的近似值
   targetSstSize: Int,
