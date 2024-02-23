@@ -3,6 +3,8 @@ package io.github.leibnizhu.tinylsm
 import org.scalatest.Assertions.{assertResult, assertThrows}
 import org.scalatest.Entry
 
+import java.io.File
+
 object TestUtils {
 
   def checkIterator(expect: List[MemTableEntry], actual: MemTableStorageIterator): Unit = {
@@ -28,4 +30,8 @@ object TestUtils {
     Entry(ByteArrayKey(k.getBytes), v.getBytes)
   }
 
+  def tempDir(): File = {
+    val tempDirPath = System.getProperty("java.io.tmpdir") + File.pathSeparator + "LsmTest"
+    new File(tempDirPath)
+  }
 }

@@ -144,20 +144,111 @@ class BlockBuilder(val blockSize: Int) {
   }
 }
 
-class BlockIterator {
-  def createAndSeekToFirst(): Unit = ???
+class BlockIterator(block: Block) extends MemTableStorageIterator {
+  private var index: Int = 0;
+  /**
+   * 当前迭代到的key，初始化和迭代完之后都是 None
+   */
+  private var curKey: Option[MemTableKey] = None
+  /**
+   * 当前value在Block中data的下标
+   */
+  private var curValuePos: (Int, Int) = (0, 0)
 
-  def createAndSeekToKey(): Unit = ???
+  def seekToFirst(): Unit = {
+    seekToIndex(0)
+  }
 
-  def key(): MemTableKey = ???
+  /**
+   * 跳到 >=指定key的位置
+   *
+   * @param key 指定定位的key，
+   */
+  def seekToKey(key: MemTableKey): Unit = {
+    // key是有序存储的，可以用二分法
+    var low = 0
+    var high = block.offsets.length
+    while (low < high) {
+      val mid = low + (high - low) / 2
+      seekToIndex(mid)
+      assert(isValid)
+      val compare = byteArrayCompare(curKey.get, key)
+      if (compare < 0) {
+        low = mid + 1
+      } else if (compare > 0) {
+        high = mid
+      } else {
+        return
+      }
+    }
+    seekToIndex(low)
+  }
 
-  def value(): MemTableValue = ???
+  override def key(): MemTableKey = {
+    assert(isValid, "BlockIterator is invalid")
+    curKey.orNull
+  }
 
-  def isValid: Boolean = ???
+  override def value(): MemTableValue = {
+    assert(isValid, "BlockIterator is invalid")
+    block.data.slice(curValuePos._1, curValuePos._2)
+  }
 
-  def seekToFirst(): Unit = ???
+  override def isValid: Boolean = {
+    curKey.isDefined
+  }
 
-  def next(): Unit = ???
+  override def next(): Unit = {
+    index += 1
+    seekToIndex(index)
+  }
 
-  def seekToKey(key: MemTableKey) = ???
+  /**
+   * 跳到上一个
+   */
+  def prev(): Unit = {
+    // index == 0 时不能再往前跳，这算异常吗？还是直接跳过忽略？
+    if (index > 0) {
+      index -= 1
+      seekToIndex(index)
+    }
+  }
+
+  private def seekToIndex(index: Int): Unit = {
+    if (index < 0) {
+      throw new IllegalArgumentException("Index must be positive!")
+    }
+    if (index >= block.offsets.length) {
+      // 越界，则不可用
+      curKey = None
+      curValuePos = (0, 0)
+      return
+    }
+
+    // 根据 offset 段获取entry位置
+    val entryOffset = block.offsets(index)
+    // 先后读取key长度、key、value长度
+    val keyLength = Block.low2BytesToInt(block.data(entryOffset), block.data(entryOffset + 1))
+    curKey = Some(block.data.slice(entryOffset + 2, entryOffset + 2 + keyLength))
+    val valueOffset = entryOffset + 2 + keyLength
+    val valueLength = Block.low2BytesToInt(block.data(valueOffset), block.data(valueOffset + 1))
+    curValuePos = (valueOffset + 2, valueOffset + 2 + valueLength)
+    this.index = index
+  }
+}
+
+object BlockIterator {
+
+  def createAndSeekToFirst(block: Block): BlockIterator = {
+    val itr = new BlockIterator(block)
+    itr.seekToFirst()
+    itr
+  }
+
+  def createAndSeekToKey(block: Block, key: MemTableKey): BlockIterator = {
+    val itr = new BlockIterator(block)
+    itr.seekToKey(key)
+    itr
+  }
+
 }

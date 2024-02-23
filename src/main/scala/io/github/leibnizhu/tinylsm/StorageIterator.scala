@@ -29,6 +29,7 @@ trait StorageIterator[K, V] {
   /**
    * 这里可用指可调用key() value() next()
    * 千万注意这是不同于hasNext的语义
+   * 迭代器初始化之后应该是可用状态，无需调用next()方法已经指向第一个元素
    *
    * @return 是否可用
    */

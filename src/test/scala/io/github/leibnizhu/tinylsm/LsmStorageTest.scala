@@ -1,6 +1,6 @@
 package io.github.leibnizhu.tinylsm
 
-import io.github.leibnizhu.tinylsm.TestUtils.{checkIterator, entry}
+import io.github.leibnizhu.tinylsm.TestUtils.{checkIterator, entry, tempDir}
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File
@@ -8,9 +8,8 @@ import java.io.File
 class LsmStorageTest extends AnyFunSuite {
 
   test("week1_day1_task2_storage_integration") {
-    val tempDir = System.getProperty("java.io.tmpdir") + File.pathSeparator + "MemTableTest"
     val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
-    val storage = LsmStorageInner(new File(tempDir), options)
+    val storage = LsmStorageInner(tempDir(), options)
 
     assert(storage.get("0".getBytes).isEmpty)
 
@@ -28,9 +27,8 @@ class LsmStorageTest extends AnyFunSuite {
   }
 
   test("week1_day1_task3_storage_integration") {
-    val tempDir = System.getProperty("java.io.tmpdir") + File.pathSeparator + "MemTableTest"
     val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
-    val storage = LsmStorageInner(new File(tempDir), options)
+    val storage = LsmStorageInner(tempDir(), options)
 
     storage.put("1".getBytes, "233".getBytes)
     storage.put("2".getBytes, "2333".getBytes)
@@ -50,9 +48,8 @@ class LsmStorageTest extends AnyFunSuite {
   }
 
   test("week1_day1_task3_freeze_on_capacity") {
-    val tempDir = System.getProperty("java.io.tmpdir") + File.pathSeparator + "MemTableTest"
     val options = LsmStorageOptions(4096, 1024, 1000, NoCompaction(), false, false)
-    val storage = LsmStorageInner(new File(tempDir), options)
+    val storage = LsmStorageInner(tempDir(), options)
 
     for (i <- 0 until 1000) {
       storage.put("1".getBytes, "2333".getBytes)
@@ -67,9 +64,8 @@ class LsmStorageTest extends AnyFunSuite {
   }
 
   test("week1_day1_task4_storage_integration") {
-    val tempDir = System.getProperty("java.io.tmpdir") + File.pathSeparator + "MemTableTest"
     val options = LsmStorageOptions(4096, 1024, 1000, NoCompaction(), false, false)
-    val storage = LsmStorageInner(new File(tempDir), options)
+    val storage = LsmStorageInner(tempDir(), options)
 
     assert(storage.get("0".getBytes).isEmpty)
 
@@ -92,9 +88,8 @@ class LsmStorageTest extends AnyFunSuite {
   }
 
   test("week1_day2_task4_integration") {
-    val tempDir = System.getProperty("java.io.tmpdir") + File.pathSeparator + "MemTableTest"
     val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
-    val storage = LsmStorageInner(new File(tempDir), options)
+    val storage = LsmStorageInner(tempDir(), options)
 
     storage.put("1".getBytes, "233".getBytes)
     storage.put("2".getBytes, "2333".getBytes)

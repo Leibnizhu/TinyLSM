@@ -40,11 +40,17 @@ class BlockTest extends AnyFunSuite {
     block
   }
 
+  private val keyNum: Int = 100
+
+  private def keyOf(i: Int) = "key_" + "%03d".format(i * 5)
+
+  private def valueOf(i: Int) = "value_" + "%03d".format(i)
+
   private def generateBlock(): Block = {
     val builder = new BlockBuilder(10000)
-    for (i <- 0 until 100) {
-      val key = "key_" + "%03d".format(i)
-      val value = "value_" + "%03d".format(i)
+    for (i <- 0 to keyNum) {
+      val key = keyOf(i)
+      val value = valueOf(i)
       assert(builder.add(key.getBytes, value.getBytes))
     }
     builder.build()
@@ -75,12 +81,33 @@ class BlockTest extends AnyFunSuite {
   }
 
   test("week1_day3_task2_block_iterator") {
-
+    val block = generateBlock()
+    val iter = BlockIterator.createAndSeekToFirst(block)
+    for (_ <- 0 to 5) {
+      for (i <- 0 to keyNum) {
+        val key = iter.key()
+        val value = iter.value()
+        assertResult(keyOf(i).getBytes)(key)
+        assertResult(valueOf(i).getBytes)(value)
+        iter.next()
+      }
+      iter.seekToFirst()
+    }
   }
 
   test("week1_day3_task2_block_seek_key") {
-
+    val block = generateBlock()
+    val iter = BlockIterator.createAndSeekToKey(block, keyOf(0).getBytes)
+    for (offset <- 1 to 5) {
+      for (i <- 0 to keyNum) {
+        val key = new String(iter.key())
+        val value = new String(iter.value())
+        assertResult(keyOf(i))(key)
+        assertResult(valueOf(i))(value)
+        // seekToKey 的逻辑是跳到>=指定key的位置，所以offset 1~5的范围内都是跳到同样的 keyOf(i+1) 对应位置
+        iter.seekToKey(("key_" + "%03d".format(i * 5 + offset)).getBytes)
+      }
+      iter.seekToKey("k".getBytes)
+    }
   }
-
-
 }
