@@ -325,13 +325,85 @@ class FusedIterator[K, V](val iter: StorageIterator[K, V])
       try {
         iter.next()
       } catch {
-        case t: Throwable => {
+        case t: Throwable =>
           errorThrown = true
           throw t
-        }
       }
     }
   }
 
   override def numActiveIterators(): Int = iter.numActiveIterators()
+}
+
+class SsTableIterator(
+                       val table: SsTable,
+                       var blockItr: BlockIterator,
+                       var blockIndex: Int
+                     ) extends MemTableStorageIterator {
+
+  override def key(): MemTableKey = blockItr.key()
+
+  override def value(): MemTableValue = blockItr.value()
+
+  override def isValid: Boolean = blockItr.isValid
+
+  override def next(): Unit = {
+    blockItr.next()
+    if (!blockItr.isValid) {
+      // 当前BlockIterator迭代完毕，换下一个
+      blockIndex += 1
+      if (blockIndex < table.numOfBlocks()) {
+        blockItr = BlockIterator.createAndSeekToFirst(table.readBlockCached(blockIndex))
+      }
+    }
+  }
+
+  def seekToFirst(): Unit = {
+    blockIndex = 0
+    blockItr = BlockIterator.createAndSeekToFirst(table.readBlockCached(0))
+  }
+
+  def seekToKey(key: MemTableKey): Unit = {
+    val (iter, index) = SsTableIterator.seekToKey(table, key)
+    this.blockItr = iter
+    this.blockIndex = index
+  }
+}
+
+object SsTableIterator {
+  def createAndSeekToFirst(table: SsTable): SsTableIterator = {
+    val iterator = BlockIterator.createAndSeekToFirst(table.readBlockCached(0))
+    SsTableIterator(table, iterator, 0)
+  }
+
+  def createAndSeekToKey(table: SsTable, key: MemTableKey): SsTableIterator = {
+    val (iterator, index) = seekToKey(table, key)
+    SsTableIterator(table, iterator, index)
+  }
+
+  def seekToKey(table: SsTable, key: MemTableKey): Tuple2[BlockIterator, Int] = {
+    var blockIndex = table.findBlockIndex(key)
+    var block = table.readBlockCached(blockIndex)
+    var blockIter = BlockIterator.createAndSeekToKey(block, key)
+    if (!blockIter.isValid) {
+      blockIndex += 1
+      if (blockIndex < table.numOfBlocks()) {
+        block = table.readBlockCached(blockIndex)
+        blockIter = BlockIterator.createAndSeekToFirst(block)
+      }
+    }
+    (blockIter, blockIndex)
+  }
+}
+
+class TwoMergeIterator[A <: MemTableStorageIterator, B <: MemTableStorageIterator]
+(a: A, b: B) extends MemTableStorageIterator {
+
+  override def key(): MemTableKey = ???
+
+  override def value(): MemTableValue = ???
+
+  override def isValid: Boolean = ???
+
+  override def next(): Unit = ???
 }

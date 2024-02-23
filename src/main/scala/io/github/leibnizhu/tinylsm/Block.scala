@@ -1,5 +1,9 @@
 package io.github.leibnizhu.tinylsm
 
+
+import com.github.blemale.scaffeine.{Cache, Scaffeine}
+import scala.concurrent.duration._
+
 import scala.collection.mutable.ArrayBuffer
 
 /**
@@ -26,15 +30,13 @@ class Block(val data: Array[Byte], val offsets: Array[Int]) {
   def encode(): Array[Byte] = {
     val buffer = new ArrayBuffer[Byte]()
     buffer.appendAll(data)
-    offsets.map(Block.getIntLow2Byte).foreach(buffer.appendAll)
-    buffer.appendAll(Block.getIntLow2Byte(offsets.length))
+    offsets.map(intLow2Bytes).foreach(buffer.appendAll)
+    buffer.appendAll(intLow2Bytes(offsets.length))
     buffer.toArray
   }
 }
 
 object Block {
-  // 16位无符号整型，u16，即short的无符号版，所占的byte数量
-  val SIZE_OF_U16 = 2
 
   /**
    * 将byte数组解码为Block，覆盖当前Block
@@ -44,28 +46,10 @@ object Block {
   def decode(bytes: Array[Byte]): Block = {
     val byteLen = bytes.length
     val numOfElement = bytes.last
-    val offsetBytes = bytes.slice(bytes.length - numOfElement * Block.SIZE_OF_U16 - 2, bytes.length - 2)
-    val offsetIntArray = offsetBytes.sliding(2, 2).map(tb => Block.low2BytesToInt(tb(0), tb(1))).toArray
-    val dataBytes = bytes.slice(0, bytes.length - numOfElement * Block.SIZE_OF_U16 - 2)
+    val offsetBytes = bytes.slice(bytes.length - numOfElement * SIZE_OF_U16 - 2, bytes.length - 2)
+    val offsetIntArray = offsetBytes.sliding(2, 2).map(tb => low2BytesToInt(tb(0), tb(1))).toArray
+    val dataBytes = bytes.slice(0, bytes.length - numOfElement * SIZE_OF_U16 - 2)
     Block(dataBytes, offsetIntArray)
-  }
-
-  /**
-   * @param i 整型数字
-   * @return 整型数字的低2位的byte，低位在后
-   */
-  def getIntLow2Byte(i: Int): List[Byte] =
-    List(((i >> 8) & 0xFF).asInstanceOf[Byte], (i & 0xFF).asInstanceOf[Byte])
-
-  /**
-   * @param high int的8-15位
-   * @param low  int的0-7位
-   * @return 两位byte拼接还原一个Int（实际取值范围为无符号short）
-   */
-  def low2BytesToInt(high: Byte, low: Byte): Int = {
-    val safeHigh: Int = if (high < 0) high + 256 else high
-    val safeLow: Int = if (low < 0) low + 256 else low
-    (safeHigh << 8) + safeLow
   }
 }
 
@@ -90,18 +74,18 @@ class BlockBuilder(val blockSize: Int) {
     // 一条数据会增加 记录key长度的2byte、key本身，记录value长度的2byte、value本身、记录offset的2byte，所以乘以3
     // 这里加入了非空的前置条件，因为如果一个kv超过BlockSize，没有非空的前置条件的话，这个kv是永远无法写入
     // 也就是说Block里第一个kv是允许超过BlockSize的
-    if (!isEmpty && estimatedSize() + key.length + value.length + Block.SIZE_OF_U16 * 3 > blockSize) {
+    if (!isEmpty && estimatedSize() + key.length + value.length + SIZE_OF_U16 * 3 > blockSize) {
       return false
     }
     // 显然，新数据的offset就是当前data长度
     offsets += data.length
 
     // key的长度
-    data.appendAll(Block.getIntLow2Byte(key.length))
+    data.appendAll(intLow2Bytes(key.length))
     // key内容
     data.appendAll(key)
     // value的长度
-    data.appendAll(Block.getIntLow2Byte(value.length))
+    data.appendAll(intLow2Bytes(value.length))
     // value内容
     data.appendAll(value)
 
@@ -119,9 +103,9 @@ class BlockBuilder(val blockSize: Int) {
     // data 已经是序列化的byte数据，所以直接算长度
     data.length +
       // offset部分
-      offsets.length * Block.SIZE_OF_U16 +
+      offsets.length * SIZE_OF_U16 +
       // Extra部分
-      Block.SIZE_OF_U16
+      SIZE_OF_U16
   }
 
   /**
@@ -228,10 +212,10 @@ class BlockIterator(block: Block) extends MemTableStorageIterator {
     // 根据 offset 段获取entry位置
     val entryOffset = block.offsets(index)
     // 先后读取key长度、key、value长度
-    val keyLength = Block.low2BytesToInt(block.data(entryOffset), block.data(entryOffset + 1))
+    val keyLength = low2BytesToInt(block.data(entryOffset), block.data(entryOffset + 1))
     curKey = Some(block.data.slice(entryOffset + 2, entryOffset + 2 + keyLength))
     val valueOffset = entryOffset + 2 + keyLength
-    val valueLength = Block.low2BytesToInt(block.data(valueOffset), block.data(valueOffset + 1))
+    val valueLength = low2BytesToInt(block.data(valueOffset), block.data(valueOffset + 1))
     curValuePos = (valueOffset + 2, valueOffset + 2 + valueLength)
     this.index = index
   }
@@ -251,4 +235,17 @@ object BlockIterator {
     itr
   }
 
+}
+
+type BlockCache = Cache[(Int, Int), Block]
+
+object BlockCache {
+
+  def apply(maxSize: Int, expire: FiniteDuration = 10.minute): BlockCache = {
+    Scaffeine()
+      .recordStats()
+      .expireAfterWrite(expire)
+      .maximumSize(maxSize)
+      .build()
+  }
 }

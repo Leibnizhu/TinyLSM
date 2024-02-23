@@ -31,7 +31,11 @@ object TestUtils {
   }
 
   def tempDir(): File = {
-    val tempDirPath = System.getProperty("java.io.tmpdir") + File.pathSeparator + "LsmTest"
-    new File(tempDirPath)
+    val tempDirPath = System.getProperty("java.io.tmpdir") + File.separator + "LsmTest"
+    val tempDir = new File(tempDirPath)
+    if (!tempDir.exists()) {
+      tempDir.mkdirs()
+    }
+    tempDir
   }
 }
