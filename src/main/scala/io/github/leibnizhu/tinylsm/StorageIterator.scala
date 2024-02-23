@@ -102,8 +102,8 @@ class MemTableIterator(val iterator: Iterator[MemTableEntry])
  * @param iterHeap 所有迭代器构成的小顶堆
  * @param curItr   当前用到的迭代器
  */
-class MergeIterator(val iterHeap: PriorityQueue[HeapWrapper],
-                    var curItr: Option[HeapWrapper] = None)
+class MergeIterator[I <: MemTableStorageIterator]
+(val iterHeap: PriorityQueue[HeapWrapper[I]], var curItr: Option[HeapWrapper[I]] = None)
   extends MemTableStorageIterator {
 
   /**
@@ -139,9 +139,9 @@ class MergeIterator(val iterHeap: PriorityQueue[HeapWrapper],
 
     // 如果堆中有相同的key的其他迭代器，只保留堆顶的(也就是保留最新的)，其他移除
     val itersItr = iterHeap.iterator()
-    val toOffer = ArrayBuffer[HeapWrapper]()
+    val toOffer = ArrayBuffer[HeapWrapper[I]]()
     while (itersItr.hasNext) {
-      val itr: HeapWrapper = itersItr.next()
+      val itr: HeapWrapper[I] = itersItr.next()
       if (curIter != itr && curKey.sameElements(itr.key())) {
         itersItr.remove()
         itr.next()
@@ -176,8 +176,8 @@ class MergeIterator(val iterHeap: PriorityQueue[HeapWrapper],
  * @param index 当前MemTable迭代器的序号，越小越新，0对应未freeze的MemTable，1之后是已freeze的MemTable
  * @param itr   MemTable迭代器
  */
-case class HeapWrapper(index: Int, itr: MemTableStorageIterator)
-  extends Comparable[HeapWrapper] {
+case class HeapWrapper[I <: MemTableStorageIterator](index: Int, itr: MemTableStorageIterator)
+  extends Comparable[HeapWrapper[I]] {
 
   def key(): MemTableKey = itr.key()
 
@@ -185,7 +185,7 @@ case class HeapWrapper(index: Int, itr: MemTableStorageIterator)
 
   def next(): Unit = itr.next()
 
-  override def compareTo(other: HeapWrapper): Int = {
+  override def compareTo(other: HeapWrapper[I]): Int = {
     // 先按key进行比较，同key的时候更新（index更小的）的优先
     val keyCompare = byteArrayCompare(this.itr.key(), other.itr.key())
     if (keyCompare == 0) {
@@ -199,7 +199,7 @@ case class HeapWrapper(index: Int, itr: MemTableStorageIterator)
   override def hashCode(): Int = MurmurHash3.seqHash(Array(index) ++ itr.key())
 
   override def equals(other: Any): Boolean = other match
-    case otherHw: HeapWrapper => otherHw.index == this.index &&
+    case otherHw: HeapWrapper[I] => otherHw.index == this.index &&
       otherHw.itr.key().sameElements(this.itr.key())
     case _ => false
 
@@ -208,8 +208,8 @@ case class HeapWrapper(index: Int, itr: MemTableStorageIterator)
 }
 
 object MergeIterator {
-  def apply(iterators: List[MemTableStorageIterator]): MergeIterator = {
-    val heap = new PriorityQueue[HeapWrapper](Math.max(1, iterators.length))
+  def apply[I <: MemTableStorageIterator](iterators: List[I]): MergeIterator[I] = {
+    val heap = new PriorityQueue[HeapWrapper[I]](Math.max(1, iterators.length))
     if (iterators.isEmpty) {
       new MergeIterator(heap, None)
     } else if (iterators.forall(!_.isValid)) {
@@ -230,7 +230,7 @@ object MergeIterator {
 /**
  * LsmIterator内部包装的迭代器类型，后续可能会变
  */
-type LsmIteratorInner = MergeIterator
+type LsmIteratorInner = MergeIterator[MemTableIterator]
 
 /**
  * 用于LSM的遍历，主要封装了已删除元素的处理逻辑
@@ -398,12 +398,38 @@ object SsTableIterator {
 
 class TwoMergeIterator[A <: MemTableStorageIterator, B <: MemTableStorageIterator]
 (a: A, b: B) extends MemTableStorageIterator {
+  skipB()
+  private var isUseA: Boolean = useA()
 
-  override def key(): MemTableKey = ???
+  override def key(): MemTableKey = if (isUseA) a.key() else b.key()
 
-  override def value(): MemTableValue = ???
+  override def value(): MemTableValue = if (isUseA) a.value() else b.value()
 
-  override def isValid: Boolean = ???
+  override def isValid: Boolean = if (isUseA) a.isValid else b.isValid
 
-  override def next(): Unit = ???
+  override def next(): Unit = {
+    if (isUseA) a.next() else b.next()
+    skipB()
+    isUseA = useA()
+  }
+
+  private def useA(): Boolean = if (!a.isValid) {
+    // a不可用的话只能用b
+    false
+  } else if (!b.isValid) {
+    // a可用、b不可用时，直接用a
+    true
+  } else {
+    // a b 都可用，那么用key较小的。调用 useA() 之前调用 skipB() 则不会出现两个key相等的情况
+    byteArrayCompare(a.key(), b.key()) < 0
+  }
+
+  private def skipB(): Unit = {
+    // 如果 a b 都可用且key相同，那么优先用a的，将b的跳过
+    if (a.isValid && b.isValid && a.key().sameElements(b.key())) {
+      b.next()
+    }
+  }
+
+  override def numActiveIterators(): Int = a.numActiveIterators() + b.numActiveIterators()
 }
