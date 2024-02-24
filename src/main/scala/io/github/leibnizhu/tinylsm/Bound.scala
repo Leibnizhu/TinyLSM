@@ -39,9 +39,17 @@ object Bounded {
  */
 case class Included(val b: Array[Byte]) extends Bounded(b, true);
 
+object Included {
+  def apply(str: String): Included = Included(str.getBytes)
+}
+
 /**
  * 不包含边界值的边界
  *
  * @param b 边界值
  */
 case class Excluded(val b: Array[Byte]) extends Bounded(b, false);
+
+object Excluded {
+  def apply(str: String): Excluded = Excluded(str.getBytes)
+}

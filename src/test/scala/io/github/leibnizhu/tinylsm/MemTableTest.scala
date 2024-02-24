@@ -57,7 +57,7 @@ class MemTableTest extends AnyFunSuite {
     }
 
     {
-      val iter = memTable.scan(Included("key1".getBytes), Included("key2".getBytes))
+      val iter = memTable.scan(Included("key1"), Included("key2"))
       assert(iter.isValid)
       assertResult("key1".getBytes)(iter.key())
       assertResult("value1".getBytes)(iter.value())
@@ -70,7 +70,7 @@ class MemTableTest extends AnyFunSuite {
     }
 
     {
-      val iter = memTable.scan(Excluded("key1".getBytes), Excluded("key3".getBytes))
+      val iter = memTable.scan(Excluded("key1"), Excluded("key3"))
       assert(iter.isValid)
       assertResult("key2".getBytes)(iter.key())
       assertResult("value2".getBytes)(iter.value())
@@ -82,11 +82,11 @@ class MemTableTest extends AnyFunSuite {
   test("week1_day2_task1_empty_memtable_iter") {
     val memTable = MemTable(0)
     {
-      val iter = memTable.scan(Excluded("key1".getBytes), Excluded("key3".getBytes))
+      val iter = memTable.scan(Excluded("key1"), Excluded("key3"))
       assert(!iter.isValid)
     }
     {
-      val iter = memTable.scan(Included("key1".getBytes), Included("key2".getBytes))
+      val iter = memTable.scan(Included("key1"), Included("key2"))
       assert(!iter.isValid)
     }
     {

@@ -89,17 +89,36 @@ private[tinylsm] class LsmStorageInner(
     }
 
     // 由新到旧遍历已 freeze 的MemTable，找到直接返回
-    state.read(st => {
+    val inFrozenMemTable = state.read(st => {
       boundary:
-        for mt <- st.immutableMemTables do
+        for (mt <- st.immutableMemTables) do {
           val curValue = mt.get(key)
           if (curValue.isDefined) {
             // 如果读取出来是墓碑（空Array）需要过滤返回None
             boundary.break(curValue.filter(!_.sameElements(DELETE_TOMBSTONE)))
           }
+        }
         None
     })
+    if (inFrozenMemTable.isDefined) {
+      return inFrozenMemTable
+    }
+
+    // 从 SST读取
+    // l0 sst 的多个sst从key开始构成一个 MergeIterator 可一查
+    val l0SsTableIters = state.read(st => {
+      st.l0SsTables.map(st.ssTables(_)).filter(_.mayContainsKey(key)).map(SsTableIterator.createAndSeekToKey(_, key))
+    })
+    val l0Iter = MergeIterator(l0SsTableIters)
+    // TODO levels sst的读取
+    if (l0Iter.isValid && l0Iter.key().sameElements(key) && !l0Iter.value().sameElements(DELETE_TOMBSTONE)) {
+      return Some(l0Iter.value())
+    }
+    None
   }
+
+
+  def get(key: String): Option[String] = get(key.getBytes).map(new String(_))
 
   /**
    * 插入或更新
@@ -113,14 +132,16 @@ private[tinylsm] class LsmStorageInner(
     doPut(key, value)
   }
 
+  def put(key: String, value: String): Unit = put(key.getBytes, value.getBytes)
+
   /**
    * 按key删除
    *
    * @param key key
    */
-  def delete(key: MemTableKey): Unit = {
-    put(key, DELETE_TOMBSTONE)
-  }
+  def delete(key: MemTableKey): Unit = put(key, DELETE_TOMBSTONE)
+
+  def delete(key: String): Unit = delete(key.getBytes)
 
   private def doPut(key: MemTableKey, value: MemTableValue): Unit = {
     // 这里 MemTable 自己的线程安全由 ConcurrentHashMap 保证，所以只要读锁
@@ -192,6 +213,16 @@ private[tinylsm] class LsmStorageInner(
       })
     }))
     FusedIterator(LsmIterator(TwoMergeIterator(memTableIter, ssTablesIter), upper))
+  }
+
+  def printStorage(): Unit = {
+    val itr = scan(Unbounded(), Unbounded())
+    print("Storage content: ")
+    while (itr.isValid) {
+      print(s"${new String(itr.key())} => ${new String(itr.value())}, ")
+      itr.next()
+    }
+    println()
   }
 }
 

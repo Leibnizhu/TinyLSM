@@ -85,6 +85,8 @@ class SsTable(val file: FileObject,
 
   def sstId(): Int = id
 
+  def mayContainsKey(key: MemTableKey): Boolean =
+    byteArrayCompare(firstKey, key) <= 0 && byteArrayCompare(key, lastKey) <= 0
 }
 
 object SsTable {
