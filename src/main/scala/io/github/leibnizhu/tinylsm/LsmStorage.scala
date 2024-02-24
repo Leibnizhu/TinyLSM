@@ -112,6 +112,7 @@ private[tinylsm] class LsmStorageInner(
     val l0Iter = MergeIterator(l0SsTableIters)
     // TODO levels sst的读取
     if (l0Iter.isValid && l0Iter.key().sameElements(key) && !l0Iter.value().sameElements(DELETE_TOMBSTONE)) {
+      // l0 sst 有效、有当前查询的key、且值不为空，即找到了value
       return Some(l0Iter.value())
     }
     None
@@ -173,7 +174,7 @@ private[tinylsm] class LsmStorageInner(
    */
   def forceFreezeMemTable(): Unit = {
     val newMemTableId = nextSstId.incrementAndGet()
-    val newMemTable = if (options.enableWal) MemTable(newMemTableId, Some(pathOfWal(newMemTableId))) else MemTable(newMemTableId)
+    val newMemTable = if (options.enableWal) MemTable(newMemTableId, Some(fileOfWal(newMemTableId))) else MemTable(newMemTableId)
     freezeMemTableWithMemTable(newMemTable)
     // TODO 文件操作
   }
@@ -185,8 +186,40 @@ private[tinylsm] class LsmStorageInner(
     })
   }
 
-  private def pathOfWal(sstId: Int): File = {
-    new File(path, sstId.toString)
+  private def fileOfWal(sstId: Int): File = {
+    new File(path, "%05d.wal".format(sstId))
+  }
+
+  private def fileOfSst(sstId: Int): File = {
+    new File(path, "%05d.sst".format(sstId))
+  }
+
+  /**
+   * 强制将最早的一个ImmutableMemTable 刷入磁盘
+   */
+  def forceFlushNextImmutableMemTable(): Unit = {
+    //TODO
+    try {
+      state.stateLock.lock()
+      val flushMemTable = state.immutableMemTables.last
+      // 构建SST、写入SST文件
+      val builder = SsTableBuilder(options.blockSize)
+      flushMemTable.flush(builder)
+      val sstId = flushMemTable.id
+      val sst = builder.build(sstId, Some(blockCache), fileOfSst(sstId))
+
+      // 移除MemTable、加入到L0 table
+      state.immutableMemTables = state.immutableMemTables.slice(0, state.immutableMemTables.length - 1)
+      state.l0SsTables = sstId :: state.l0SsTables
+      state.ssTables(sstId) = sst
+
+      // 删除WAL文件
+      if (options.enableWal) {
+        fileOfWal(sstId).delete()
+      }
+    } finally {
+      state.stateLock.unlock()
+    }
   }
 
   def scan(lower: Bound, upper: Bound): FusedIterator[MemTableKey, MemTableValue] = {
@@ -235,7 +268,27 @@ object LsmStorageInner {
 
 }
 
-class TinyLsm {
+class TinyLsm(val inner: LsmStorageInner) {
+  def get(key: MemTableKey): Option[MemTableValue] = inner.get(key)
+
+  def get(key: String): Option[String] = inner.get(key)
+
+  def put(key: MemTableKey, value: MemTableValue): Unit = inner.put(key, value)
+
+  def put(key: String, value: String): Unit = inner.put(key, value)
+
+  def delete(key: MemTableKey): Unit = inner.delete(key)
+
+  def delete(key: String): Unit = inner.delete(key)
+
+  def scan(lower: Bound, upper: Bound): FusedIterator[MemTableKey, MemTableValue] = inner.scan(lower, upper)
+
+}
+
+object TinyLsm {
+  def apply(path: File, options: LsmStorageOptions): TinyLsm = {
+    new TinyLsm(LsmStorageInner(path, options))
+  }
 
 }
 

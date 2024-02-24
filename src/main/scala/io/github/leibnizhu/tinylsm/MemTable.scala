@@ -63,6 +63,10 @@ case class MemTable(
     case (Bounded(l: MemTableKey, il: Boolean), Bounded(r: MemTableKey, ir: Boolean)) =>
       new MemTableIterator(map.subMap(ByteArrayKey(l), il, ByteArrayKey(r), ir).entrySet().iterator().asScala)
     case (_, _) => null
+
+  def flush(builder: SsTableBuilder): Unit = {
+    map.forEach((k, v) => builder.add(k.bytes, v))
+  }
 }
 
 object MemTable {

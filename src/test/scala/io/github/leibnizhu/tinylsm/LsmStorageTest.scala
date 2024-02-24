@@ -167,9 +167,11 @@ class LsmStorageTest extends AnyFunSuite {
       entry("2", "2333"),
       entry("3", "23333"),
     ), storage.scan(Unbounded(), Unbounded()))
+
     checkIterator(List(
       entry("2", "2333")
     ), storage.scan(Included("1"), Included("2")))
+
     checkIterator(List(
       entry("2", "2333")
     ), storage.scan(Excluded("1"), Excluded("3")))
@@ -207,5 +209,122 @@ class LsmStorageTest extends AnyFunSuite {
     assert(storage.get("4").isEmpty)
     assert(storage.get("--").isEmpty)
     assert(storage.get("5").isEmpty)
+  }
+
+  test("week1_day6_task1_storage_scan") {
+    val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
+    val storage = LsmStorageInner(tempDir(), options)
+    storage.put("0", "2333333")
+    storage.put("00", "2333333")
+    storage.put("4", "23")
+    storage.forceFreezeMemTable()
+    storage.forceFlushNextImmutableMemTable()
+    storage.delete("4")
+    storage.forceFreezeMemTable()
+    storage.forceFlushNextImmutableMemTable()
+    storage.put("1", "233")
+    storage.put("2", "2333")
+    storage.forceFreezeMemTable()
+    storage.put("00", "2333")
+    storage.forceFreezeMemTable()
+    storage.put("3", "23333")
+    storage.delete("1")
+
+    storage.state.read(st => {
+      assertResult(2)(st.l0SsTables.length)
+      assertResult(2)(st.immutableMemTables.length)
+    })
+
+    checkIterator(List(
+      entry("0", "2333333"),
+      entry("00", "2333"),
+      entry("2", "2333"),
+      entry("3", "23333"),
+    ), storage.scan(Unbounded(), Unbounded()))
+
+    checkIterator(List(
+      entry("2", "2333"),
+    ), storage.scan(Included("1"), Included("2")))
+
+    checkIterator(List(
+      entry("2", "2333"),
+    ), storage.scan(Excluded("1"), Excluded("3")))
+  }
+
+  test("week1_day6_task1_storage_get") {
+    val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
+    val storage = LsmStorageInner(tempDir(), options)
+    storage.put("0", "2333333")
+    storage.put("00", "2333333")
+    storage.put("4", "23")
+    storage.forceFreezeMemTable()
+    storage.forceFlushNextImmutableMemTable()
+    storage.delete("4")
+    storage.forceFreezeMemTable()
+    storage.forceFlushNextImmutableMemTable()
+    storage.put("1", "233")
+    storage.put("2", "2333")
+    storage.forceFreezeMemTable()
+    storage.put("00", "2333")
+    storage.forceFreezeMemTable()
+    storage.put("3", "23333")
+    storage.delete("1")
+
+    storage.state.read(st => {
+      assertResult(2)(st.l0SsTables.length)
+      assertResult(2)(st.immutableMemTables.length)
+    })
+
+    assertResult("2333333")(storage.get("0").get)
+    assertResult("2333")(storage.get("00").get)
+    assertResult("2333")(storage.get("2").get)
+    assertResult("23333")(storage.get("3").get)
+    assert(storage.get("4").isEmpty)
+    assert(storage.get("--").isEmpty)
+    assert(storage.get("555").isEmpty)
+  }
+
+  test("week1_day6_task2_auto_flush") {
+    val options = LsmStorageOptions(4096, 2 << 20, 2, NoCompaction(), false, false)
+    val storage = TinyLsm(tempDir(), options)
+    val value = "1" * 1024
+    for (i <- 0 until 6000) {
+      storage.put(i.toString, value)
+    }
+    Thread.sleep(500)
+    storage.inner.state.read(st => assert(st.l0SsTables.nonEmpty))
+  }
+
+  test("week1_day6_task3_sst_filter") {
+    val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
+    val storage = LsmStorageInner(tempDir(), options)
+    for (i <- 1 to 10000) {
+      if (i % 1000 == 0) {
+        storage.forceFreezeMemTable()
+        storage.forceFlushNextImmutableMemTable()
+      }
+      storage.put("%05".format(i), "2333333")
+      val iter1 = storage.scan(Unbounded(), Unbounded())
+      val maxIterNum = iter1.numActiveIterators()
+      assert(maxIterNum >= 10, s"current active iterators: $maxIterNum")
+
+      val iter2 = storage.scan(Excluded("%05".format(10000)), Unbounded())
+      val minIterNum = iter2.numActiveIterators()
+      assert(minIterNum < maxIterNum)
+
+      val iter3 = storage.scan(Unbounded(), Excluded("%05".format(1)))
+      assertResult(minIterNum)(iter3.numActiveIterators())
+
+      val iter4 = storage.scan(Unbounded(), Included("%05".format(0)))
+      assertResult(minIterNum)(iter4.numActiveIterators())
+
+      val iter5 = storage.scan(Included("%05".format(10001)), Unbounded())
+      assertResult(minIterNum)(iter5.numActiveIterators())
+
+      val iter6 = storage.scan(Included("%05".format(5000)), Excluded("%05".format(6000)))
+      assert(minIterNum < iter6.numActiveIterators())
+      assert(maxIterNum > iter6.numActiveIterators())
+    }
+
   }
 }
