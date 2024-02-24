@@ -3,6 +3,7 @@ package io.github.leibnizhu.tinylsm
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.{Lock, ReadWriteLock, ReentrantLock, ReentrantReadWriteLock}
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.boundary
 
@@ -10,7 +11,14 @@ class LsmStorageState(
                        // 当前Memtable
                        var memTable: MemTable,
                        // 不可变的Memtable，从最近到最早的
-                       var immutableMemTables: List[MemTable]) {
+                       var immutableMemTables: List[MemTable],
+                       // L0 SST 从最新到最早的
+                       var l0SsTables: List[Int],
+                       // 按key 范围排序的SsTable， L1 -> Lmax
+                       var levels: List[(Int, List[Int])],
+                       // SST 对象
+                       val ssTables: mutable.Map[Int, SsTable] = mutable.HashMap()
+                     ) {
   // 对 MemTable 做 freeze 操作的读写锁
   val rwLock: ReadWriteLock = ReentrantReadWriteLock()
   // MemTable 做 freeze 时，保证只有一个线程执行 freeze 的锁
@@ -53,7 +61,7 @@ class LsmStorageState(
 
 object LsmStorageState {
   def apply(options: LsmStorageOptions): LsmStorageState = {
-    new LsmStorageState(MemTable(0), List[MemTable]())
+    new LsmStorageState(MemTable(0), List[MemTable](), List(), List())
   }
 }
 
@@ -61,6 +69,7 @@ private[tinylsm] class LsmStorageInner(
                                         // wal的根目录
                                         path: File,
                                         val state: LsmStorageState,
+                                        val blockCache: BlockCache,
                                         options: LsmStorageOptions,
                                         nextSstId: AtomicInteger) {
   /**
@@ -166,14 +175,31 @@ private[tinylsm] class LsmStorageInner(
       st.immutableMemTables.map(mt => mt.scan(lower, upper)).foreach(memTableIters.addOne)
     })
     val memTableIter = MergeIterator(memTableIters.toList)
-    FusedIterator(LsmIterator(memTableIter, upper))
+    // TODO 处理 levels
+    val ssTablesIter = MergeIterator(state.read(st => {
+      st.l0SsTables.map(st.ssTables(_)).map(sst => lower match {
+        // 没有左边界，则直接到最开始遍历
+        case Unbounded() => SsTableIterator.createAndSeekToFirst(sst)
+        // 包含左边界，则可以跳到左边界的key开始遍历
+        case Included(l: MemTableKey) => SsTableIterator.createAndSeekToKey(sst, l)
+        // 不包含左边界，则先跳到左边界的key，如果跳完之后实际的key等于左边界，由于不包含边界所以跳到下个值
+        case Excluded(l: MemTableKey) =>
+          val iter = SsTableIterator.createAndSeekToKey(sst, l)
+          if (iter.isValid && iter.key().sameElements(l)) {
+            iter.next()
+          }
+          iter
+      })
+    }))
+    FusedIterator(LsmIterator(TwoMergeIterator(memTableIter, ssTablesIter), upper))
   }
 }
 
 object LsmStorageInner {
   def apply(path: File, options: LsmStorageOptions): LsmStorageInner = {
     val state = LsmStorageState(options)
-    new LsmStorageInner(path, state, options, AtomicInteger(0))
+    val blockCache = BlockCache.apply(128)
+    new LsmStorageInner(path, state, blockCache, options, AtomicInteger(0))
   }
 
 }

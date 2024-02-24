@@ -1,6 +1,6 @@
 package io.github.leibnizhu.tinylsm
 
-import io.github.leibnizhu.tinylsm.TestUtils.{checkIterator, entry, tempDir}
+import io.github.leibnizhu.tinylsm.TestUtils.{checkIterator, entry, generateSst, tempDir}
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File
@@ -125,5 +125,63 @@ class LsmStorageTest extends AnyFunSuite {
       iter.next()
       assert(!iter.isValid)
     }
+  }
+
+  test("week1_day5_task2_storage_scan") {
+    val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
+    val storage = LsmStorageInner(tempDir(), options)
+    storage.put("1".getBytes, "233".getBytes)
+    storage.put("2".getBytes, "2333".getBytes)
+    storage.put("00".getBytes, "2333".getBytes)
+    storage.forceFreezeMemTable()
+    storage.put("3".getBytes, "23333".getBytes)
+    storage.delete("1".getBytes)
+
+    val sst1 = generateSst(10, new File(tempDir(), "10.sst"), List(
+      entry("0", "2333333"),
+      entry("00", "2333333"),
+      entry("4", "23")
+    ), Some(storage.blockCache))
+    val sst2 = generateSst(11, new File(tempDir(), "11.sst"), List(
+      entry("4", "")
+    ), Some(storage.blockCache))
+
+    storage.state.write(st => {
+      st.l0SsTables = sst2.sstId() :: sst1.sstId() :: st.l0SsTables
+      st.ssTables(sst1.sstId()) = sst1
+      st.ssTables(sst2.sstId()) = sst2
+    })
+
+    /**
+     * MemTable
+     * 1 -> "", 3 -> 23333
+     * 00 -> 23333, 1 -> 233, 2 -> 2333
+     * SST
+     * 4 -> ""
+     * 0 -> 2333333, 00 -> 2333333, 4 -> 23
+     */
+    printStorage(storage)
+    checkIterator(List(
+      entry("0", "2333333"),
+      entry("00", "2333"),
+      entry("2", "2333"),
+      entry("3", "23333"),
+    ), storage.scan(Unbounded(), Unbounded()))
+    checkIterator(List(
+      entry("2", "2333")
+    ), storage.scan(Included("1".getBytes), Included("2".getBytes)))
+    checkIterator(List(
+      entry("2", "2333")
+    ), storage.scan(Excluded("1".getBytes), Excluded("3".getBytes)))
+  }
+
+  private def printStorage(storage: LsmStorageInner): Unit = {
+    val itr = storage.scan(Unbounded(), Unbounded())
+    print("Storage content: ")
+    while (itr.isValid) {
+      print(s"${new String(itr.key())} => ${new String(itr.value())}, ")
+      itr.next()
+    }
+    println()
   }
 }

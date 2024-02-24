@@ -199,7 +199,7 @@ case class HeapWrapper[I <: MemTableStorageIterator](index: Int, itr: MemTableSt
   override def hashCode(): Int = MurmurHash3.seqHash(Array(index) ++ itr.key())
 
   override def equals(other: Any): Boolean = other match
-    case otherHw: HeapWrapper[I] => otherHw.index == this.index &&
+    case otherHw: HeapWrapper[?] => otherHw.index == this.index &&
       otherHw.itr.key().sameElements(this.itr.key())
     case _ => false
 
@@ -228,9 +228,10 @@ object MergeIterator {
 }
 
 /**
- * LsmIterator内部包装的迭代器类型，后续可能会变
+ * LsmIterator内部包装的迭代器类型
+ * 使用TwoMergeIterator ，优先迭代内存的MemTableIterator，再迭代SST的SsTableIterator
  */
-type LsmIteratorInner = MergeIterator[MemTableIterator]
+type LsmIteratorInner = TwoMergeIterator[MergeIterator[MemTableIterator], MergeIterator[SsTableIterator]]
 
 /**
  * 用于LSM的遍历，主要封装了已删除元素的处理逻辑
@@ -265,11 +266,12 @@ class LsmIterator(innerIter: LsmIteratorInner, endBound: Bound) extends MemTable
       isSelfValid = false
       return
     }
-    // 否则还要检查下上界，如果到达上界则当前LsmIterator不可用
+    // 由于LsmIteratorInner 包含了MemTable和SST的迭代器，而SST的迭代器不支持上界
+    // 所以还要检查下上界，如果到达上界则当前LsmIterator不可用
     endBound match
       case Included(r) => isSelfValid = byteArrayCompare(key(), r) <= 0
       case Excluded(r) => isSelfValid = byteArrayCompare(key(), r) < 0
-      case _ => {}
+      case _ =>
   }
 
   /**
@@ -398,30 +400,33 @@ object SsTableIterator {
 
 class TwoMergeIterator[A <: MemTableStorageIterator, B <: MemTableStorageIterator]
 (a: A, b: B) extends MemTableStorageIterator {
-  skipB()
   private var isUseA: Boolean = useA()
 
-  override def key(): MemTableKey = if (isUseA) a.key() else b.key()
+  override def key(): MemTableKey = chooseIter().key()
 
-  override def value(): MemTableValue = if (isUseA) a.value() else b.value()
+  override def value(): MemTableValue = chooseIter().value()
 
-  override def isValid: Boolean = if (isUseA) a.isValid else b.isValid
+  override def isValid: Boolean = chooseIter().isValid
 
   override def next(): Unit = {
-    if (isUseA) a.next() else b.next()
-    skipB()
+    chooseIter().next()
     isUseA = useA()
   }
 
-  private def useA(): Boolean = if (!a.isValid) {
-    // a不可用的话只能用b
-    false
-  } else if (!b.isValid) {
-    // a可用、b不可用时，直接用a
-    true
-  } else {
-    // a b 都可用，那么用key较小的。调用 useA() 之前调用 skipB() 则不会出现两个key相等的情况
-    byteArrayCompare(a.key(), b.key()) < 0
+  private def chooseIter(): MemTableStorageIterator = if (isUseA) a else b
+
+  private def useA(): Boolean = {
+    skipB()
+    if (!a.isValid) {
+      // a不可用的话只能用b
+      false
+    } else if (!b.isValid) {
+      // a可用、b不可用时，直接用a
+      true
+    } else {
+      // a b 都可用，那么用key较小的。调用 useA() 之前调用 skipB() 则不会出现两个key相等的情况
+      byteArrayCompare(a.key(), b.key()) < 0
+    }
   }
 
   private def skipB(): Unit = {

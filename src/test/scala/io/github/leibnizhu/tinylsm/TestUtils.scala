@@ -11,8 +11,8 @@ object TestUtils {
     for (expectEntry <- expect) {
       assert(actual.isValid)
       println(s"Expect: ${new String(expectEntry.getKey.bytes)} => ${new String(expectEntry.getValue)}, Actual: ${new String(actual.key())} => ${new String(actual.value())}")
-      assertResult(expectEntry.getKey.bytes)(actual.key())
-      assertResult(expectEntry.getValue)(actual.value())
+      assertResult(new String(expectEntry.getKey.bytes))(new String(actual.key()))
+      assertResult(new String(expectEntry.getValue))(new String(actual.value()))
       actual.next()
     }
     assert(!actual.isValid)
@@ -37,5 +37,13 @@ object TestUtils {
       tempDir.mkdirs()
     }
     tempDir
+  }
+
+  def generateSst(id: Int, path: File, data: Seq[MemTableEntry], blockCache: Option[BlockCache]): SsTable = {
+    val builder = SsTableBuilder(128)
+    for (entry <- data) {
+      builder.add(entry.getKey.bytes, entry.getValue)
+    }
+    builder.build(id, blockCache, path)
   }
 }
