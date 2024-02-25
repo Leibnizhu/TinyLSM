@@ -2,6 +2,7 @@ package io.github.leibnizhu.tinylsm
 
 import java.util
 import scala.util.boundary
+import scala.util.hashing.MurmurHash3
 
 class Bloom(val filter: util.BitSet, val hashFuncNum: Int) {
 
@@ -23,6 +24,21 @@ class Bloom(val filter: util.BitSet, val hashFuncNum: Int) {
         }
         true
     }
+
+  /**
+   * 序列化到指定buffer
+   * 顺序：filter -> hashFuncNum -> hash(filter, hashFuncNum)
+   *
+   * @param buffer 指定buffer
+   */
+  def encode(buffer: ByteArrayWriter): Unit = {
+    val offset = buffer.length
+    buffer.putByteArray(filter.toByteArray)
+    // hashFuncNum 最大30，可以放入一个byte
+    buffer.putByte(hashFuncNum.toByte)
+    val checksum = MurmurHash3.seqHash(buffer.slice(offset, buffer.length))
+    buffer.putUint32(checksum)
+  }
 }
 
 object Bloom {
@@ -57,5 +73,22 @@ object Bloom {
     // 布隆过滤器长度
     val size = -1.0 * entries.toDouble * Math.log(falsePositiveRate) / ln2 / ln2
     Math.ceil(size / entries).toInt
+  }
+
+  /**
+   * 从byte数组还原Bloom
+   *
+   * @param bytes byte数组
+   * @return Bloom对象
+   */
+  def decode(bytes: Array[Byte]): Bloom = {
+    val checksum = bytesToInt(bytes.slice(bytes.length - 4, bytes.length))
+    if (checksum != MurmurHash3.seqHash(bytes.slice(0, bytes.length - 4))) {
+      throw new IllegalArgumentException("Bloom filter checksum mismatch")
+    }
+    val filter = bytes.slice(0, bytes.length - 5)
+    val k = bytes(bytes.length - 5).toInt
+    val bitSet = util.BitSet.valueOf(filter)
+    new Bloom(bitSet, k)
   }
 }

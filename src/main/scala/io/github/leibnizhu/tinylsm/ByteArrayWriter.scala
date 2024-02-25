@@ -28,6 +28,11 @@ class ByteArrayWriter {
     this
   }
 
+  def putByte(byte: Byte): ByteArrayWriter = {
+    buffer.append(byte)
+    this
+  }
+
 }
 
 

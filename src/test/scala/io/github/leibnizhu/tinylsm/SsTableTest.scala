@@ -104,4 +104,13 @@ class SsTableTest extends AnyFunSuite {
       iterator.seekToKey("k".getBytes)
     }
   }
+  
+  test("week1_day7_task2_sst_decode") {
+    val sst1 = generateSst()
+    val sst2 = SsTable.open(0, None, FileObject.open(sst1.file.file.get))
+    val bloom1 = sst1.bloom.get
+    val bloom2 = sst2.bloom.get
+    assertResult(bloom1.hashFuncNum)(bloom2.hashFuncNum)
+    assertResult(bloom1.filter)(bloom2.filter)
+  }
 }

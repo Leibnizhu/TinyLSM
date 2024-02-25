@@ -11,11 +11,12 @@ import scala.util.hashing.MurmurHash3
  * SST包括多个DataBlock和一个Index
  * SST文件一般 256MB
  * SST结构
- * ------------------------------------------------------------------------------ * -------------
- * |         Block Section         |          Meta Section         |          Extra          |
- * -------------------------------------------------------------------------------------------
- * | data block | ... | data block |            metadata           | meta block offset (u32) |
- * -------------------------------------------------------------------------------------------
+ * ---------------------------------------------------------------------------------------------------------
+ * |      Block Section      |          Meta Section        |            Bloom Section           |  Extra  |
+ * ---------------------------------------------------------------------------------------------------------
+ * |   data  | ... |   data  | metadata | meta block offset | bloom filter | bloom filter offset |         |
+ * | block 1 |     | block N |  varlen  |         u32       |    varlen    |        u32          |         |
+ * ---------------------------------------------------------------------------------------------------------
  */
 class SsTable(val file: FileObject,
               private val id: Int,
@@ -24,6 +25,7 @@ class SsTable(val file: FileObject,
               private val blockCache: Option[BlockCache],
               val firstKey: MemTableKey,
               val lastKey: MemTableKey,
+              val bloom: Option[Bloom],
               // SST存储的最大时间戳
               val maxTimestamp: Long = -1L) {
 
@@ -87,6 +89,7 @@ class SsTable(val file: FileObject,
 
   /**
    * TODO 可以加入bloom过滤器
+   *
    * @param key 要判断的key
    * @return 这个key是否可能在当前sst里面
    */
@@ -97,12 +100,17 @@ class SsTable(val file: FileObject,
 object SsTable {
   def open(id: Int, blockCache: Option[BlockCache], file: FileObject): SsTable = {
     val len = file.size
-    // TODO bloom 相关
-    // 参考 SsTableBuilder.build ，最后是meta的offset
-    val metaOffset = bytesToInt(file.read(len - 4, 4))
-    val rawMeta = file.read(metaOffset, len - 4 - metaOffset)
+    // 参考 SsTableBuilder.build ，最后是bloom的offset,先读bloom，再读meta
+    val bloomOffset = bytesToInt(file.read(len - 4, 4))
+    val rawBloom = file.read(bloomOffset, len - 4 - bloomOffset)
+    val bloomFilter = Bloom.decode(rawBloom)
+
+    // 读meta，bloom开始再向前4byte就是meta的offset了
+    val metaOffset = bytesToInt(file.read(bloomOffset - 4, 4))
+    val rawMeta = file.read(metaOffset, bloomOffset - 4 - metaOffset)
     val blockMeta = BlockMeta.decode(rawMeta)
 
+    // 构建sst
     new SsTable(
       file = file,
       id = id,
@@ -111,6 +119,7 @@ object SsTable {
       blockCache = blockCache,
       firstKey = blockMeta.head.firstKey.clone,
       lastKey = blockMeta.last.lastKey.clone,
+      bloom = Some(bloomFilter),
       maxTimestamp = 0
     )
   }
@@ -124,6 +133,7 @@ object SsTable {
       blockCache = None,
       firstKey = firstKey,
       lastKey = lastKey,
+      bloom = None,
       maxTimestamp = 0
     )
   }
@@ -191,12 +201,23 @@ class SsTableBuilder(val blockSize: Int) {
   def estimateSize(): Int = data.length
 
   def build(id: Int, blockCache: Option[BlockCache], path: File): SsTable = {
+    // 剩余的数据作为一个Block
     finishBlock()
-    val metaOffset = data.length
-    BlockMeta.encode(meta, data)
-    data.putUint32(metaOffset)
-    // TODO bloom 相关
-    val file = FileObject.create(path, data.toArray)
+
+    // meta写入buffer
+    val buffer = data
+    val metaOffset = buffer.length
+    BlockMeta.encode(meta, buffer)
+    buffer.putUint32(metaOffset)
+
+    //  bloom 写入 buffer
+    val bloom = Bloom(keyHashes.toArray, Bloom.bloomBitsPerKey(keyHashes.length, 0.01))
+    val bloomOffset = buffer.length
+    bloom.encode(buffer)
+    buffer.putUint32(bloomOffset)
+
+    // 生成sst文件
+    val file = FileObject.create(path, buffer.toArray)
     new SsTable(
       file = file,
       id = id,
@@ -205,6 +226,7 @@ class SsTableBuilder(val blockSize: Int) {
       blockCache = blockCache,
       firstKey = meta.head.firstKey.clone(),
       lastKey = meta.last.lastKey.clone(),
+      bloom = Some(bloom),
       // TODO
       maxTimestamp = 0
     )
