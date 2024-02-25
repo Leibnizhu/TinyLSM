@@ -8,7 +8,7 @@ object TinyLsmWebServer extends cask.MainRoutes {
 
   override def port: Int = Config.Port.getInt()
 
-  override def host: String = "0.0.0.0"
+  override def host: String = Config.Host.get()
 
   private val lsmOptions = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
   private val tempDir = new File(System.getProperty("java.io.tmpdir") + File.separator + "TinyLsm")
@@ -35,28 +35,12 @@ object TinyLsmWebServer extends cask.MainRoutes {
 
 enum Config(private val envName: String, private val defaultVal: String) {
 
-  private val sysPropName = underlineToHump(envName)
+  private val sysPropName = toSysPropertyName(envName)
 
   case Port extends Config("TINY_LSM_PORT", "9527")
+  case Host extends Config("TINY_LSM_LISTEN", "0.0.0.0")
 
-  def underlineToHump(str: String): String = {
-    var spStr: Array[String] = str.split("_")
-    //循环这个数组
-    var result = ""
-    var index = 0
-    for (i <- 0 until str.length) {
-      if (str.charAt(i) == '_') {
-        index = 1 + i
-      } else {
-        if (i == index && i != 0) {
-          result += str.charAt(i).toUpper
-        } else {
-          result += str.charAt(i)
-        }
-      }
-    }
-    result
-  }
+  private def toSysPropertyName(str: String): String = str.replace("_", ".").toLowerCase
 
   def get(): String = {
     val sysProp = System.getProperty(sysPropName)

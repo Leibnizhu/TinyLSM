@@ -10,14 +10,8 @@ libraryDependencies ++= Seq(
   "org.mockito" % "mockito-core" % "4.11.0" % Test
 )
 
-lazy val app = (project in file("app"))
+lazy val app = (project in file("."))
   .settings(
     assembly / mainClass := Some("io.github.leibnizhu.tinylsm.TinyLsmWebServer"),
-    // more settings here ...
-  )
-
-lazy val utils = (project in file("utils"))
-  .settings(
-    assembly / assemblyJarName := "utils.jar",
-    // more settings here ...
+    assembly / assemblyJarName := "TinyLsmAssembly.jar",
   )

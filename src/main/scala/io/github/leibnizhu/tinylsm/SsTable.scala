@@ -85,6 +85,11 @@ class SsTable(val file: FileObject,
 
   def sstId(): Int = id
 
+  /**
+   * TODO 可以加入bloom过滤器
+   * @param key 要判断的key
+   * @return 这个key是否可能在当前sst里面
+   */
   def mayContainsKey(key: MemTableKey): Boolean =
     byteArrayCompare(firstKey, key) <= 0 && byteArrayCompare(key, lastKey) <= 0
 }
