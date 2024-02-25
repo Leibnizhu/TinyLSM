@@ -1,6 +1,10 @@
 package io.github.leibnizhu.tinylsm
 
+import org.jboss.logging.Logger
+import org.slf4j.LoggerFactory
+
 import java.io.File
+import java.util.Timer
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.{Lock, ReadWriteLock, ReentrantLock, ReentrantReadWriteLock}
 import scala.collection.mutable
@@ -70,8 +74,10 @@ private[tinylsm] class LsmStorageInner(
                                         path: File,
                                         val state: LsmStorageState,
                                         val blockCache: BlockCache,
-                                        options: LsmStorageOptions,
+                                        val options: LsmStorageOptions,
                                         nextSstId: AtomicInteger) {
+  private val log = LoggerFactory.getLogger(classOf[LsmStorageInner])
+
   /**
    * 按key获取
    *
@@ -198,7 +204,6 @@ private[tinylsm] class LsmStorageInner(
    * 强制将最早的一个ImmutableMemTable 刷入磁盘
    */
   def forceFlushNextImmutableMemTable(): Unit = {
-    //TODO
     try {
       state.stateLock.lock()
       val flushMemTable = state.immutableMemTables.last
@@ -257,6 +262,15 @@ private[tinylsm] class LsmStorageInner(
     }
     println()
   }
+
+  def triggerFlush(): Unit = {
+    val needTrigger = state.read(st => st.immutableMemTables.length >=
+      options.numMemTableLimit)
+    if (needTrigger) {
+      log.info("Trigger flush earliest MemTable to SST...")
+      forceFlushNextImmutableMemTable()
+    }
+  }
 }
 
 object LsmStorageInner {
@@ -269,6 +283,8 @@ object LsmStorageInner {
 }
 
 class TinyLsm(val inner: LsmStorageInner) {
+  private val flushThread = spawnFlushThread()
+
   def get(key: MemTableKey): Option[MemTableValue] = inner.get(key)
 
   def get(key: String): Option[String] = inner.get(key)
@@ -283,6 +299,22 @@ class TinyLsm(val inner: LsmStorageInner) {
 
   def scan(lower: Bound, upper: Bound): FusedIterator[MemTableKey, MemTableValue] = inner.scan(lower, upper)
 
+  def spawnFlushThread(): Timer = {
+    val timer = new Timer()
+    timer.schedule(() => inner.triggerFlush(), 0, 50)
+    timer
+  }
+
+  def close(): Unit = {
+    flushThread.cancel()
+    if (inner.options.enableWal) {
+      // TODO 同步wal目录
+    }
+    while (!inner.state.read(st => st.immutableMemTables.nonEmpty)) {
+      inner.forceFlushNextImmutableMemTable()
+    }
+    //TODO sst目录
+  }
 }
 
 object TinyLsm {

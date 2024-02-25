@@ -293,6 +293,7 @@ class LsmStorageTest extends AnyFunSuite {
     }
     Thread.sleep(500)
     storage.inner.state.read(st => assert(st.l0SsTables.nonEmpty))
+    storage.close()
   }
 
   test("week1_day6_task3_sst_filter") {
