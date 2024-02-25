@@ -167,6 +167,9 @@ class MergeIterator[I <: MemTableStorageIterator]
     // 更新当前的迭代器为堆顶迭代器
     curItr = Option(iterHeap.peek())
   }
+
+  override def numActiveIterators(): Int =
+    iterHeap.iterator().asScala.map(_.itr.numActiveIterators()).sum
 }
 
 /**
@@ -239,7 +242,7 @@ type LsmIteratorInner = TwoMergeIterator[MergeIterator[MemTableIterator], MergeI
  * @param innerIter LsmIteratorInner内部迭代器
  * @param endBound  遍历的key上界
  */
-class LsmIterator(innerIter: LsmIteratorInner, endBound: Bound) extends MemTableStorageIterator {
+class LsmIterator(val innerIter: LsmIteratorInner, endBound: Bound) extends MemTableStorageIterator {
   // LsmIterator本身是否可用，
   private var isSelfValid = innerIter.isValid
   // 跳过前面已删除的元素
@@ -399,7 +402,7 @@ object SsTableIterator {
 }
 
 class TwoMergeIterator[A <: MemTableStorageIterator, B <: MemTableStorageIterator]
-(a: A, b: B) extends MemTableStorageIterator {
+(val a: A, val b: B) extends MemTableStorageIterator {
   private var isUseA: Boolean = useA()
 
   override def key(): MemTableKey = chooseIter().key()

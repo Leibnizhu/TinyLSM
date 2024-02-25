@@ -233,24 +233,52 @@ private[tinylsm] class LsmStorageInner(
       memTableIters.addOne(st.memTable.scan(lower, upper))
       st.immutableMemTables.map(mt => mt.scan(lower, upper)).foreach(memTableIters.addOne)
     })
-    val memTableIter = MergeIterator(memTableIters.toList)
+    val memTablesIter = MergeIterator(memTableIters.toList)
+    val ssTableIters = state.read(st => {
+      st.l0SsTables
+        .map(st.ssTables(_))
+        .filter(sst => rangeOverlap(lower, upper, sst.firstKey, sst.lastKey))
+        .map(sst => lower match {
+          // 没有左边界，则直接到最开始遍历
+          case Unbounded() => SsTableIterator.createAndSeekToFirst(sst)
+          // 包含左边界，则可以跳到左边界的key开始遍历
+          case Included(l: MemTableKey) => SsTableIterator.createAndSeekToKey(sst, l)
+          // 不包含左边界，则先跳到左边界的key，如果跳完之后实际的key等于左边界，由于不包含边界所以跳到下个值
+          case Excluded(l: MemTableKey) =>
+            val iter = SsTableIterator.createAndSeekToKey(sst, l)
+            if (iter.isValid && iter.key().sameElements(l)) {
+              iter.next()
+            }
+            iter
+        })
+    })
+    val ssTablesIter = MergeIterator(ssTableIters)
     // TODO 处理 levels
-    val ssTablesIter = MergeIterator(state.read(st => {
-      st.l0SsTables.map(st.ssTables(_)).map(sst => lower match {
-        // 没有左边界，则直接到最开始遍历
-        case Unbounded() => SsTableIterator.createAndSeekToFirst(sst)
-        // 包含左边界，则可以跳到左边界的key开始遍历
-        case Included(l: MemTableKey) => SsTableIterator.createAndSeekToKey(sst, l)
-        // 不包含左边界，则先跳到左边界的key，如果跳完之后实际的key等于左边界，由于不包含边界所以跳到下个值
-        case Excluded(l: MemTableKey) =>
-          val iter = SsTableIterator.createAndSeekToKey(sst, l)
-          if (iter.isValid && iter.key().sameElements(l)) {
-            iter.next()
-          }
-          iter
-      })
-    }))
-    FusedIterator(LsmIterator(TwoMergeIterator(memTableIter, ssTablesIter), upper))
+    FusedIterator(LsmIterator(TwoMergeIterator(memTablesIter, ssTablesIter), upper))
+  }
+
+  /**
+   * sst的范围是否包含用户指定的scan范围
+   *
+   * @param userBegin scan指定的左边界
+   * @param userEnd scan指定的右边界
+   * @param sstBegin sst的左边，第一个key
+   * @param sstEnd sst的右边，最后一个key
+   * @return sst是否满足scan范围
+   */
+  private def rangeOverlap(userBegin: Bound, userEnd: Bound,
+                           sstBegin: MemTableKey, sstEnd: MemTableKey): Boolean = {
+    // 判断scan的右边界如果小于SST的最左边第一个key，那么这个sst肯定不包含这个scan范围
+    userEnd match
+      case Excluded(r: MemTableKey) if byteArrayCompare(r, sstBegin) <= 0 => return false
+      case Included(r: MemTableKey) if byteArrayCompare(r, sstBegin) < 0 => return false
+      case _ => {}
+    // 判断scan的左边界如果大于SST的最右边最后一个key，那么这个sst肯定不包含这个scan范围
+    userBegin match
+      case Excluded(r: MemTableKey) if byteArrayCompare(r, sstEnd) >= 0 => return false
+      case Included(r: MemTableKey) if byteArrayCompare(r, sstEnd) > 0 => return false
+      case _ => {}
+    true
   }
 
   def printStorage(): Unit = {

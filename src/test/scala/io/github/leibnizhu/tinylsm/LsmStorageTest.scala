@@ -299,33 +299,33 @@ class LsmStorageTest extends AnyFunSuite {
   test("week1_day6_task3_sst_filter") {
     val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
     val storage = LsmStorageInner(tempDir(), options)
+    val keyFormat = "%05d"
     for (i <- 1 to 10000) {
       if (i % 1000 == 0) {
         storage.forceFreezeMemTable()
         storage.forceFlushNextImmutableMemTable()
       }
-      storage.put("%05".format(i), "2333333")
-      val iter1 = storage.scan(Unbounded(), Unbounded())
-      val maxIterNum = iter1.numActiveIterators()
-      assert(maxIterNum >= 10, s"current active iterators: $maxIterNum")
-
-      val iter2 = storage.scan(Excluded("%05".format(10000)), Unbounded())
-      val minIterNum = iter2.numActiveIterators()
-      assert(minIterNum < maxIterNum)
-
-      val iter3 = storage.scan(Unbounded(), Excluded("%05".format(1)))
-      assertResult(minIterNum)(iter3.numActiveIterators())
-
-      val iter4 = storage.scan(Unbounded(), Included("%05".format(0)))
-      assertResult(minIterNum)(iter4.numActiveIterators())
-
-      val iter5 = storage.scan(Included("%05".format(10001)), Unbounded())
-      assertResult(minIterNum)(iter5.numActiveIterators())
-
-      val iter6 = storage.scan(Included("%05".format(5000)), Excluded("%05".format(6000)))
-      assert(minIterNum < iter6.numActiveIterators())
-      assert(maxIterNum > iter6.numActiveIterators())
+      storage.put(keyFormat.format(i), "2333333")
     }
+    val iter1 = storage.scan(Unbounded(), Unbounded())
+    val maxIterNum = iter1.numActiveIterators()
+    assert(maxIterNum >= 10, s"current active iterators: $maxIterNum")
 
+    val iter2 = storage.scan(Excluded(keyFormat.format(10000)), Unbounded())
+    val minIterNum = iter2.numActiveIterators()
+    assert(minIterNum < maxIterNum)
+
+    val iter3 = storage.scan(Unbounded(), Excluded(keyFormat.format(1)))
+    assertResult(minIterNum)(iter3.numActiveIterators())
+
+    val iter4 = storage.scan(Unbounded(), Included(keyFormat.format(0)))
+    assertResult(minIterNum)(iter4.numActiveIterators())
+
+    val iter5 = storage.scan(Included(keyFormat.format(10001)), Unbounded())
+    assertResult(minIterNum)(iter5.numActiveIterators())
+
+    val iter6 = storage.scan(Included(keyFormat.format(5000)), Excluded(keyFormat.format(6000)))
+    assert(minIterNum < iter6.numActiveIterators())
+    assert(maxIterNum > iter6.numActiveIterators())
   }
 }

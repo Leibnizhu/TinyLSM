@@ -2,9 +2,9 @@ package io.github.leibnizhu.tinylsm
 
 
 import com.github.blemale.scaffeine.{Cache, Scaffeine}
-import scala.concurrent.duration._
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration.*
 
 /**
  * Block 结构：
@@ -45,7 +45,7 @@ object Block {
    */
   def decode(bytes: Array[Byte]): Block = {
     val byteLen = bytes.length
-    val numOfElement = bytes.last
+    val numOfElement = if (bytes.last < 0) (bytes.last + 256) else bytes.last.toInt
     val offsetBytes = bytes.slice(bytes.length - numOfElement * SIZE_OF_U16 - 2, bytes.length - 2)
     val offsetIntArray = offsetBytes.sliding(2, 2).map(tb => low2BytesToInt(tb(0), tb(1))).toArray
     val dataBytes = bytes.slice(0, bytes.length - numOfElement * SIZE_OF_U16 - 2)
