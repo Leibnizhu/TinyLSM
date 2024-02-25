@@ -78,8 +78,8 @@ class SsTableTest extends AnyFunSuite {
   test("week1_day4_task2_sst_iterator") {
     val sst = generateSst()
     val iterator = SsTableIterator.createAndSeekToFirst(sst)
-    for(_ <- 0 until 5) {
-      for(i <- 0 until keyNum) {
+    for (_ <- 0 until 5) {
+      for (i <- 0 until keyNum) {
         val key = iterator.key()
         val value = iterator.value()
         assertResult(keyOf(i))(new String(key))
@@ -93,8 +93,8 @@ class SsTableTest extends AnyFunSuite {
   test("week1_day4_task1_sst_seek_key") {
     val sst = generateSst()
     val iterator = SsTableIterator.createAndSeekToKey(sst, keyOf(0).getBytes)
-    for(offset <- 1 to 5) {
-      for(i <- 0 until keyNum) {
+    for (offset <- 1 to 5) {
+      for (i <- 0 until keyNum) {
         val key = iterator.key()
         val value = iterator.value()
         assertResult(keyOf(i))(new String(key))
@@ -104,7 +104,7 @@ class SsTableTest extends AnyFunSuite {
       iterator.seekToKey("k".getBytes)
     }
   }
-  
+
   test("week1_day7_task2_sst_decode") {
     val sst1 = generateSst()
     val sst2 = SsTable.open(0, None, FileObject.open(sst1.file.file.get))
@@ -112,5 +112,10 @@ class SsTableTest extends AnyFunSuite {
     val bloom2 = sst2.bloom.get
     assertResult(bloom1.hashFuncNum)(bloom2.hashFuncNum)
     assertResult(bloom1.filter)(bloom2.filter)
+  }
+
+  test("week1_day7_task3_block_key_compression") {
+    val sst = generateSst()
+    assert(sst.blockMeta.length <= 25)
   }
 }

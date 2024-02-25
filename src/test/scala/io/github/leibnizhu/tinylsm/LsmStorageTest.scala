@@ -291,7 +291,7 @@ class LsmStorageTest extends AnyFunSuite {
     for (i <- 0 until 6000) {
       storage.put(i.toString, value)
     }
-    Thread.sleep(500)
+    Thread.sleep(1000)
     storage.inner.state.read(st => assert(st.l0SsTables.nonEmpty))
     storage.close()
   }

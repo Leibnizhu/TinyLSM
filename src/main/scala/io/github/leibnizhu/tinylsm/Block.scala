@@ -34,6 +34,14 @@ class Block(val data: Array[Byte], val offsets: Array[Int]) {
     buffer.appendAll(intLow2Bytes(offsets.length))
     buffer.toArray
   }
+
+  def getFirstKey(): MemTableKey = {
+    val buffer = ByteArrayReader(data)
+    val overlapLen = buffer.readUint16()
+    assert(overlapLen == 0)
+    val keyLen = buffer.readUint16()
+    buffer.readBytes(keyLen)
+  }
 }
 
 object Block {
@@ -80,10 +88,16 @@ class BlockBuilder(val blockSize: Int) {
     // 显然，新数据的offset就是当前data长度
     offsets += data.length
 
-    // key的长度
-    data.appendAll(intLow2Bytes(key.length))
+    // overlap 格式
+    // key_overlap_len (u16) | rest_key_len (u16) | key (rest_key_len)
+    // 当前key与firstKey的共同前缀byte数量
+    val overlap = commonPrefix(key)
+    // key_overlap_len
+    data.appendAll(intLow2Bytes(overlap))
+    //  rest_key_len (u16)
+    data.appendAll(intLow2Bytes(key.length - overlap))
     // key内容
-    data.appendAll(key)
+    data.appendAll(key.slice(overlap, key.length))
     // value的长度
     data.appendAll(intLow2Bytes(value.length))
     // value内容
@@ -95,6 +109,20 @@ class BlockBuilder(val blockSize: Int) {
     true
   }
 
+  /**
+   * @param key 指定key
+   * @return 指定key与 firstKey 有多少个相同的前缀byte
+   */
+  private def commonPrefix(key: MemTableKey): Int = {
+    if (firstKey.isEmpty) {
+      return 0
+    }
+    var index = 0
+    while (index < firstKey.get.length && index < key.length && firstKey.get(index) == key(index)) {
+      index += 1
+    }
+    index
+  }
 
   /**
    * @return 按data和offsets估算的体积
@@ -138,6 +166,7 @@ class BlockIterator(block: Block) extends MemTableStorageIterator {
    * 当前value在Block中data的下标
    */
   private var curValuePos: (Int, Int) = (0, 0)
+  private val firstKey = block.getFirstKey()
 
   def seekToFirst(): Unit = {
     seekToIndex(0)
@@ -211,10 +240,12 @@ class BlockIterator(block: Block) extends MemTableStorageIterator {
 
     // 根据 offset 段获取entry位置
     val entryOffset = block.offsets(index)
-    // 先后读取key长度、key、value长度
-    val keyLength = low2BytesToInt(block.data(entryOffset), block.data(entryOffset + 1))
-    curKey = Some(block.data.slice(entryOffset + 2, entryOffset + 2 + keyLength))
-    val valueOffset = entryOffset + 2 + keyLength
+    // 先后读取overlap长度、剩余key长度、剩余key、value长度
+    val overlapLength = low2BytesToInt(block.data(entryOffset), block.data(entryOffset + 1))
+    val restKeyLength = low2BytesToInt(block.data(entryOffset + 2), block.data(entryOffset + 3))
+    curKey = Some(firstKey.slice(0, overlapLength) ++
+      block.data.slice(entryOffset + 4, entryOffset + 4 + restKeyLength))
+    val valueOffset = entryOffset + 4 + restKeyLength
     val valueLength = low2BytesToInt(block.data(valueOffset), block.data(valueOffset + 1))
     curValuePos = (valueOffset + 2, valueOffset + 2 + valueLength)
     this.index = index
