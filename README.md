@@ -4,7 +4,12 @@ Tiny LSM in scala
 
 ## Requirement
 
+development:
 - JDK 11 or later
+- sbt
+
+build:
+- Docker
 
 ## Configuration
 
@@ -27,5 +32,32 @@ Configuration lookup order:
 | TINY_LSM_SERIALIZABLE    | serializable           |                                                                              | false                     |
 | TINY_LSM_DATA_DIR        | data.dir               |                                                                              | /etc/tinylsm/data         |
 | TINY_LSM_CONFIG_FILE     | config.file            |                                                                              | /etc/tinylsm/tinylsm.conf |
+
+## Usage
+
+### Build
+
+Make sure `docker` is installed, and then execute:  
+```shell
+docker build . -f Dockerfile -t ${DOCKER_IMAGE_TAG:-tiny-lsm:0.0.1} --network=host --target prod
+```
+
+### Run
+
+```shell
+docker run --rm -d --name tinylsm ${DOCKER_IMAGE_TAG:-tiny-lsm:0.0.1}
+docker exec -it tinylsm bash
+
+# in container's bash
+tinylsm-cli
+
+# in tinylsm-cli
+:help
+put key value
+get key
+delete key
+get key
+:quit
+```
 
 [Reference](https://skyzh.github.io/mini-lsm/00-preface.html)
