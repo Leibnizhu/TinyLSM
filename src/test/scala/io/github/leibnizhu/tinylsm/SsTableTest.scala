@@ -116,6 +116,8 @@ class SsTableTest extends AnyFunSuite {
 
   test("week1_day7_task3_block_key_compression") {
     val sst = generateSst()
-    assert(sst.blockMeta.length <= 25)
+    // 据观察，没开启的时候是20个block
+    // key都是  key_xxx，压缩后，每个key多了2byte记录前缀长度，少了4-6个前缀byte，估算 ((4+6)/2 -2)/7
+    assert(sst.blockMeta.length < 20)
   }
 }

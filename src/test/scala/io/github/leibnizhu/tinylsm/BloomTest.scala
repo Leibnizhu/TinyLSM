@@ -37,7 +37,7 @@ class BloomTest extends AnyFunSuite {
       }
       cnt += 1
     }
-    println(s"total key: $cnt, may match key: $x, falsePositiveRate: ${"%1.4f".format(x.toDouble/cnt)}")
+    println(s"total key: $cnt, may match key: $x, falsePositiveRate: ${"%1.4f".format(x.toDouble / cnt)}")
     assert(x != cnt)
     assert(x != 0)
   }

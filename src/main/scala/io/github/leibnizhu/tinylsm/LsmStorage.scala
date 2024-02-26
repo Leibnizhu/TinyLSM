@@ -261,9 +261,9 @@ private[tinylsm] class LsmStorageInner(
    * sst的范围是否包含用户指定的scan范围
    *
    * @param userBegin scan指定的左边界
-   * @param userEnd scan指定的右边界
-   * @param sstBegin sst的左边，第一个key
-   * @param sstEnd sst的右边，最后一个key
+   * @param userEnd   scan指定的右边界
+   * @param sstBegin  sst的左边，第一个key
+   * @param sstEnd    sst的右边，最后一个key
    * @return sst是否满足scan范围
    */
   private def rangeOverlap(userBegin: Bound, userEnd: Bound,
@@ -358,7 +358,7 @@ case class LsmStorageOptions
   blockSize: Int,
   // SST大小，单位是 bytes, 同时也是MemTable容量限制的近似值
   targetSstSize: Int,
-  // MemTable在内存中的最大占用空间, 到达这个大小后会 flush 到 L0
+  // MemTable在内存中的最多个数, 超过这么多MemTable后会 flush 到 L0
   numMemTableLimit: Int,
   // Compaction配置
   compactionOptions: CompactionOptions,
@@ -367,3 +367,24 @@ case class LsmStorageOptions
   // 是否可序列化
   serializable: Boolean
 )
+
+object LsmStorageOptions {
+  def defaultOption(): LsmStorageOptions = LsmStorageOptions(
+    4096,
+    2 << 20,
+    50,
+    NoCompaction(),
+    false,
+    false)
+
+  def fromConfig(): LsmStorageOptions =
+    LsmStorageOptions(
+      Config.BlockSize.getInt,
+      Config.TargetSstSize.getInt,
+      Config.MemTableLimitNum.getInt,
+      // TODO
+      NoCompaction(),
+      Config.EnableWal.getBoolean,
+      Config.Serializable.getBoolean
+    )
+}

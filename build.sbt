@@ -4,8 +4,10 @@ version := "0.1"
 
 libraryDependencies ++= Seq(
   "com.lihaoyi" %% "cask" % "0.9.2" % "compile",
+  "com.lihaoyi" %% "requests" % "0.8.0"% "compile",
   "com.github.blemale" %% "scaffeine" % "5.2.1" % "compile",
   "org.jboss.slf4j" % "slf4j-jboss-logging" % "1.2.1.Final" % "compile",
+  "org.jline" % "jline" % "3.25.1" % "compile",
   "org.scalatest" %% "scalatest" % "3.2.9" % Test,
   "org.mockito" % "mockito-core" % "4.11.0" % Test
 )

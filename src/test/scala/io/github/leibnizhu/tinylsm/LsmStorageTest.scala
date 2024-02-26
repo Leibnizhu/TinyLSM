@@ -8,7 +8,7 @@ import java.io.File
 class LsmStorageTest extends AnyFunSuite {
 
   test("week1_day1_task2_storage_integration") {
-    val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
+    val options = LsmStorageOptions.defaultOption()
     val storage = LsmStorageInner(tempDir(), options)
 
     assert(storage.get("0").isEmpty)
@@ -27,7 +27,7 @@ class LsmStorageTest extends AnyFunSuite {
   }
 
   test("week1_day1_task3_storage_integration") {
-    val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
+    val options = LsmStorageOptions.defaultOption()
     val storage = LsmStorageInner(tempDir(), options)
 
     storage.put("1", "233")
@@ -88,7 +88,7 @@ class LsmStorageTest extends AnyFunSuite {
   }
 
   test("week1_day2_task4_integration") {
-    val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
+    val options = LsmStorageOptions.defaultOption()
     val storage = LsmStorageInner(tempDir(), options)
 
     storage.put("1", "233")
@@ -128,7 +128,7 @@ class LsmStorageTest extends AnyFunSuite {
   }
 
   test("week1_day5_task2_storage_scan") {
-    val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
+    val options = LsmStorageOptions.defaultOption()
     val storage = LsmStorageInner(tempDir(), options)
     storage.put("1", "233")
     storage.put("2", "2333")
@@ -178,7 +178,7 @@ class LsmStorageTest extends AnyFunSuite {
   }
 
   test("week1_day5_task3_storage_get") {
-    val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
+    val options = LsmStorageOptions.defaultOption()
     val storage = LsmStorageInner(tempDir(), options)
     storage.put("1", "233")
     storage.put("2", "2333")
@@ -212,7 +212,7 @@ class LsmStorageTest extends AnyFunSuite {
   }
 
   test("week1_day6_task1_storage_scan") {
-    val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
+    val options = LsmStorageOptions.defaultOption()
     val storage = LsmStorageInner(tempDir(), options)
     storage.put("0", "2333333")
     storage.put("00", "2333333")
@@ -252,7 +252,7 @@ class LsmStorageTest extends AnyFunSuite {
   }
 
   test("week1_day6_task1_storage_get") {
-    val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
+    val options = LsmStorageOptions.defaultOption()
     val storage = LsmStorageInner(tempDir(), options)
     storage.put("0", "2333333")
     storage.put("00", "2333333")
@@ -297,7 +297,7 @@ class LsmStorageTest extends AnyFunSuite {
   }
 
   test("week1_day6_task3_sst_filter") {
-    val options = LsmStorageOptions(4096, 2 << 20, 50, NoCompaction(), false, false)
+    val options = LsmStorageOptions.defaultOption()
     val storage = LsmStorageInner(tempDir(), options)
     val keyFormat = "%05d"
     for (i <- 1 to 10000) {
