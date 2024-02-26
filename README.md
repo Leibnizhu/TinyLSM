@@ -1,6 +1,6 @@
 # TinyLSM
 
-Tiny LSM in scala
+Tiny LSM in scala, [Reference to...](https://skyzh.github.io/mini-lsm/00-preface.html)
 
 ## Requirement
 
@@ -73,5 +73,3 @@ delete key
 get key
 :quit
 ```
-
-[Reference](https://skyzh.github.io/mini-lsm/00-preface.html)
