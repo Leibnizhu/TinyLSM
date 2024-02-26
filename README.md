@@ -26,12 +26,26 @@ Configuration lookup order:
 | TINY_LSM_PORT            | port                   |                                                                              | 9527                      |
 | TINY_LSM_LISTEN          | listen                 |                                                                              | 0.0.0.0                   |
 | TINY_LSM_BLOCK_SIZE      | block.size             | Block size in bytes                                                          | 4096                      |
-| TINY_LSM_TARGET_SST_SIZE | block.size             | SST size in bytes, also the approximate memtable capacity limit              | 2 << 20 (2MB)             |
+| TINY_LSM_TARGET_SST_SIZE | target.sst.size        | SST size in bytes, also the approximate memtable capacity limit              | 2 << 20 (2MB)             |
 | TINY_LSM_MEMTABLE_NUM    | memtable.num           | Maximum number of memtables in memory, flush to L0 when exceeding this limit | 50                        |
 | TINY_LSM_ENABLE_WAL      | enable.wal             |                                                                              | true                      |
 | TINY_LSM_SERIALIZABLE    | serializable           |                                                                              | false                     |
 | TINY_LSM_DATA_DIR        | data.dir               |                                                                              | /etc/tinylsm/data         |
 | TINY_LSM_CONFIG_FILE     | config.file            |                                                                              | /etc/tinylsm/tinylsm.conf |
+
+For example, write a config file in `/path/to/tinylsm.conf` :
+```properties
+port=9527
+listen=0.0.0.0
+block.size=4096
+target.sst.size=1048576
+memtable.num=50
+enable.wal=true
+serializable=false
+data.dir=/etc/tinylsm/data
+```
+
+then `export TINY_LSM_CONFIG_FILE=/path/to/tinylsm.conf`( or `-e TINY_LSM_CONFIG_FILE=/path/to/tinylsm.conf` for docker command) and start TinyLsm.
 
 ## Usage
 
