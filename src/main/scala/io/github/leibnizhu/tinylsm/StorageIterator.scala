@@ -453,3 +453,20 @@ class TwoMergeIterator[A <: MemTableStorageIterator, B <: MemTableStorageIterato
 
   override def numActiveIterators(): Int = a.numActiveIterators() + b.numActiveIterators()
 }
+
+class SstConcatIterator extends MemTableStorageIterator {
+
+  override def key(): MemTableKey = ???
+
+  override def value(): MemTableValue = ???
+
+  override def isValid: Boolean = ???
+
+  override def next(): Unit = ???
+}
+
+object SstConcatIterator {
+  def createAndSeekToFirst(table: List[SsTable]): SstConcatIterator = {
+    null
+  }
+}

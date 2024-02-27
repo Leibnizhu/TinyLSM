@@ -4,8 +4,10 @@ import org.scalatest.Assertions.{assertResult, assertThrows}
 import org.scalatest.Entry
 
 import java.io.File
+import scala.collection.mutable.ArrayBuffer
 
 object TestUtils {
+  val TS_ENABLED = false
 
   def checkIterator(expect: List[MemTableEntry], actual: MemTableStorageIterator): Unit = {
     for (expectEntry <- expect) {
@@ -45,5 +47,23 @@ object TestUtils {
       builder.add(entry.getKey.bytes, entry.getValue)
     }
     builder.build(id, blockCache, path)
+  }
+
+  def syncStorage(storage: LsmStorageInner): Unit = {
+    storage.forceFreezeMemTable()
+    storage.forceFlushNextImmutableMemTable()
+  }
+
+  def constructMergeIteratorOverStorage(state: LsmStorageState): MergeIterator[SsTableIterator] = {
+    val iters = new ArrayBuffer[SsTableIterator]()
+    for (t <- state.l0SsTables) {
+      iters += SsTableIterator.createAndSeekToFirst(state.ssTables(t))
+    }
+    for (level <- state.levels) {
+      for (f <- level._2) {
+        iters += SsTableIterator.createAndSeekToFirst(state.ssTables(f))
+      }
+    }
+    MergeIterator(iters.toList)
   }
 }

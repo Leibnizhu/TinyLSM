@@ -8,7 +8,7 @@ import java.util.Timer
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.{Lock, ReadWriteLock, ReentrantLock, ReentrantReadWriteLock}
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.util.boundary
 
 class LsmStorageState(
@@ -18,8 +18,8 @@ class LsmStorageState(
                        var immutableMemTables: List[MemTable],
                        // L0 SST 从最新到最早的
                        var l0SsTables: List[Int],
-                       // 按key 范围排序的SsTable， L1 -> Lmax
-                       var levels: List[(Int, List[Int])],
+                       // TODO 按key 范围排序的SsTable， L1 -> Lmax
+                       val levels: Array[(Int, List[Int])] = Array((1, List())),
                        // SST 对象
                        val ssTables: mutable.Map[Int, SsTable] = mutable.HashMap()
                      ) {
@@ -65,7 +65,7 @@ class LsmStorageState(
 
 object LsmStorageState {
   def apply(options: LsmStorageOptions): LsmStorageState = {
-    new LsmStorageState(MemTable(0), List[MemTable](), List(), List())
+    new LsmStorageState(MemTable(0), List[MemTable](), List())
   }
 }
 
@@ -257,6 +257,95 @@ private[tinylsm] class LsmStorageInner(
     FusedIterator(LsmIterator(TwoMergeIterator(memTablesIter, ssTablesIter), upper))
   }
 
+  def forceFullCompaction(): Unit = {
+    if (options.compactionOptions == CompactionOptions.NoCompaction) {
+      throw new IllegalStateException("full compaction can only be called with compaction is enabled")
+    }
+
+    // 执行 full compaction
+    val l0SsTables = List(state.read(_.l0SsTables): _*)
+    val l1SsTables = List(state.read(st => if (st.levels.isEmpty) List() else st.levels.head._2): _*)
+    val compactionTask = ForceFullCompactionTask(l0SsTables, l1SsTables)
+    log.info("Force full compaction: {}", compactionTask)
+    val newSsTables = compactionTask.doCompact(this)
+
+    // 替换state的sst
+    val sstIds = new ListBuffer[Int]()
+    try {
+      state.stateLock.lock()
+      // 从 ssTables 移除旧SST
+      for (sstId <- l0SsTables ++ l1SsTables) {
+        val removed = state.ssTables.remove(sstId)
+        assert(removed.isDefined)
+      }
+      // 向 sstTables加入新SST
+      for (newSst <- newSsTables) {
+        sstIds += newSst.sstId()
+        state.ssTables(newSst.sstId()) = newSst
+      }
+      // 修改 levels 1
+      state.levels.update(0, (1, sstIds.toList))
+      // 更新 L0
+      val l0SsTablesSet = mutable.HashSet(l0SsTables: _*)
+      state.l0SsTables = state.l0SsTables.filter(s => !l0SsTablesSet.remove(s))
+      assert(l0SsTablesSet.isEmpty)
+    } finally {
+      state.stateLock.unlock()
+    }
+
+    // 删除旧sst
+    for (sstId <- l0SsTables ++ l1SsTables) {
+      val sstFile = fileOfSst(sstId)
+      val deleted = sstFile.delete()
+      log.info("Deleted sst file: {} {}", sstFile.getAbsolutePath, if (deleted) "success" else "failed")
+    }
+    log.info("force full compaction done, new SSTs: {}", sstIds.toList)
+  }
+
+  /**
+   * 使用迭代器迭代数据，写入新sst
+   *
+   * @param iter                 迭代器
+   * @param compactToBottomLevel 是否压缩合并底部的level，如果是的话，会删除 delete墓碑
+   * @return 新的sst
+   */
+  def compactGenerateSstFromIter(iter: MemTableStorageIterator, compactToBottomLevel: Boolean): List[SsTable] = {
+    var builder: Option[SsTableBuilder] = None
+    val newSstList = new ArrayBuffer[SsTable]()
+    while (iter.isValid) {
+      if (builder.isEmpty) {
+        builder = Some(SsTableBuilder(options.blockSize))
+      }
+      val innerBuilder = builder.get
+      if (compactToBottomLevel) {
+        // 如果压缩合并底部的level，则不保留delete墓碑
+        if (!iter.value().sameElements(DELETE_TOMBSTONE)) {
+          innerBuilder.add(iter.key(), iter.value())
+        }
+      } else {
+        innerBuilder.add(iter.key(), iter.value())
+      }
+      iter.next()
+      // builder满了则生成sst，并新开一个builder
+      if (innerBuilder.estimateSize() >= options.targetSstSize) {
+        val sstId = nextSstId.incrementAndGet()
+        val sst = innerBuilder.build(sstId, Some(blockCache), fileOfSst(sstId))
+        newSstList += sst
+      }
+    }
+    // 最后一个SsTableBuilder
+    if (builder.isDefined) {
+      val sstId = nextSstId.incrementAndGet()
+      val sst = builder.get.build(sstId, Some(blockCache), fileOfSst(sstId))
+      newSstList += sst
+    }
+    newSstList.toList
+  }
+
+  def newTxn(): Unit = {
+
+  }
+
   /**
    * sst的范围是否包含用户指定的scan范围
    *
@@ -327,6 +416,10 @@ class TinyLsm(val inner: LsmStorageInner) {
 
   def scan(lower: Bound, upper: Bound): FusedIterator[MemTableKey, MemTableValue] = inner.scan(lower, upper)
 
+  def newTxn(): Unit = inner.newTxn()
+
+  def forceFullCompaction(): Unit = inner.forceFullCompaction()
+
   def spawnFlushThread(): Timer = {
     val timer = new Timer()
     timer.schedule(() => inner.triggerFlush(), 0, 50)
@@ -373,18 +466,17 @@ object LsmStorageOptions {
     4096,
     2 << 20,
     50,
-    NoCompaction(),
+    CompactionOptions.NoCompaction,
     false,
     false)
 
-  def fromConfig(): LsmStorageOptions =
-    LsmStorageOptions(
-      Config.BlockSize.getInt,
-      Config.TargetSstSize.getInt,
-      Config.MemTableLimitNum.getInt,
-      // TODO
-      NoCompaction(),
-      Config.EnableWal.getBoolean,
-      Config.Serializable.getBoolean
-    )
+  def fromConfig(): LsmStorageOptions = LsmStorageOptions(
+    Config.BlockSize.getInt,
+    Config.TargetSstSize.getInt,
+    Config.MemTableLimitNum.getInt,
+    // TODO
+    CompactionOptions.NoCompaction,
+    Config.EnableWal.getBoolean,
+    Config.Serializable.getBoolean
+  )
 }

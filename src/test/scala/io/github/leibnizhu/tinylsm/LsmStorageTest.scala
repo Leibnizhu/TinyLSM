@@ -1,6 +1,6 @@
 package io.github.leibnizhu.tinylsm
 
-import io.github.leibnizhu.tinylsm.TestUtils.{checkIterator, entry, generateSst, tempDir}
+import io.github.leibnizhu.tinylsm.TestUtils.{checkIterator, entry, generateSst, tempDir, syncStorage}
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File
@@ -48,7 +48,7 @@ class LsmStorageTest extends AnyFunSuite {
   }
 
   test("week1_day1_task3_freeze_on_capacity") {
-    val options = LsmStorageOptions(4096, 1024, 1000, NoCompaction(), false, false)
+    val options = LsmStorageOptions(4096, 1024, 1000, CompactionOptions.NoCompaction, false, false)
     val storage = LsmStorageInner(tempDir(), options)
 
     for (i <- 0 until 1000) {
@@ -64,7 +64,7 @@ class LsmStorageTest extends AnyFunSuite {
   }
 
   test("week1_day1_task4_storage_integration") {
-    val options = LsmStorageOptions(4096, 1024, 1000, NoCompaction(), false, false)
+    val options = LsmStorageOptions(4096, 1024, 1000, CompactionOptions.NoCompaction, false, false)
     val storage = LsmStorageInner(tempDir(), options)
 
     assert(storage.get("0").isEmpty)
@@ -217,11 +217,9 @@ class LsmStorageTest extends AnyFunSuite {
     storage.put("0", "2333333")
     storage.put("00", "2333333")
     storage.put("4", "23")
-    storage.forceFreezeMemTable()
-    storage.forceFlushNextImmutableMemTable()
+    syncStorage(storage)
     storage.delete("4")
-    storage.forceFreezeMemTable()
-    storage.forceFlushNextImmutableMemTable()
+    syncStorage(storage)
     storage.put("1", "233")
     storage.put("2", "2333")
     storage.forceFreezeMemTable()
@@ -257,11 +255,9 @@ class LsmStorageTest extends AnyFunSuite {
     storage.put("0", "2333333")
     storage.put("00", "2333333")
     storage.put("4", "23")
-    storage.forceFreezeMemTable()
-    storage.forceFlushNextImmutableMemTable()
+    syncStorage(storage)
     storage.delete("4")
-    storage.forceFreezeMemTable()
-    storage.forceFlushNextImmutableMemTable()
+    syncStorage(storage)
     storage.put("1", "233")
     storage.put("2", "2333")
     storage.forceFreezeMemTable()
@@ -285,7 +281,7 @@ class LsmStorageTest extends AnyFunSuite {
   }
 
   test("week1_day6_task2_auto_flush") {
-    val options = LsmStorageOptions(4096, 2 << 20, 2, NoCompaction(), false, false)
+    val options = LsmStorageOptions(4096, 2 << 20, 2, CompactionOptions.NoCompaction, false, false)
     val storage = TinyLsm(tempDir(), options)
     val value = "1" * 1024
     for (i <- 0 until 6000) {
@@ -302,8 +298,7 @@ class LsmStorageTest extends AnyFunSuite {
     val keyFormat = "%05d"
     for (i <- 1 to 10000) {
       if (i % 1000 == 0) {
-        storage.forceFreezeMemTable()
-        storage.forceFlushNextImmutableMemTable()
+        syncStorage(storage)
       }
       storage.put(keyFormat.format(i), "2333333")
     }

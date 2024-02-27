@@ -1,6 +1,6 @@
 package io.github.leibnizhu.tinylsm
 
-import io.github.leibnizhu.tinylsm.TestUtils.tempDir
+import io.github.leibnizhu.tinylsm.TestUtils.{TS_ENABLED, tempDir}
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File
@@ -118,6 +118,10 @@ class SsTableTest extends AnyFunSuite {
     val sst = generateSst()
     // 据观察，没开启的时候是20个block
     // key都是  key_xxx，压缩后，每个key多了2byte记录前缀长度，少了4-6个前缀byte，估算 ((4+6)/2 -2)/7
-    assert(sst.blockMeta.length < 20)
+    if (TS_ENABLED) {
+      assert(sst.blockMeta.length < 29)
+    } else {
+      assert(sst.blockMeta.length < 20)
+    }
   }
 }
