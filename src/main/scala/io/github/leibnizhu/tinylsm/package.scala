@@ -9,7 +9,7 @@ package object tinylsm {
   val SIZE_OF_INT = 4
 
   // 已删除的key对应的value
-  val DELETE_TOMBSTONE = Array[Byte]()
+  val DELETE_TOMBSTONE: Array[Byte] = Array()
 
   type MemTableKey = Array[Byte]
   type MemTableValue = Array[Byte]
@@ -82,5 +82,25 @@ package object tinylsm {
     val safeB1: Int = if (b1 < 0) b1 + 256 else b1
     val safeB0: Int = if (b0 < 0) b0 + 256 else b0
     (safeB3 << 24) + (safeB2 << 16) + (safeB1 << 8) + safeB0
+  }
+
+  def partitionPoint[T](items: Seq[T], target: T => Boolean): Int = {
+    // 二分查找，找到最后（数组的右边满足 target 的索引
+    var low = 0
+    var high = items.length - 1
+    var result = 0
+    while (low <= high) {
+      val mid = (high + low) / 2
+      val matched = target(items(mid))
+      if (matched) {
+        // 满足条件时，先存储起来，有可能是最终结果，low尝试右移
+        result = mid
+        low = mid + 1
+      } else {
+        //当前mid不满足条件，所以右边界应该比mid还小，减一
+        high = mid - 1
+      }
+    }
+    result
   }
 }

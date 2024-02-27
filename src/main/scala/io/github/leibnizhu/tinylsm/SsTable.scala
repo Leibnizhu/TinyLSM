@@ -62,23 +62,7 @@ class SsTable(val file: FileObject,
 
   def findBlockIndex(targetKey: MemTableKey): Int = {
     // 二分查找，找到最后（数组的右边）一个 meta.firstKey <= targetKey 的 meta 的索引
-    var low = 0
-    var high = blockMeta.length - 1
-    var result = 0
-    while (low <= high) {
-      val mid = (high + low) / 2
-      val compare = byteArrayCompare(blockMeta(mid).firstKey, targetKey)
-      if (compare <= 0) {
-        // meta.firstKey <= targetKey 当前mid是满足条件的，
-        // 由于key是升序的，所以实际结果只会比这个大，先存储起来，有可能是最终结果，low尝试右移
-        result = mid
-        low = mid + 1
-      } else {
-        // meta.firstKey > targetKey 当前mid不满足条件，所以右边界应该比mid还小，减一
-        high = mid - 1
-      }
-    }
-    result
+    partitionPoint(blockMeta, meta => byteArrayCompare(meta.firstKey, targetKey) <= 0)
   }
 
   def numOfBlocks(): Int = blockMeta.length
@@ -95,6 +79,16 @@ class SsTable(val file: FileObject,
    */
   def mayContainsKey(key: MemTableKey): Boolean =
     byteArrayCompare(firstKey, key) <= 0 && byteArrayCompare(key, lastKey) <= 0
+
+  def printSsTable(): Unit = {
+    val itr = SsTableIterator.createAndSeekToFirst(this)
+    print(s"SsTable(ID=$id) content: ")
+    while (itr.isValid) {
+      print(s"${new String(itr.key())} => ${new String(itr.value())}, ")
+      itr.next()
+    }
+    println()
+  }
 }
 
 object SsTable {
@@ -177,6 +171,8 @@ class SsTableBuilder(val blockSize: Int) {
     firstKey = Some(key)
     lastKey = Some(key)
   }
+
+  def add(key: String, value: String): Unit = add(key.getBytes, value.getBytes)
 
   /**
    * 一个Block写完、满了后，的处理

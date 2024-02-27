@@ -1,6 +1,7 @@
 scalaVersion := "3.3.1"
 name := "ScalaTinyLsm"
 version := "0.2-SNAPSHOT"
+parallelExecution in Test := false
 
 libraryDependencies ++= Seq(
   "com.lihaoyi" %% "cask" % "0.9.2" % "compile",
