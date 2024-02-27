@@ -113,13 +113,25 @@ private[tinylsm] class LsmStorageInner(
     // 从 SST读取
     // l0 sst 的多个sst从key开始构成一个 MergeIterator 可一查
     val l0SsTableIters = state.read(st => {
-      st.l0SsTables.map(st.ssTables(_)).filter(_.mayContainsKey(key)).map(SsTableIterator.createAndSeekToKey(_, key))
+      st.l0SsTables
+        .map(st.ssTables(_))
+        .filter(_.mayContainsKey(key))
+        .map(SsTableIterator.createAndSeekToKey(_, key))
     })
-    val l0Iter = MergeIterator(l0SsTableIters)
-    // TODO levels sst的读取
-    if (l0Iter.isValid && l0Iter.key().sameElements(key) && !l0Iter.value().sameElements(DELETE_TOMBSTONE)) {
+    // levels sst的读取
+    val levelIters = state.read(st => {
+      st.levels.map((_, levelSstIds) => {
+        val levelSsts = levelSstIds
+          .map(st.ssTables(_))
+          .filter(_.mayContainsKey(key))
+        SstConcatIterator.createAndSeekToKey(levelSsts, key)
+      }).toList
+    })
+    // 合成sst迭代器
+    val sstIter = TwoMergeIterator(MergeIterator(l0SsTableIters), MergeIterator(levelIters))
+    if (sstIter.isValid && sstIter.key().sameElements(key) && !sstIter.value().sameElements(DELETE_TOMBSTONE)) {
       // l0 sst 有效、有当前查询的key、且值不为空，即找到了value
-      return Some(l0Iter.value())
+      return Some(sstIter.value())
     }
     None
   }
@@ -237,25 +249,25 @@ private[tinylsm] class LsmStorageInner(
     val ssTableIters = state.read(st => {
       st.l0SsTables
         .map(st.ssTables(_))
+        // 过滤key范围可能包含当前scan范围的sst，减少IO
         .filter(sst => rangeOverlap(lower, upper, sst.firstKey, sst.lastKey))
-        .map(sst => lower match {
-          // 没有左边界，则直接到最开始遍历
-          case Unbounded() => SsTableIterator.createAndSeekToFirst(sst)
-          // 包含左边界，则可以跳到左边界的key开始遍历
-          case Included(l: MemTableKey) => SsTableIterator.createAndSeekToKey(sst, l)
-          // 不包含左边界，则先跳到左边界的key，如果跳完之后实际的key等于左边界，由于不包含边界所以跳到下个值
-          case Excluded(l: MemTableKey) =>
-            val iter = SsTableIterator.createAndSeekToKey(sst, l)
-            if (iter.isValid && iter.key().sameElements(l)) {
-              iter.next()
-            }
-            iter
-        })
+        .map(sst => SsTableIterator.createByLowerBound(sst, lower))
     })
-    val ssTablesIter = MergeIterator(ssTableIters)
-    // TODO 处理 levels
-    FusedIterator(LsmIterator(TwoMergeIterator(memTablesIter, ssTablesIter), upper))
+    val l0ssTablesIter = MergeIterator(ssTableIters)
+    // 处理 levels
+    val levelIters = state.read(st => {
+      st.levels.map((_, levelSstIds) => {
+        val levelSsts = levelSstIds
+          .map(st.ssTables(_))
+          .filter(sst => rangeOverlap(lower, upper, sst.firstKey, sst.lastKey))
+        SstConcatIterator.createByLowerBound(levelSsts, lower)
+      }).toList
+    })
+    val levelTablesIter = MergeIterator(levelIters)
+    val mergedIter = TwoMergeIterator(TwoMergeIterator(memTablesIter, l0ssTablesIter), levelTablesIter)
+    FusedIterator(LsmIterator(mergedIter, upper))
   }
+
 
   def forceFullCompaction(): Unit = {
     if (options.compactionOptions == CompactionOptions.NoCompaction) {

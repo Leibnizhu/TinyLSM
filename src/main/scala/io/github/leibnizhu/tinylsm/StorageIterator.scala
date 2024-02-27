@@ -246,7 +246,10 @@ object MergeIterator {
  * LsmIterator内部包装的迭代器类型
  * 使用TwoMergeIterator ，优先迭代内存的MemTableIterator，再迭代SST的SsTableIterator
  */
-type LsmIteratorInner = TwoMergeIterator[MergeIterator[MemTableIterator], MergeIterator[SsTableIterator]]
+type LsmIteratorInner = TwoMergeIterator[
+  TwoMergeIterator[MergeIterator[MemTableIterator], MergeIterator[SsTableIterator]],
+  MergeIterator[SstConcatIterator]
+]
 
 /**
  * 用于LSM的遍历，主要封装了已删除元素的处理逻辑
@@ -411,6 +414,20 @@ object SsTableIterator {
     }
     (blockIter, blockIndex)
   }
+
+  def createByLowerBound(sst: SsTable, lower: Bound): SsTableIterator = lower match {
+    // 没有左边界，则直接到最开始遍历
+    case Unbounded() => SsTableIterator.createAndSeekToFirst(sst)
+    // 包含左边界，则可以跳到左边界的key开始遍历
+    case Included(l: MemTableKey) => SsTableIterator.createAndSeekToKey(sst, l)
+    // 不包含左边界，则先跳到左边界的key，如果跳完之后实际的key等于左边界，由于不包含边界所以跳到下个值
+    case Excluded(l: MemTableKey) =>
+      val iter = SsTableIterator.createAndSeekToKey(sst, l)
+      if (iter.isValid && iter.key().sameElements(l)) {
+        iter.next()
+      }
+      iter
+  }
 }
 
 class TwoMergeIterator[A <: MemTableStorageIterator, B <: MemTableStorageIterator]
@@ -530,5 +547,19 @@ object SstConcatIterator {
         assert(byteArrayCompare(ssTables(i).lastKey, ssTables(i + 1).firstKey) < 0)
       }
     }
+  }
+
+  def createByLowerBound(ssTables: List[SsTable], lower: Bound): SstConcatIterator = lower match {
+    // 没有左边界，则直接到最开始遍历
+    case Unbounded() => SstConcatIterator.createAndSeekToFirst(ssTables)
+    // 包含左边界，则可以跳到左边界的key开始遍历
+    case Included(l: MemTableKey) => SstConcatIterator.createAndSeekToKey(ssTables, l)
+    // 不包含左边界，则先跳到左边界的key，如果跳完之后实际的key等于左边界，由于不包含边界所以跳到下个值
+    case Excluded(l: MemTableKey) =>
+      val iter = SstConcatIterator.createAndSeekToKey(ssTables, l)
+      if (iter.isValid && iter.key().sameElements(l)) {
+        iter.next()
+      }
+      iter
   }
 }

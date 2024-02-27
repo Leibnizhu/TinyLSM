@@ -173,9 +173,9 @@ class CompactTest extends AnyFunSuite {
     assert(storage.state.levels(0)._2.nonEmpty)
 
     checkIterator(List(
-      entry("0","2333333"),
-      entry("00","2333"),
-      entry("2","2333"),
+      entry("0", "2333333"),
+      entry("00", "2333"),
+      entry("2", "2333"),
       entry("3", "23333"),
     ), storage.scan(Unbounded(), Unbounded()))
     assertResult("2333333")(storage.get("0").get)

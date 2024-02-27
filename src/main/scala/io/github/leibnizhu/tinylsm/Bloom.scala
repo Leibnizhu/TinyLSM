@@ -10,7 +10,7 @@ class Bloom(val filter: util.BitSet, val hashFuncNum: Int) {
     // hash函数个数太多，已经很难判定
     if (hashFuncNum > 30) true else {
       // 布隆过滤器的总位数
-      val nBits = filter.length
+      val nBits = filter.size()
       var hash = h
       // 每次hash的偏移量
       val delta = (hash >> 17) | (hash << 15)

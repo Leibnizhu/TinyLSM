@@ -44,7 +44,7 @@ case class ForceFullCompactionTask(l0SsTableIds: List[Int], l1SsTableIds: List[I
     val l1Iters = l1SsTableIds.map(ssTableMap(_)).map(SsTableIterator.createAndSeekToFirst)
     val l1SsTables = l1SsTableIds.map(ssTableMap(_))
     val iter = TwoMergeIterator[MergeIterator[SsTableIterator], MergeIterator[SsTableIterator]](
-      MergeIterator(l0Iters),  MergeIterator(l1Iters)
+      MergeIterator(l0Iters), MergeIterator(l1Iters)
       //SstConcatIterator.createAndSeekToFirst(l1SsTables)
     )
     storage.compactGenerateSstFromIter(iter, compactToBottomLevel())

@@ -41,4 +41,13 @@ class BloomTest extends AnyFunSuite {
     assert(x != cnt)
     assert(x != 0)
   }
+
+  test("contain_test") {
+    val origin = List("0", "0") // , "00", "2", "3")
+    val keyHashes = origin.map(s => byteArrayHash(s.getBytes))
+    val bloom = Bloom(keyHashes.toArray, Bloom.bloomBitsPerKey(keyHashes.length, 0.01))
+    for (k <- origin) {
+      assert(bloom.mayContains(byteArrayHash(k.getBytes)))
+    }
+  }
 }

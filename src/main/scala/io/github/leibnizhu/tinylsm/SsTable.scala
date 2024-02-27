@@ -72,13 +72,25 @@ class SsTable(val file: FileObject,
   def sstId(): Int = id
 
   /**
-   * TODO 可以加入bloom过滤器
+   * 除了firstKey lastKey这个范围命中以外，还进一步判断bloom过滤器，提高效率
    *
    * @param key 要判断的key
    * @return 这个key是否可能在当前sst里面
    */
-  def mayContainsKey(key: MemTableKey): Boolean =
-    byteArrayCompare(firstKey, key) <= 0 && byteArrayCompare(key, lastKey) <= 0
+  def mayContainsKey(key: MemTableKey): Boolean = {
+    val keyInRange = byteArrayCompare(firstKey, key) <= 0 && byteArrayCompare(key, lastKey) <= 0
+    if (keyInRange) {
+      if (bloom.isDefined) {
+        // 如果有布隆过滤器，则以布隆过滤器为准（说存在只是可能存在，说不存在是肯定不存在）
+        bloom.get.mayContains(byteArrayHash(key))
+      } else {
+        // 没有布隆过滤器，则以key范围为准
+        true
+      }
+    } else {
+      false
+    }
+  }
 
   def printSsTable(): Unit = {
     val itr = SsTableIterator.createAndSeekToFirst(this)

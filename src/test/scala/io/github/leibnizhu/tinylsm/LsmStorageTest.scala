@@ -1,6 +1,6 @@
 package io.github.leibnizhu.tinylsm
 
-import io.github.leibnizhu.tinylsm.TestUtils.{checkIterator, entry, generateSst, tempDir, syncStorage}
+import io.github.leibnizhu.tinylsm.TestUtils.*
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File

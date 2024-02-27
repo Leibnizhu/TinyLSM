@@ -5,10 +5,12 @@ Tiny LSM in scala, [Reference to...](https://skyzh.github.io/mini-lsm/00-preface
 ## Requirement
 
 development:
+
 - JDK 11 or later
 - sbt
 
 build:
+
 - Docker
 
 ## Configuration
@@ -34,6 +36,7 @@ Configuration lookup order:
 | TINY_LSM_CONFIG_FILE     | config.file            |                                                                              | /etc/tinylsm/tinylsm.conf |
 
 For example, write a config file in `/path/to/tinylsm.conf` :
+
 ```properties
 port=9527
 listen=0.0.0.0
@@ -45,13 +48,15 @@ serializable=false
 data.dir=/etc/tinylsm/data
 ```
 
-then `export TINY_LSM_CONFIG_FILE=/path/to/tinylsm.conf`( or `-e TINY_LSM_CONFIG_FILE=/path/to/tinylsm.conf` for docker command) and start TinyLsm.
+then `export TINY_LSM_CONFIG_FILE=/path/to/tinylsm.conf`( or `-e TINY_LSM_CONFIG_FILE=/path/to/tinylsm.conf` for docker
+command) and start TinyLsm.
 
 ## Usage
 
 ### Build
 
-Make sure `docker` is installed, and then execute:  
+Make sure `docker` is installed, and then execute:
+
 ```shell
 docker build . -f Dockerfile -t ${DOCKER_IMAGE_TAG:-tiny-lsm:0.0.1} --network=host --target prod
 ```
