@@ -1,6 +1,6 @@
 package io.github.leibnizhu.tinylsm
 
-import java.util.PriorityQueue
+import java.util.{PriorityQueue, StringJoiner}
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters.*
 import scala.util.hashing.MurmurHash3
@@ -44,6 +44,18 @@ trait StorageIterator[K, V] {
    * 当前迭代器的潜在活动迭代器的数量。
    */
   def numActiveIterators(): Int = 1
+
+  final def joinAllKeyValue(sj: StringJoiner): StringJoiner = {
+    while (isValid) {
+      (key(), value()) match
+        case (curKey: MemTableKey, curValue: MemTableValue) =>
+          sj.add(new String(curKey))
+          sj.add(new String(curValue))
+        case _ =>
+      next()
+    }
+    sj
+  }
 }
 
 /**

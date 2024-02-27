@@ -5,6 +5,13 @@ package io.github.leibnizhu.tinylsm
  */
 sealed class Bound;
 
+object Bound {
+  def apply(boundType: String, boundKey: String): Bound = boundType.toLowerCase match
+    case "unbounded" => Unbounded()
+    case "excluded" => Excluded(boundKey)
+    case "included" => Included(boundKey)
+}
+
 /**
  * 无边界
  */

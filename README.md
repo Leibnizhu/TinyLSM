@@ -38,7 +38,7 @@ For example, write a config file in `/path/to/tinylsm.conf` :
 port=9527
 listen=0.0.0.0
 block.size=4096
-target.sst.size=1048576
+target.sst.size=2097152
 memtable.num=50
 enable.wal=true
 serializable=false

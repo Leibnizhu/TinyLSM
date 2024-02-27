@@ -9,7 +9,7 @@ import requests.{RequestFailedException, get}
 import java.io.{File, FileInputStream}
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
-import java.util.Properties
+import java.util.{Properties, StringJoiner}
 import scala.collection.mutable
 import scala.jdk.CollectionConverters.*
 
@@ -32,18 +32,31 @@ object TinyLsmWebServer extends cask.MainRoutes {
   }
 
   @cask.delete("/key/:key")
-  def deleteByKey(key: String): Unit = {
+  def deleteByKey(key: String): Response[String] = {
     storage.delete(key)
+    cask.Response("", statusCode = 204)
   }
 
   @cask.post("/key/:key")
-  def putValue(key: String, value: String): Unit = {
+  def putValue(key: String, value: String): Response[String] = {
     storage.put(key, value)
+    cask.Response("", statusCode = 204)
   }
 
   @cask.get("/scan")
-  def scan(): Unit = {
-    //TODO
+  def scan(fromType: String, fromKey: String, toType: String, toKey: String): String = {
+    val lower = Bound(fromType, fromKey)
+    val upper = Bound(toType, toKey)
+    val itr = storage.scan(lower, upper)
+    val sj = new StringJoiner("\n")
+    itr.joinAllKeyValue(sj).toString
+  }
+
+  @cask.post("/flush")
+  def forceFlush(): Response[String] = {
+    storage.forceFreezeMemTable()
+    storage.forceFlushNextImmutableMemTable()
+    cask.Response("", statusCode = 204)
   }
 
   Config.print()
@@ -149,6 +162,7 @@ object TinyLsmCli {
       } catch
         case e: UserInterruptException => gracefullyExit()
         case e: EndOfFileException => gracefullyExit()
+        case e: Exception => e.printStackTrace()
     }
   }
 
@@ -176,6 +190,12 @@ object TinyLsmCli {
       } else {
         cliContext.put(words(1), words(2))
       }
+      case "scan" => if (words.length < 5) {
+        println("Invalid command, use: scan <Unbound|Excluded|Included> <fromKey> <Unbound|Excluded|Included> <toKey>")
+      } else {
+        cliContext.scan(words(1), words(2), words(3), words(4))
+      }
+      case "flush" => cliContext.flush()
       case _ => println("Unsupported command: " + words.head)
   }
 
@@ -185,15 +205,19 @@ object TinyLsmCli {
       |  get <key> : Get value by key.
       |  delete <key> : Delete a key.
       |  put <key> <value> : Put value by key.
+      |  scan <Unbound|Excluded|Included> <fromKey> <Unbound|Excluded|Included> <toKey> : scan by key range
+      |  flush : force flush MemTable to SST
       |  :help : Show this help info.
       |  :quit : Quit TinyLsm cli.""".stripMargin)
 
   private def getCompleter: Completer =
+    val boundCompleter = new StringsCompleter("Unbounded", "Excluded", "Included")
     new AggregateCompleter(
       new ArgumentCompleter(new StringsCompleter("get"), NullCompleter.INSTANCE),
       new ArgumentCompleter(new StringsCompleter("put"), NullCompleter.INSTANCE),
       new ArgumentCompleter(new StringsCompleter("delete"), NullCompleter.INSTANCE),
-      new ArgumentCompleter(new StringsCompleter("scan"), NullCompleter.INSTANCE),
+      new ArgumentCompleter(new StringsCompleter("scan"), boundCompleter, NullCompleter.INSTANCE, boundCompleter, NullCompleter.INSTANCE),
+      new ArgumentCompleter(new StringsCompleter("flush"), NullCompleter.INSTANCE),
       new ArgumentCompleter(new StringsCompleter(":help"), NullCompleter.INSTANCE),
       new ArgumentCompleter(new StringsCompleter(":quit"), NullCompleter.INSTANCE),
     )
@@ -225,7 +249,7 @@ object TinyLsmCli {
 }
 
 class CliContext(playgroundMode: Boolean,
-                 playgroundLsm: Option[TinyLsm],
+                 playgroundLsm: Option[LsmStorageInner],
                  host: String,
                  port: Int) {
 
@@ -271,14 +295,51 @@ class CliContext(playgroundMode: Boolean,
       requests.post(s"http://$host:$port/key/$encodedKey?value=$encodedValue")
     }
   }
+
+  private val validBoundType = Set("unbounded", "excluded", "included")
+
+  def scan(fromType: String, fromKey: String, toType: String, toKey: String): Unit = {
+    if (!validBoundType.contains(fromType.toLowerCase)) {
+      println("Invalid command, fromType must be one of: " + validBoundType)
+    }
+    if (!validBoundType.contains(toType.toLowerCase)) {
+      println("Invalid command, toType must be one of: " + validBoundType)
+    }
+
+    if (playgroundMode) {
+      val lower = Bound(fromType, fromKey)
+      val upper = Bound(toType, toKey)
+      val itr = playgroundLsm.get.scan(lower, upper)
+      val sj = new StringJoiner("\n")
+      println(itr.joinAllKeyValue(sj).toString)
+    } else {
+      val encodedFromKey = URLEncoder.encode(fromKey, StandardCharsets.UTF_8)
+      val encodedToKey = URLEncoder.encode(toKey, StandardCharsets.UTF_8)
+      val r = requests.get(s"http://$host:$port/scan?fromType=$fromType&fromKey=$encodedFromKey&toType=$toType&toKey=$encodedToKey")
+      println(r.text())
+    }
+  }
+
+  def flush(): Unit = {
+    if (playgroundMode) {
+      playgroundLsm.get.forceFreezeMemTable()
+      playgroundLsm.get.forceFlushNextImmutableMemTable()
+    } else {
+      requests.post(s"http://$host:$port/flush")
+    }
+  }
 }
 
 object CliContext {
   def apply(argMap: Map[String, Any]): CliContext = {
     val playgroundMode = argMap.getOrElse("playground", false).asInstanceOf[Boolean]
     val playgroundLsm = if (playgroundMode) {
-      val tempDir = System.getProperty("java.io.tmpdir") + File.separator + "TinyLsmPlayground"
-      Some(TinyLsm(new File(tempDir), LsmStorageOptions.defaultOption()))
+      val tempDir = new File(System.getProperty("java.io.tmpdir") + File.separator + "TinyLsmPlayground")
+      if (tempDir.exists()) {
+        tempDir.delete()
+      }
+      tempDir.mkdirs()
+      Some(LsmStorageInner(tempDir, LsmStorageOptions.defaultOption()))
     } else {
       None
     }
