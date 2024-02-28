@@ -1,6 +1,8 @@
-package io.github.leibnizhu.tinylsm
+package io.github.leibnizhu.tinylsm.iterator
 
+import io.github.leibnizhu.tinylsm.MemTableEntry
 import io.github.leibnizhu.tinylsm.TestUtils.*
+import io.github.leibnizhu.tinylsm.iterator.{FusedIterator, MemTableIterator}
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.Entry
 import org.scalatest.funsuite.AnyFunSuite

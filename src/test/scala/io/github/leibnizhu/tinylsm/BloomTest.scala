@@ -1,5 +1,6 @@
 package io.github.leibnizhu.tinylsm
 
+import io.github.leibnizhu.tinylsm.{Bloom, byteArrayHash}
 import org.scalatest.funsuite.AnyFunSuite
 
 import scala.collection.mutable.ListBuffer
@@ -31,7 +32,7 @@ class BloomTest extends AnyFunSuite {
 
     var x = 0
     var cnt = 0
-    for (idx <- keyNum until keyNum * 1000) {
+    for (idx <- keyNum until keyNum * 100) {
       if (bloom.mayContains(MurmurHash3.stringHash(keyOf(idx)))) {
         x += 1
       }

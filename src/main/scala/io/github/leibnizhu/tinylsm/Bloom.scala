@@ -1,5 +1,8 @@
 package io.github.leibnizhu.tinylsm
 
+import io.github.leibnizhu.tinylsm.utils.ByteArrayWriter
+import io.github.leibnizhu.tinylsm.{bytesToInt}
+
 import java.util
 import scala.util.boundary
 import scala.util.hashing.MurmurHash3
@@ -47,8 +50,9 @@ object Bloom {
 
   def apply(hashes: Seq[Int], bitsPerKey: Int): Bloom = {
     val k = (bitsPerKey * 0.69).toInt.max(1).min(30)
-    val nBits = (hashes.length * bitsPerKey).max(64)
+    var nBits = (hashes.length * bitsPerKey).max(64)
     val filter = new util.BitSet(nBits)
+    nBits = filter.size()
     for (h <- hashes) {
       var hash = h
       val delta = (hash >> 17) | (hash << 15);

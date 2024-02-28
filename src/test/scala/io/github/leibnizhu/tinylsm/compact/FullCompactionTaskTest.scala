@@ -1,15 +1,19 @@
-package io.github.leibnizhu.tinylsm
+package io.github.leibnizhu.tinylsm.compact
 
 import io.github.leibnizhu.tinylsm.TestUtils.*
+import io.github.leibnizhu.tinylsm.compact.CompactionOptions
+import io.github.leibnizhu.tinylsm.iterator.*
+import io.github.leibnizhu.tinylsm.utils.Unbounded
+import io.github.leibnizhu.tinylsm.{LsmStorageInner, LsmStorageOptions}
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File
 import scala.collection.mutable.ListBuffer
 
-class CompactTest extends AnyFunSuite {
+class FullCompactionTaskTest extends AnyFunSuite {
 
   test("week2_day1_task1_full_compaction") {
-    val storage = LsmStorageInner(tempDir(), doCompactionOption())
+    val storage = LsmStorageInner(tempDir(), fullCompactionOption())
     storage.newTxn()
     storage.put("0", "v1")
     syncStorage(storage)
@@ -108,45 +112,16 @@ class CompactTest extends AnyFunSuite {
     }
   }
 
-  private def doCompactionOption(): LsmStorageOptions = LsmStorageOptions(
+  private def fullCompactionOption(): LsmStorageOptions = LsmStorageOptions(
     4096,
     2 << 20,
     50,
-    CompactionOptions.SimpleCompactionOptions(0, 0, 0),
+    CompactionOptions.TempL0L1Compaction,
     false,
     false)
 
-  private def generateConcatSst(startKey: Int, endKey: Int, dir: File, id: Int): SsTable = {
-    val builder = SsTableBuilder(128)
-    for (idx <- startKey until endKey) {
-      builder.add("%05d".format(idx), "test")
-    }
-    builder.build(0, None, new File(dir, id + ".sst"))
-  }
-
-  test("week2_day1_task2_concat_iterator") {
-    val lsmDir = tempDir()
-    val ssTables = (1 to 10).map(i => generateConcatSst(i * 10, (i + 1) * 10, lsmDir, i)).toList
-    for (key <- 0 until 120) {
-      val iter = SstConcatIterator.createAndSeekToKey(ssTables, "%05d".format(key).getBytes)
-      if (key < 10) {
-        assert(iter.isValid)
-        assertResult("00010")(new String(iter.key()))
-      } else if (key >= 110) {
-        assert(!iter.isValid)
-      } else {
-        assert(iter.isValid)
-        assertResult("%05d".format(key))(new String(iter.key()))
-      }
-    }
-
-    val iter = SstConcatIterator.createAndSeekToFirst(ssTables)
-    assert(iter.isValid)
-    assertResult("00010")(new String(iter.key()))
-  }
-
   test("week2_day1_task3_integration") {
-    val storage = LsmStorageInner(tempDir(), doCompactionOption())
+    val storage = LsmStorageInner(tempDir(), fullCompactionOption())
     storage.put("0", "2333333")
     storage.put("00", "2333333")
     storage.put("4", "23")

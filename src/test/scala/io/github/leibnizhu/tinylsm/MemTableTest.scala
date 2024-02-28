@@ -1,5 +1,6 @@
 package io.github.leibnizhu.tinylsm
 
+import io.github.leibnizhu.tinylsm.utils.{Excluded, Included, Unbounded}
 import org.scalatest.funsuite.AnyFunSuite
 
 class MemTableTest extends AnyFunSuite {

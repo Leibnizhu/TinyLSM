@@ -1,5 +1,7 @@
 package io.github.leibnizhu.tinylsm
 
+import io.github.leibnizhu.tinylsm.iterator.{MergeIterator, SsTableIterator}
+import io.github.leibnizhu.tinylsm.block.{BlockCache}
 import org.scalatest.Assertions.{assertResult, assertThrows}
 import org.scalatest.Entry
 

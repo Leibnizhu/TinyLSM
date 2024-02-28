@@ -1,5 +1,9 @@
 package io.github.leibnizhu.tinylsm
 
+import io.github.leibnizhu.tinylsm.block.BlockCache
+import io.github.leibnizhu.tinylsm.compact.{CompactionOptions, FullCompactionTask}
+import io.github.leibnizhu.tinylsm.iterator.*
+import io.github.leibnizhu.tinylsm.utils.{Bound, Config, Excluded, Included, Unbounded}
 import org.jboss.logging.Logger
 import org.slf4j.LoggerFactory
 
@@ -277,7 +281,7 @@ private[tinylsm] class LsmStorageInner(
     // 执行 full compaction
     val l0SsTables = List(state.read(_.l0SsTables): _*)
     val l1SsTables = List(state.read(st => if (st.levels.isEmpty) List() else st.levels.head._2): _*)
-    val compactionTask = ForceFullCompactionTask(l0SsTables, l1SsTables)
+    val compactionTask = FullCompactionTask(l0SsTables, l1SsTables)
     log.info("Force full compaction: {}", compactionTask)
     val newSsTables = compactionTask.doCompact(this)
 

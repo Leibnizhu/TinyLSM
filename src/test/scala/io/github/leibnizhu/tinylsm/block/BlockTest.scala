@@ -1,5 +1,6 @@
-package io.github.leibnizhu.tinylsm
+package io.github.leibnizhu.tinylsm.block
 
+import io.github.leibnizhu.tinylsm.block.{Block, BlockBuilder}
 import org.scalatest.funsuite.AnyFunSuite
 
 class BlockTest extends AnyFunSuite {

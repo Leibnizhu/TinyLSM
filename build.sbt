@@ -15,6 +15,6 @@ libraryDependencies ++= Seq(
 
 lazy val app = (project in file("."))
   .settings(
-    assembly / mainClass := Some("io.github.leibnizhu.tinylsm.TinyLsmWebServer"),
+    assembly / mainClass := Some("io.github.leibnizhu.tinylsm.ap.TinyLsmWebServer"),
     assembly / assemblyJarName := "TinyLsmAssembly.jar",
   )

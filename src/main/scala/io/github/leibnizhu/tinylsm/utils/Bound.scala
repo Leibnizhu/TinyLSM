@@ -1,4 +1,6 @@
-package io.github.leibnizhu.tinylsm
+package io.github.leibnizhu.tinylsm.utils
+
+import io.github.leibnizhu.tinylsm.*
 
 /**
  * 定义key边界相关的类

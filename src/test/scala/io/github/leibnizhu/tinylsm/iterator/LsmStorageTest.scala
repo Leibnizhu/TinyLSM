@@ -1,6 +1,10 @@
-package io.github.leibnizhu.tinylsm
+package io.github.leibnizhu.tinylsm.iterator
 
+import io.github.leibnizhu.tinylsm.*
 import io.github.leibnizhu.tinylsm.TestUtils.*
+import io.github.leibnizhu.tinylsm.compact.CompactionOptions
+import io.github.leibnizhu.tinylsm.iterator.*
+import io.github.leibnizhu.tinylsm.utils.{Excluded, Included, Unbounded}
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File
