@@ -1,7 +1,7 @@
 package io.github.leibnizhu.tinylsm
 
+import io.github.leibnizhu.tinylsm.bytesToInt
 import io.github.leibnizhu.tinylsm.utils.ByteArrayWriter
-import io.github.leibnizhu.tinylsm.{bytesToInt}
 
 import java.util
 import scala.util.boundary

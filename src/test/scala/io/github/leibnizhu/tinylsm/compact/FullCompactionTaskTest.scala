@@ -13,7 +13,7 @@ import scala.collection.mutable.ListBuffer
 class FullCompactionTaskTest extends AnyFunSuite {
 
   test("week2_day1_task1_full_compaction") {
-    val storage = LsmStorageInner(tempDir(), fullCompactionOption())
+    val storage = LsmStorageInner(tempDir(), compactionOption(CompactionOptions.FullCompaction))
     storage.newTxn()
     storage.put("0", "v1")
     syncStorage(storage)
@@ -112,16 +112,8 @@ class FullCompactionTaskTest extends AnyFunSuite {
     }
   }
 
-  private def fullCompactionOption(): LsmStorageOptions = LsmStorageOptions(
-    4096,
-    2 << 20,
-    50,
-    CompactionOptions.TempL0L1Compaction,
-    false,
-    false)
-
   test("week2_day1_task3_integration") {
-    val storage = LsmStorageInner(tempDir(), fullCompactionOption())
+    val storage = LsmStorageInner(tempDir(), compactionOption(CompactionOptions.FullCompaction))
     storage.put("0", "2333333")
     storage.put("00", "2333333")
     storage.put("4", "23")

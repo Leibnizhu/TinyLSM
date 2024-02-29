@@ -8,9 +8,9 @@ enum CompactionOptions {
   case NoCompaction extends CompactionOptions
 
   /**
-   * 测试临时用，每次都是L0+L1全部合并成L1
+   * 全 Compaction，每次都是L0+L1全部 compact 成新的L1
    */
-  case TempL0L1Compaction extends CompactionOptions
+  case FullCompaction extends CompactionOptions
 
   case LeveledCompactionOptions(
                                  levelSizeMultiplier: Int,

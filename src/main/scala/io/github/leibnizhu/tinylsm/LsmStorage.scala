@@ -1,9 +1,10 @@
 package io.github.leibnizhu.tinylsm
 
 import io.github.leibnizhu.tinylsm.block.BlockCache
+import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{LeveledCompactionOptions, SimpleCompactionOptions, FullCompaction, TieredCompactionOptions}
 import io.github.leibnizhu.tinylsm.compact.{CompactionOptions, FullCompactionTask}
 import io.github.leibnizhu.tinylsm.iterator.*
-import io.github.leibnizhu.tinylsm.utils.{Bound, Config, Excluded, Included, Unbounded}
+import io.github.leibnizhu.tinylsm.utils.*
 import org.jboss.logging.Logger
 import org.slf4j.LoggerFactory
 
@@ -15,18 +16,22 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.util.boundary
 
-class LsmStorageState(
-                       // 当前Memtable
-                       var memTable: MemTable,
-                       // 不可变的Memtable，从最近到最早的
-                       var immutableMemTables: List[MemTable],
-                       // L0 SST 从最新到最早的
-                       var l0SsTables: List[Int],
-                       // TODO 按key 范围排序的SsTable， L1 -> Lmax
-                       val levels: Array[(Int, List[Int])] = Array((1, List())),
-                       // SST 对象
-                       val ssTables: mutable.Map[Int, SsTable] = mutable.HashMap()
-                     ) {
+/**
+ * 全是var，var里面是immutable的，需要snapshot的话直接copy这个state就可以
+ * state.read(_.copy())
+ */
+case class LsmStorageState(
+                            // 当前Memtable
+                            var memTable: MemTable,
+                            // 不可变的Memtable，从最近到最早的
+                            var immutableMemTables: List[MemTable],
+                            // L0 SST 从最新到最早的
+                            var l0SsTables: List[Int],
+                            // TODO 按key 范围排序的SsTable， L1 -> Lmax
+                            var levels: List[(Int, List[Int])] = List((1, List())),
+                            // SST 对象
+                            var ssTables: Map[Int, SsTable] = Map()
+                          ) {
   // 对 MemTable 做 freeze 操作的读写锁
   val rwLock: ReadWriteLock = ReentrantReadWriteLock()
   // MemTable 做 freeze 时，保证只有一个线程执行 freeze 的锁
@@ -69,8 +74,17 @@ class LsmStorageState(
 
 object LsmStorageState {
   def apply(options: LsmStorageOptions): LsmStorageState = {
-    new LsmStorageState(MemTable(0), List[MemTable](), List())
+    val levels = options.compactionOptions match
+      case SimpleCompactionOptions(_, _, maxLevels) => makeLevelsByMax(maxLevels)
+      case LeveledCompactionOptions(_, _, maxLevels, _) => makeLevelsByMax(maxLevels)
+      case FullCompaction => makeLevelsByMax(1)
+      case t: TieredCompactionOptions => List()
+      case _ => List()
+    new LsmStorageState(MemTable(0), List[MemTable](), List(), levels)
   }
+
+  private def makeLevelsByMax(maxLevels: Int): List[(Int, List[Int])] =
+    (1 to maxLevels).map((_, List[Int]())).toList
 }
 
 private[tinylsm] class LsmStorageInner(
@@ -91,17 +105,18 @@ private[tinylsm] class LsmStorageInner(
   def get(key: MemTableKey): Option[MemTableValue] = {
     assert(key != null && !key.isEmpty, "key cannot be empty")
 
+    val snapshot = state.read(_.copy())
     // 先判断当前未 freeze 的MemTable是否有需要读取的值
-    val inMemTable = state.read(_.memTable.get(key))
+    val inMemTable = snapshot.memTable.get(key)
     if (inMemTable.isDefined) {
       // 如果读取出来是墓碑（空Array）需要过滤返回None
       return inMemTable.filter(!_.sameElements(DELETE_TOMBSTONE))
     }
 
     // 由新到旧遍历已 freeze 的MemTable，找到直接返回
-    val inFrozenMemTable = state.read(st => {
+    val inFrozenMemTable = {
       boundary:
-        for (mt <- st.immutableMemTables) do {
+        for (mt <- snapshot.immutableMemTables) do {
           val curValue = mt.get(key)
           if (curValue.isDefined) {
             // 如果读取出来是墓碑（空Array）需要过滤返回None
@@ -109,27 +124,23 @@ private[tinylsm] class LsmStorageInner(
           }
         }
         None
-    })
+    }
     if (inFrozenMemTable.isDefined) {
       return inFrozenMemTable
     }
 
     // 从 SST读取
     // l0 sst 的多个sst从key开始构成一个 MergeIterator 可一查
-    val l0SsTableIters = state.read(st => {
-      st.l0SsTables
-        .map(st.ssTables(_))
-        .filter(_.mayContainsKey(key))
-        .map(SsTableIterator.createAndSeekToKey(_, key))
-    })
+    val l0SsTableIters = snapshot.l0SsTables
+      .map(snapshot.ssTables(_))
+      .filter(_.mayContainsKey(key))
+      .map(SsTableIterator.createAndSeekToKey(_, key))
     // levels sst的读取
-    val levelIters = state.read(st => {
-      st.levels.map((_, levelSstIds) => {
-        val levelSsts = levelSstIds
-          .map(st.ssTables(_))
-          .filter(_.mayContainsKey(key))
-        SstConcatIterator.createAndSeekToKey(levelSsts, key)
-      }).toList
+    val levelIters = snapshot.levels.map((_, levelSstIds) => {
+      val levelSsts = levelSstIds
+        .map(snapshot.ssTables(_))
+        .filter(_.mayContainsKey(key))
+      SstConcatIterator.createAndSeekToKey(levelSsts, key)
     })
     // 合成sst迭代器
     val sstIter = TwoMergeIterator(MergeIterator(l0SsTableIters), MergeIterator(levelIters))
@@ -232,7 +243,7 @@ private[tinylsm] class LsmStorageInner(
       // 移除MemTable、加入到L0 table
       state.immutableMemTables = state.immutableMemTables.slice(0, state.immutableMemTables.length - 1)
       state.l0SsTables = sstId :: state.l0SsTables
-      state.ssTables(sstId) = sst
+      state.ssTables = state.ssTables + (sstId -> sst)
 
       // 删除WAL文件
       if (options.enableWal) {
@@ -245,28 +256,22 @@ private[tinylsm] class LsmStorageInner(
 
   def scan(lower: Bound, upper: Bound): FusedIterator[MemTableKey, MemTableValue] = {
     val memTableIters = ArrayBuffer[MemTableIterator]()
-    state.read(st => {
-      memTableIters.addOne(st.memTable.scan(lower, upper))
-      st.immutableMemTables.map(mt => mt.scan(lower, upper)).foreach(memTableIters.addOne)
-    })
+    val snapshot = state.read(_.copy())
+    memTableIters.addOne(snapshot.memTable.scan(lower, upper))
+    snapshot.immutableMemTables.map(mt => mt.scan(lower, upper)).foreach(memTableIters.addOne)
     val memTablesIter = MergeIterator(memTableIters.toList)
-    val ssTableIters = state.read(st => {
-      st.l0SsTables
-        .map(st.ssTables(_))
-        // 过滤key范围可能包含当前scan范围的sst，减少IO
-        .filter(sst => rangeOverlap(lower, upper, sst.firstKey, sst.lastKey))
-        .map(sst => SsTableIterator.createByLowerBound(sst, lower))
-    })
+    val ssTableIters = snapshot.l0SsTables.map(snapshot.ssTables(_))
+      // 过滤key范围可能包含当前scan范围的sst，减少IO
+      .filter(sst => rangeOverlap(lower, upper, sst.firstKey, sst.lastKey))
+      .map(sst => SsTableIterator.createByLowerBound(sst, lower))
     val l0ssTablesIter = MergeIterator(ssTableIters)
     // 处理 levels
-    val levelIters = state.read(st => {
-      st.levels.map((_, levelSstIds) => {
-        val levelSsts = levelSstIds
-          .map(st.ssTables(_))
-          .filter(sst => rangeOverlap(lower, upper, sst.firstKey, sst.lastKey))
-        SstConcatIterator.createByLowerBound(levelSsts, lower)
-      }).toList
-    })
+    val levelIters = snapshot.levels.map((_, levelSstIds) => {
+      val levelSsts = levelSstIds
+        .map(snapshot.ssTables(_))
+        .filter(sst => rangeOverlap(lower, upper, sst.firstKey, sst.lastKey))
+      SstConcatIterator.createByLowerBound(levelSsts, lower)
+    }).toList
     val levelTablesIter = MergeIterator(levelIters)
     val mergedIter = TwoMergeIterator(TwoMergeIterator(memTablesIter, l0ssTablesIter), levelTablesIter)
     FusedIterator(LsmIterator(mergedIter, upper))
@@ -279,8 +284,9 @@ private[tinylsm] class LsmStorageInner(
     }
 
     // 执行 full compaction
-    val l0SsTables = List(state.read(_.l0SsTables): _*)
-    val l1SsTables = List(state.read(st => if (st.levels.isEmpty) List() else st.levels.head._2): _*)
+    val snapshot = this.state.read(_.copy())
+    val l0SsTables = List(snapshot.l0SsTables: _*)
+    val l1SsTables = if (snapshot.levels.isEmpty) List() else List(snapshot.levels.head._2: _*)
     val compactionTask = FullCompactionTask(l0SsTables, l1SsTables)
     log.info("Force full compaction: {}", compactionTask)
     val newSsTables = compactionTask.doCompact(this)
@@ -290,17 +296,21 @@ private[tinylsm] class LsmStorageInner(
     try {
       state.stateLock.lock()
       // 从 ssTables 移除旧SST
+      val tempSsTableMap = mutable.Map[Int, SsTable]() ++ state.ssTables
       for (sstId <- l0SsTables ++ l1SsTables) {
-        val removed = state.ssTables.remove(sstId)
+        val removed = tempSsTableMap.remove(sstId)
         assert(removed.isDefined)
       }
       // 向 sstTables加入新SST
       for (newSst <- newSsTables) {
         sstIds += newSst.sstId()
-        state.ssTables(newSst.sstId()) = newSst
+        tempSsTableMap += (newSst.sstId() -> newSst)
       }
+      state.ssTables = tempSsTableMap.toMap
+
       // 修改 levels 1
-      state.levels.update(0, (1, sstIds.toList))
+      state.levels = state.levels.updated(0, (1, sstIds.toList))
+
       // 更新 L0
       val l0SsTablesSet = mutable.HashSet(l0SsTables: _*)
       state.l0SsTables = state.l0SsTables.filter(s => !l0SsTablesSet.remove(s))

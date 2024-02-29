@@ -1,7 +1,7 @@
 package io.github.leibnizhu.tinylsm.iterator
 
-import io.github.leibnizhu.tinylsm.{SsTable, SsTableBuilder}
 import io.github.leibnizhu.tinylsm.TestUtils.tempDir
+import io.github.leibnizhu.tinylsm.{SsTable, SsTableBuilder}
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File

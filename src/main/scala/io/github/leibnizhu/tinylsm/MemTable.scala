@@ -2,7 +2,7 @@ package io.github.leibnizhu.tinylsm
 
 
 import io.github.leibnizhu.tinylsm.iterator.MemTableIterator
-import io.github.leibnizhu.tinylsm.utils.{Bound, Bounded, Excluded, Included, Unbounded}
+import io.github.leibnizhu.tinylsm.utils.*
 
 import java.io.File
 import java.util

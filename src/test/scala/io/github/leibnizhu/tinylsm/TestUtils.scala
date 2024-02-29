@@ -1,7 +1,8 @@
 package io.github.leibnizhu.tinylsm
 
+import io.github.leibnizhu.tinylsm.block.BlockCache
+import io.github.leibnizhu.tinylsm.compact.CompactionOptions
 import io.github.leibnizhu.tinylsm.iterator.{MergeIterator, SsTableIterator}
-import io.github.leibnizhu.tinylsm.block.{BlockCache}
 import org.scalatest.Assertions.{assertResult, assertThrows}
 import org.scalatest.Entry
 
@@ -68,4 +69,12 @@ object TestUtils {
     }
     MergeIterator(iters.toList)
   }
+
+  def compactionOption(compactOpt: CompactionOptions): LsmStorageOptions = LsmStorageOptions(
+    4096,
+    1 << 20,
+    2,
+    compactOpt,
+    false,
+    false)
 }

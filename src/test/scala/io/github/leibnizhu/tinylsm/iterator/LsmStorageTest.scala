@@ -152,8 +152,8 @@ class LsmStorageTest extends AnyFunSuite {
 
     storage.state.write(st => {
       st.l0SsTables = sst2.sstId() :: sst1.sstId() :: st.l0SsTables
-      st.ssTables(sst1.sstId()) = sst1
-      st.ssTables(sst2.sstId()) = sst2
+      st.ssTables = st.ssTables + (sst1.sstId() -> sst1)
+      st.ssTables = st.ssTables + (sst2.sstId() -> sst2)
     })
 
     /**
@@ -202,8 +202,8 @@ class LsmStorageTest extends AnyFunSuite {
 
     storage.state.write(st => {
       st.l0SsTables = sst2.sstId() :: sst1.sstId() :: st.l0SsTables
-      st.ssTables(sst1.sstId()) = sst1
-      st.ssTables(sst2.sstId()) = sst2
+      st.ssTables = st.ssTables + (sst1.sstId() -> sst1)
+      st.ssTables = st.ssTables + (sst2.sstId() -> sst2)
     })
 
     assertResult("2333333")(storage.get("0").get)
