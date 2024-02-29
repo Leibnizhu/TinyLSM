@@ -2,6 +2,7 @@ package io.github.leibnizhu.tinylsm
 
 import io.github.leibnizhu.tinylsm.block.{Block, BlockBuilder, BlockCache}
 import io.github.leibnizhu.tinylsm.iterator.*
+import io.github.leibnizhu.tinylsm.utils.ByteTransOps.bytesToInt
 import io.github.leibnizhu.tinylsm.utils.{ByteArrayReader, ByteArrayWriter}
 
 import java.io.*
@@ -40,9 +41,9 @@ class SsTable(val file: FileObject,
       blockMetaOffset else blockMeta(blockIndex + 1).offset
     // 还要减掉最后的checkSum
     val blockLength = blockEndOffset - blockOffset - SIZE_OF_INT
-    val blockDataWithChecksum = file.read(blockOffset, blockEndOffset - blockOffset)
-    val blockData = blockDataWithChecksum.slice(0, blockLength)
-    val checksum = bytesToInt(blockDataWithChecksum.slice(blockLength, blockLength + SIZE_OF_INT))
+    val blockDataWithChecksum = new ByteArrayReader(file.read(blockOffset, blockEndOffset - blockOffset))
+    val blockData = blockDataWithChecksum.readBytes(blockLength)
+    val checksum = blockDataWithChecksum.readUint32()
     // 校验hash
     if (MurmurHash3.seqHash(blockData) != checksum) {
       throw new IllegalArgumentException("Block data checksum mismatched!!!")
@@ -66,7 +67,7 @@ class SsTable(val file: FileObject,
 
   def findBlockIndex(targetKey: MemTableKey): Int = {
     // 二分查找，找到最后（数组的右边）一个 meta.firstKey <= targetKey 的 meta 的索引
-    partitionPoint(blockMeta, meta => byteArrayCompare(meta.firstKey, targetKey) <= 0)
+    partitionPoint(blockMeta, meta => util.Arrays.compare(meta.firstKey, targetKey) <= 0)
   }
 
   def numOfBlocks(): Int = blockMeta.length
@@ -82,7 +83,7 @@ class SsTable(val file: FileObject,
    * @return 这个key是否可能在当前sst里面
    */
   def mayContainsKey(key: MemTableKey): Boolean = {
-    val keyInRange = byteArrayCompare(firstKey, key) <= 0 && byteArrayCompare(key, lastKey) <= 0
+    val keyInRange = util.Arrays.compare(firstKey, key) <= 0 && util.Arrays.compare(key, lastKey) <= 0
     if (keyInRange) {
       if (bloom.isDefined) {
         // 如果有布隆过滤器，则以布隆过滤器为准（说存在只是可能存在，说不存在是肯定不存在）
@@ -160,9 +161,9 @@ class SsTableBuilder(val blockSize: Int) {
   // 当前Block的第一个和最后一个Key
   private var firstKey: Option[MemTableKey] = None
   private var lastKey: Option[MemTableKey] = None
-  private var data: ByteArrayWriter = new ByteArrayWriter()
+  private val data: ByteArrayWriter = new ByteArrayWriter()
   var meta: ArrayBuffer[BlockMeta] = new ArrayBuffer()
-  private var keyHashes: ArrayBuffer[Int] = new ArrayBuffer()
+  private val keyHashes: ArrayBuffer[Int] = new ArrayBuffer()
 
   /**
    * 往SST增加一个kv对
@@ -201,7 +202,7 @@ class SsTableBuilder(val blockSize: Int) {
     val encodedBlock = prevBuilder.build().encode()
     meta.addOne(new BlockMeta(data.length, firstKey.get.clone(), lastKey.get.clone()))
     val checkSum = byteArrayHash(encodedBlock)
-    data.putByteArray(encodedBlock)
+    data.putBytes(encodedBlock)
     data.putUint32(checkSum)
   }
 
@@ -303,9 +304,9 @@ object BlockMeta {
     for (meta <- blockMetas) {
       buffer.putUint32(meta.offset)
       buffer.putUint16(meta.firstKey.length)
-      buffer.putByteArray(meta.firstKey)
+      buffer.putBytes(meta.firstKey)
       buffer.putUint16(meta.lastKey.length)
-      buffer.putByteArray(meta.lastKey)
+      buffer.putBytes(meta.lastKey)
     }
     val metasCheckSum = MurmurHash3.seqHash(buffer.slice(metaOffset + SIZE_OF_INT, buffer.length))
     buffer.putUint32(metasCheckSum)

@@ -1,12 +1,13 @@
 package io.github.leibnizhu.tinylsm.block
 
-import io.github.leibnizhu.tinylsm.{MemTableKey, SIZE_OF_U16, intLow2Bytes}
+import io.github.leibnizhu.tinylsm.utils.ByteArrayWriter
+import io.github.leibnizhu.tinylsm.{MemTableKey, SIZE_OF_U16}
 
 import scala.collection.mutable.ArrayBuffer
 
 class BlockBuilder(val blockSize: Int) {
   // 序列化的Entry数据
-  val data: ArrayBuffer[Byte] = new ArrayBuffer()
+  val data = new ByteArrayWriter()
   // 直接放offset，虽然入参是Int，其实需要的是无符号short，写入磁盘时按2byte
   val offsets: ArrayBuffer[Int] = new ArrayBuffer()
   // Block中第一个key
@@ -36,15 +37,15 @@ class BlockBuilder(val blockSize: Int) {
     // 当前key与firstKey的共同前缀byte数量
     val overlap = commonPrefix(key)
     // key_overlap_len
-    data.appendAll(intLow2Bytes(overlap))
+    data.putUint16(overlap)
     //  rest_key_len (u16)
-    data.appendAll(intLow2Bytes(key.length - overlap))
+    data.putUint16(key.length - overlap)
     // key内容
-    data.appendAll(key.slice(overlap, key.length))
+    data.putBytes(key.slice(overlap, key.length))
     // value的长度
-    data.appendAll(intLow2Bytes(value.length))
+    data.putUint16(value.length)
     // value内容
-    data.appendAll(value)
+    data.putBytes(value)
 
     if (firstKey.isEmpty) {
       firstKey = Some(key)

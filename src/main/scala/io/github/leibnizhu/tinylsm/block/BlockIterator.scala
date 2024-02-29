@@ -1,6 +1,9 @@
 package io.github.leibnizhu.tinylsm.block
 
 import io.github.leibnizhu.tinylsm.*
+import io.github.leibnizhu.tinylsm.utils.ByteArrayReader
+
+import java.util.Arrays
 
 class BlockIterator(block: Block) extends MemTableStorageIterator {
   private var index: Int = 0;
@@ -31,7 +34,7 @@ class BlockIterator(block: Block) extends MemTableStorageIterator {
       val mid = low + (high - low) / 2
       seekToIndex(mid)
       assert(isValid)
-      val compare = byteArrayCompare(curKey.get, key)
+      val compare = java.util.Arrays.compare(curKey.get, key)
       if (compare < 0) {
         low = mid + 1
       } else if (compare > 0) {
@@ -87,12 +90,12 @@ class BlockIterator(block: Block) extends MemTableStorageIterator {
     // 根据 offset 段获取entry位置
     val entryOffset = block.offsets(index)
     // 先后读取overlap长度、剩余key长度、剩余key、value长度
-    val overlapLength = low2BytesToInt(block.data(entryOffset), block.data(entryOffset + 1))
-    val restKeyLength = low2BytesToInt(block.data(entryOffset + 2), block.data(entryOffset + 3))
-    curKey = Some(firstKey.slice(0, overlapLength) ++
-      block.data.slice(entryOffset + 4, entryOffset + 4 + restKeyLength))
+    val blockData = new ByteArrayReader(block.data).seekTo(entryOffset)
+    val overlapLength = blockData.readUint16()
+    val restKeyLength = blockData.readUint16()
+    curKey = Some(firstKey.slice(0, overlapLength) ++ blockData.readBytes(restKeyLength))
     val valueOffset = entryOffset + 4 + restKeyLength
-    val valueLength = low2BytesToInt(block.data(valueOffset), block.data(valueOffset + 1))
+    val valueLength = blockData.readUint16()
     curValuePos = (valueOffset + 2, valueOffset + 2 + valueLength)
     this.index = index
   }

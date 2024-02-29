@@ -87,7 +87,7 @@ object MemTable {
 
 case class ByteArrayKey(val bytes: MemTableKey) extends Comparable[ByteArrayKey] {
   override def compareTo(other: ByteArrayKey): Int = {
-    byteArrayCompare(this.bytes, other.bytes)
+    util.Arrays.compare(this.bytes, other.bytes)
   }
 
   override def hashCode(): Int = byteArrayHash(this.bytes)

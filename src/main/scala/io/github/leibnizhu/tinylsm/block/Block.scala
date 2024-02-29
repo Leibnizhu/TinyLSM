@@ -1,7 +1,7 @@
 package io.github.leibnizhu.tinylsm.block
 
 import io.github.leibnizhu.tinylsm.*
-import io.github.leibnizhu.tinylsm.utils.ByteArrayReader
+import io.github.leibnizhu.tinylsm.utils.{ByteArrayReader, ByteArrayWriter}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -27,10 +27,10 @@ class Block(val data: Array[Byte], val offsets: Array[Int]) {
    * @return
    */
   def encode(): Array[Byte] = {
-    val buffer = new ArrayBuffer[Byte]()
-    buffer.appendAll(data)
-    offsets.map(intLow2Bytes).foreach(buffer.appendAll)
-    buffer.appendAll(intLow2Bytes(offsets.length))
+    val buffer = new ByteArrayWriter()
+    buffer.putBytes(data)
+    offsets.foreach(buffer.putUint16)
+    buffer.putUint16(offsets.length)
     buffer.toArray
   }
 
@@ -51,11 +51,11 @@ object Block {
    * @param bytes byte数组
    */
   def decode(bytes: Array[Byte]): Block = {
-    val byteLen = bytes.length
-    val numOfElement = if (bytes.last < 0) (bytes.last + 256) else bytes.last.toInt
-    val offsetBytes = bytes.slice(bytes.length - numOfElement * SIZE_OF_U16 - 2, bytes.length - 2)
-    val offsetIntArray = offsetBytes.sliding(2, 2).map(tb => low2BytesToInt(tb(0), tb(1))).toArray
-    val dataBytes = bytes.slice(0, bytes.length - numOfElement * SIZE_OF_U16 - 2)
+    val buffer = ByteArrayReader(bytes)
+    val numOfElement = buffer.readTailUint16()
+    // 总长度减去 所有offset + offset长度2B 就是要读的data长度
+    val dataBytes = buffer.readBytes(bytes.length - numOfElement * SIZE_OF_U16 - SIZE_OF_U16)
+    val offsetIntArray = (0 until numOfElement).map(_ => buffer.readUint16()).toArray
     Block(dataBytes, offsetIntArray)
   }
 }

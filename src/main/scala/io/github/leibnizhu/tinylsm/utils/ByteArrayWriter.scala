@@ -1,6 +1,6 @@
 package io.github.leibnizhu.tinylsm.utils
 
-import io.github.leibnizhu.tinylsm.{intLow2Bytes, intToByteArray}
+import io.github.leibnizhu.tinylsm.utils.ByteTransOps.{intLow2Bytes, intToByteArray}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -25,7 +25,7 @@ class ByteArrayWriter {
     this
   }
 
-  def putByteArray(bytes: Array[Byte]): ByteArrayWriter = {
+  def putBytes(bytes: Array[Byte]): ByteArrayWriter = {
     buffer.appendAll(bytes)
     this
   }

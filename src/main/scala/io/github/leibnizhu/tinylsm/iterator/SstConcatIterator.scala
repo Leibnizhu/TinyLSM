@@ -4,6 +4,7 @@ import io.github.leibnizhu.tinylsm.*
 import io.github.leibnizhu.tinylsm.iterator.{MemTableIterator, MergeIterator, SsTableIterator, StorageIterator}
 import io.github.leibnizhu.tinylsm.utils.{Bound, Excluded, Included, Unbounded}
 
+import java.util
 import java.util.{PriorityQueue, StringJoiner}
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters.*
@@ -67,7 +68,7 @@ object SstConcatIterator {
 
   def createAndSeekToKey(ssTables: List[SsTable], key: MemTableKey): SstConcatIterator = {
     checkSstValid(ssTables)
-    val idx = partitionPoint(ssTables, sst => byteArrayCompare(sst.firstKey, key) <= 0)
+    val idx = partitionPoint(ssTables, sst => util.Arrays.compare(sst.firstKey, key) <= 0)
     if (idx >= ssTables.length) {
       // 没找到包含key的sst
       return new SstConcatIterator(None, ssTables.length, ssTables)
@@ -79,11 +80,11 @@ object SstConcatIterator {
 
   private def checkSstValid(ssTables: List[SsTable]): Unit = {
     for (sst <- ssTables) {
-      assert(byteArrayCompare(sst.firstKey, sst.lastKey) <= 0)
+      assert(util.Arrays.compare(sst.firstKey, sst.lastKey) <= 0)
     }
     if (ssTables.nonEmpty) {
       for (i <- 0 until ssTables.length - 1) {
-        assert(byteArrayCompare(ssTables(i).lastKey, ssTables(i + 1).firstKey) < 0)
+        assert(util.Arrays.compare(ssTables(i).lastKey, ssTables(i + 1).firstKey) < 0)
       }
     }
   }

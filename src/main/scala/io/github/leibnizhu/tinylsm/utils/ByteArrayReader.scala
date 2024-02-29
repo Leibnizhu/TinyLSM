@@ -1,6 +1,6 @@
 package io.github.leibnizhu.tinylsm.utils
 
-import io.github.leibnizhu.tinylsm.{bytesToInt, low2BytesToInt}
+import io.github.leibnizhu.tinylsm.utils.ByteTransOps.{bytesToInt, low2BytesToInt}
 
 class ByteArrayReader(val bytes: Array[Byte]) {
   private var curPos = 0;
@@ -9,6 +9,11 @@ class ByteArrayReader(val bytes: Array[Byte]) {
    * @return 剩余未读的byte数
    */
   def remaining: Int = bytes.length - curPos
+
+  def seekTo(offset: Int): ByteArrayReader = {
+    curPos = offset
+    this
+  }
 
   def readUint16(): Int = {
     low2BytesToInt(readByte(), readByte())
@@ -30,4 +35,11 @@ class ByteArrayReader(val bytes: Array[Byte]) {
     read
   }
 
+  def readTailUint16(): Int = {
+    low2BytesToInt(bytes(bytes.length - 2), bytes.last)
+  }
+
+  def readTailUnit32(): Int = {
+    bytesToInt(bytes.slice(bytes.length - 4, bytes.length))
+  }
 }

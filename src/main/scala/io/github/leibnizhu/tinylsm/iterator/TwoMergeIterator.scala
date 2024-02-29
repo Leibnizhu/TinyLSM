@@ -1,6 +1,8 @@
 package io.github.leibnizhu.tinylsm.iterator
 
-import io.github.leibnizhu.tinylsm.{MemTableKey, MemTableStorageIterator, MemTableValue, byteArrayCompare}
+import io.github.leibnizhu.tinylsm.{MemTableKey, MemTableStorageIterator, MemTableValue}
+
+import java.util
 
 class TwoMergeIterator[A <: MemTableStorageIterator, B <: MemTableStorageIterator]
 (val a: A, val b: B) extends MemTableStorageIterator {
@@ -29,7 +31,7 @@ class TwoMergeIterator[A <: MemTableStorageIterator, B <: MemTableStorageIterato
       true
     } else {
       // a b 都可用，那么用key较小的。调用 useA() 之前调用 skipB() 则不会出现两个key相等的情况
-      byteArrayCompare(a.key(), b.key()) < 0
+      util.Arrays.compare(a.key(), b.key()) < 0
     }
   }
 

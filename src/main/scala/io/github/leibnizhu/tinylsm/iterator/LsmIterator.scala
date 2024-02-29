@@ -3,6 +3,8 @@ package io.github.leibnizhu.tinylsm.iterator
 import io.github.leibnizhu.tinylsm.*
 import io.github.leibnizhu.tinylsm.utils.{Bound, Excluded, Included}
 
+import java.util
+
 /**
  * 用于LSM的遍历，主要封装了已删除元素的处理逻辑
  *
@@ -39,8 +41,8 @@ class LsmIterator(val innerIter: LsmIteratorInner, endBound: Bound) extends MemT
     // 由于LsmIteratorInner 包含了MemTable和SST的迭代器，而SST的迭代器不支持上界
     // 所以还要检查下上界，如果到达上界则当前LsmIterator不可用
     endBound match
-      case Included(r) => isSelfValid = byteArrayCompare(key(), r) <= 0
-      case Excluded(r) => isSelfValid = byteArrayCompare(key(), r) < 0
+      case Included(r) => isSelfValid = util.Arrays.compare(key(), r) <= 0
+      case Excluded(r) => isSelfValid = util.Arrays.compare(key(), r) < 0
       case _ =>
   }
 

@@ -1,7 +1,7 @@
 package io.github.leibnizhu.tinylsm
 
 import io.github.leibnizhu.tinylsm.block.BlockCache
-import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{LeveledCompactionOptions, SimpleCompactionOptions, FullCompaction, TieredCompactionOptions}
+import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{FullCompaction, LeveledCompactionOptions, SimpleCompactionOptions, TieredCompactionOptions}
 import io.github.leibnizhu.tinylsm.compact.{CompactionOptions, FullCompactionTask}
 import io.github.leibnizhu.tinylsm.iterator.*
 import io.github.leibnizhu.tinylsm.utils.*
@@ -9,9 +9,10 @@ import org.jboss.logging.Logger
 import org.slf4j.LoggerFactory
 
 import java.io.File
-import java.util.Timer
+import java.util
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.{Lock, ReadWriteLock, ReentrantLock, ReentrantReadWriteLock}
+import java.util.{Arrays, Timer}
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.util.boundary
@@ -385,13 +386,13 @@ private[tinylsm] class LsmStorageInner(
                            sstBegin: MemTableKey, sstEnd: MemTableKey): Boolean = {
     // 判断scan的右边界如果小于SST的最左边第一个key，那么这个sst肯定不包含这个scan范围
     userEnd match
-      case Excluded(r: MemTableKey) if byteArrayCompare(r, sstBegin) <= 0 => return false
-      case Included(r: MemTableKey) if byteArrayCompare(r, sstBegin) < 0 => return false
+      case Excluded(r: MemTableKey) if util.Arrays.compare(r, sstBegin) <= 0 => return false
+      case Included(r: MemTableKey) if util.Arrays.compare(r, sstBegin) < 0 => return false
       case _ => {}
     // 判断scan的左边界如果大于SST的最右边最后一个key，那么这个sst肯定不包含这个scan范围
     userBegin match
-      case Excluded(r: MemTableKey) if byteArrayCompare(r, sstEnd) >= 0 => return false
-      case Included(r: MemTableKey) if byteArrayCompare(r, sstEnd) > 0 => return false
+      case Excluded(r: MemTableKey) if util.Arrays.compare(r, sstEnd) >= 0 => return false
+      case Included(r: MemTableKey) if util.Arrays.compare(r, sstEnd) > 0 => return false
       case _ => {}
     true
   }

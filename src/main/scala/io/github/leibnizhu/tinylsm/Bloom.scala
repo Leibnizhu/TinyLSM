@@ -1,7 +1,6 @@
 package io.github.leibnizhu.tinylsm
 
-import io.github.leibnizhu.tinylsm.bytesToInt
-import io.github.leibnizhu.tinylsm.utils.ByteArrayWriter
+import io.github.leibnizhu.tinylsm.utils.{ByteArrayReader, ByteArrayWriter}
 
 import java.util
 import scala.util.boundary
@@ -36,7 +35,7 @@ class Bloom(val filter: util.BitSet, val hashFuncNum: Int) {
    */
   def encode(buffer: ByteArrayWriter): Unit = {
     val offset = buffer.length
-    buffer.putByteArray(filter.toByteArray)
+    buffer.putBytes(filter.toByteArray)
     // hashFuncNum 最大30，可以放入一个byte
     buffer.putByte(hashFuncNum.toByte)
     val checksum = MurmurHash3.seqHash(buffer.slice(offset, buffer.length))
@@ -86,12 +85,13 @@ object Bloom {
    * @return Bloom对象
    */
   def decode(bytes: Array[Byte]): Bloom = {
-    val checksum = bytesToInt(bytes.slice(bytes.length - 4, bytes.length))
-    if (checksum != MurmurHash3.seqHash(bytes.slice(0, bytes.length - 4))) {
+    val buffer = new ByteArrayReader(bytes)
+    val checksum = buffer.readTailUnit32()
+    if (checksum != MurmurHash3.seqHash(bytes.slice(0, bytes.length - SIZE_OF_INT))) {
       throw new IllegalArgumentException("Bloom filter checksum mismatch")
     }
-    val filter = bytes.slice(0, bytes.length - 5)
-    val k = bytes(bytes.length - 5).toInt
+    val filter = buffer.readBytes(bytes.length - SIZE_OF_INT - 1)
+    val k = buffer.readByte().toInt
     val bitSet = util.BitSet.valueOf(filter)
     new Bloom(bitSet, k)
   }

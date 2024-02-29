@@ -2,7 +2,7 @@ package io.github.leibnizhu.tinylsm.iterator
 
 import io.github.leibnizhu.tinylsm.*
 
-import java.util.PriorityQueue
+import java.util.{Arrays, PriorityQueue}
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters.*
 import scala.util.hashing.MurmurHash3
@@ -125,7 +125,7 @@ case class HeapWrapper[I <: MemTableStorageIterator](index: Int, itr: MemTableSt
 
   override def compareTo(other: HeapWrapper[I]): Int = {
     // 先按key进行比较，同key的时候更新（index更小的）的优先
-    val keyCompare = byteArrayCompare(this.itr.key(), other.itr.key())
+    val keyCompare = java.util.Arrays.compare(this.itr.key(), other.itr.key())
     if (keyCompare == 0) {
       // 小的index就是更新的迭代器
       this.index - other.index
