@@ -164,7 +164,7 @@ class LsmStorageTest extends AnyFunSuite {
      * 4 -> ""
      * 0 -> 2333333, 00 -> 2333333, 4 -> 23
      */
-    storage.printStorage()
+    storage.dumpStorage()
     checkIterator(List(
       entry("0", "2333333"),
       entry("00", "2333"),

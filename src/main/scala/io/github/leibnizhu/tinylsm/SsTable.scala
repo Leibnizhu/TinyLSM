@@ -4,6 +4,7 @@ import io.github.leibnizhu.tinylsm.block.{Block, BlockBuilder, BlockCache}
 import io.github.leibnizhu.tinylsm.iterator.*
 import io.github.leibnizhu.tinylsm.utils.ByteTransOps.bytesToInt
 import io.github.leibnizhu.tinylsm.utils.{ByteArrayReader, ByteArrayWriter}
+import org.slf4j.LoggerFactory
 
 import java.io.*
 import java.nio.ByteBuffer
@@ -156,6 +157,7 @@ object SsTable {
  * @param blockSize Block大小
  */
 class SsTableBuilder(val blockSize: Int) {
+  private val log = LoggerFactory.getLogger(classOf[LsmStorageInner])
   // 当前Block的builder
   private var builder = BlockBuilder(blockSize)
   // 当前Block的第一个和最后一个Key
@@ -231,6 +233,7 @@ class SsTableBuilder(val blockSize: Int) {
 
     // 生成sst文件
     val file = FileObject.create(path, buffer.toArray)
+    log.info(s"Created new SST file: ${file.file.get.getPath}")
     new SsTable(
       file = file,
       id = id,

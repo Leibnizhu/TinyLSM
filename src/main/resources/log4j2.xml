@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration>
+    <Properties>
+        <property name="LOG_PATTERN" value="%d{yyyy-MM-dd_HH:mm:ss} [%t] %p %c{1.}:%L: %m%n"/>
+    </Properties>
+
+    <Appenders>
+        <Console name="STDOUT" target="SYSTEM_OUT">
+            <PatternLayout pattern="${LOG_PATTERN}"/>
+            <ThresholdFilter level="DEBUG"/>
+        </Console>
+    </Appenders>
+
+    <Loggers>
+        <Logger name="org.apache.http" level="INFO"/>
+        <Root level="INFO">
+            <AppenderRef ref="STDOUT"/>
+        </Root>
+    </Loggers>
+
+</Configuration>

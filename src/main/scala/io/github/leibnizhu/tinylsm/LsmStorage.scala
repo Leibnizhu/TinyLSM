@@ -2,10 +2,9 @@ package io.github.leibnizhu.tinylsm
 
 import io.github.leibnizhu.tinylsm.block.BlockCache
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{FullCompaction, LeveledCompactionOptions, SimpleCompactionOptions, TieredCompactionOptions}
-import io.github.leibnizhu.tinylsm.compact.{CompactionOptions, FullCompactionTask}
+import io.github.leibnizhu.tinylsm.compact.{CompactionController, CompactionOptions, FullCompactionTask}
 import io.github.leibnizhu.tinylsm.iterator.*
 import io.github.leibnizhu.tinylsm.utils.*
-import org.jboss.logging.Logger
 import org.slf4j.LoggerFactory
 
 import java.io.File
@@ -71,6 +70,19 @@ case class LsmStorageState(
       writeLock.unlock()
     }
   }
+
+  def dumpState(): Unit = {
+    val snapshot = this.read(_.copy())
+    println(s"Current MemTable: ${snapshot.memTable.id}")
+    println(s"Frozen MemTables: ${snapshot.immutableMemTables.map(_.id)}")
+    if (snapshot.l0SsTables.nonEmpty) {
+      println(s"L0 (${snapshot.l0SsTables.length}): ${snapshot.l0SsTables}")
+    }
+    for ((level, files) <- snapshot.levels) {
+      println(s"L$level (${files.length}): ${files}")
+    }
+    println(s"SST: ${snapshot.ssTables.keys}")
+  }
 }
 
 object LsmStorageState {
@@ -94,7 +106,8 @@ private[tinylsm] class LsmStorageInner(
                                         val state: LsmStorageState,
                                         val blockCache: BlockCache,
                                         val options: LsmStorageOptions,
-                                        nextSstId: AtomicInteger) {
+                                        nextSstId: AtomicInteger,
+                                        val compactionController: CompactionController) {
   private val log = LoggerFactory.getLogger(classOf[LsmStorageInner])
 
   /**
@@ -357,6 +370,7 @@ private[tinylsm] class LsmStorageInner(
       if (innerBuilder.estimateSize() >= options.targetSstSize) {
         val sstId = nextSstId.incrementAndGet()
         val sst = innerBuilder.build(sstId, Some(blockCache), fileOfSst(sstId))
+        builder = None
         newSstList += sst
       }
     }
@@ -397,7 +411,7 @@ private[tinylsm] class LsmStorageInner(
     true
   }
 
-  def printStorage(): Unit = {
+  def dumpStorage(): Unit = {
     val itr = scan(Unbounded(), Unbounded())
     print("Storage content: ")
     while (itr.isValid) {
@@ -407,6 +421,8 @@ private[tinylsm] class LsmStorageInner(
     println()
   }
 
+  def dumpState(): Unit = state.dumpState()
+
   def triggerFlush(): Unit = {
     val needTrigger = state.read(st => st.immutableMemTables.length >=
       options.numMemTableLimit)
@@ -415,19 +431,56 @@ private[tinylsm] class LsmStorageInner(
       forceFlushNextImmutableMemTable()
     }
   }
+
+  def triggerCompact(): Unit = {
+    val snapshot = state.read(_.copy())
+    val compactTask = compactionController.generateCompactionTask(snapshot)
+    if (compactTask.isEmpty) {
+      return
+    }
+    val task = compactTask.get
+    dumpState()
+    log.info("running compaction task: {}", task)
+    val ssTables = task.doCompact(this)
+    val newSstIds = ssTables.map(_.sstId())
+    log.info("compaction task finished: {}, new SST: {}", task, newSstIds)
+    val sstToRemove = new ListBuffer[Int]()
+    try {
+      state.stateLock.lock()
+      val snapshot = state.read(_.copy())
+      state.ssTables = state.ssTables ++ ssTables.map(sst => (sst.sstId() -> sst))
+      val sstFileToRemove = task.applyCompactionResult(state, newSstIds)
+      sstFileToRemove.foreach(sstId => {
+        if (state.ssTables.contains(sstId)) {
+          state.ssTables = state.ssTables - sstId
+          sstToRemove += sstId
+        }
+      })
+    } finally {
+      state.stateLock.unlock()
+    }
+    // 释放锁之后再做文件IO
+    for (sstId <- sstToRemove) {
+      val sstFile = fileOfSst(sstId)
+      val deleted = sstFile.delete()
+      log.info("Deleted SST table file: {} {}", sstFile.getAbsolutePath, if (deleted) "success" else "failed")
+    }
+  }
 }
 
 object LsmStorageInner {
   def apply(path: File, options: LsmStorageOptions): LsmStorageInner = {
     val state = LsmStorageState(options)
     val blockCache = BlockCache.apply(128)
-    new LsmStorageInner(path, state, blockCache, options, AtomicInteger(0))
+    val compactionController = CompactionController(options.compactionOptions)
+    new LsmStorageInner(path, state, blockCache, options, AtomicInteger(0), compactionController)
   }
 
 }
 
 class TinyLsm(val inner: LsmStorageInner) {
   private val flushThread = spawnFlushThread()
+  private val compactionThread = spawnCompactionThread()
 
   def get(key: MemTableKey): Option[MemTableValue] = inner.get(key)
 
@@ -453,8 +506,15 @@ class TinyLsm(val inner: LsmStorageInner) {
     timer
   }
 
+  def spawnCompactionThread(): Timer = {
+    val timer = new Timer()
+    timer.schedule(() => inner.triggerCompact(), 0, 50)
+    timer
+  }
+
   def close(): Unit = {
     flushThread.cancel()
+    compactionThread.cancel()
     if (inner.options.enableWal) {
       // TODO 同步wal目录
     }
