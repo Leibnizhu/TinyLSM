@@ -92,7 +92,7 @@ object TestUtils {
     def genValue(i: Int) = "%0110d".format(i)
 
     var maxKey = 0
-    var keyMap = mutable.HashMap[Int, Int]()
+    val keyMap = mutable.HashMap[Int, Int]()
     val overlaps = if (TS_ENABLED) 10000 else 20000
     var cnt = 0
     for (iter <- 0 until 10) {
@@ -120,7 +120,7 @@ object TestUtils {
 
     var prevSnapshot = storage.inner.state.copy()
     while ( {
-      TimeUnit.SECONDS.sleep(1);
+      TimeUnit.SECONDS.sleep(1)
       val snapshot = storage.inner.state.copy()
       val toContinue = prevSnapshot.levels != snapshot.levels ||
         prevSnapshot.l0SsTables != snapshot.l0SsTables
@@ -137,11 +137,10 @@ object TestUtils {
       val key = genKey(i)
       val value = storage.get(key)
       keyMap.get(i) match
-        case Some(expectKey) => {
+        case Some(expectKey) =>
           val expectedValue = genValue(expectKey)
           assertResult(expectedValue)(value.get)
           expectedEntries += entry(key, expectedValue)
-        }
         case None => assert(value.isEmpty)
     }
     checkIterator(expectedEntries.toList, storage.scan(Unbounded(), Unbounded()), false)
@@ -167,31 +166,31 @@ object TestUtils {
           val curSize = levelSizes(idx)
           if (prevSize != 0 && curSize != 0) {
             assert((curSize.toDouble / prevSize) >= sizeRatioPercent.toDouble / 100,
-              s"L${snapshot.levels(idx - 1)._1}/L${snapshot.levels(idx)._1}, ${curSize}/${prevSize}<${sizeRatioPercent}%")
+              s"L${snapshot.levels(idx - 1)._1}/L${snapshot.levels(idx)._1}, $curSize/$prevSize<$sizeRatioPercent%")
           }
         }
         assert(numIters <= (l0SstNum + numMemtables + maxLevels + extraIterators),
-          s"we found ${numIters} iterators in your implementation, (l0SstNum=${l0SstNum}, numMemtables=${numMemtables}, maxLevels=${maxLevels}) did you use concat iterators?")
+          s"we found $numIters iterators in your implementation, (l0SstNum=$l0SstNum, numMemtables=$numMemtables, maxLevels=$maxLevels) did you use concat iterators?")
       case TieredCompactionOptions(maxSizeAmplificationPercent, sizeRatio, minMergeWidth, numTiers) =>
         val sizeRatioTrigger = (100.0 + sizeRatio.toDouble) / 100.0
         assertResult(0)(l0SstNum)
         assert(levelSizes.length <= numTiers)
-        var sumSize = levelSizes(0)
+        var sumSize = levelSizes.head
         for (idx <- 1 until levelSizes.length) {
           val curSize = levelSizes(idx)
           if (levelSizes.length > minMergeWidth) {
             assert(sumSize.toDouble / curSize <= sizeRatioTrigger,
-              s"violation of size ratio: sum(⬆️L${snapshot.levels(idx - 1)._1})/L${snapshot.levels(idx)._1}, ${sumSize}/${curSize}>${sizeRatioTrigger}")
+              s"violation of size ratio: sum(⬆️L${snapshot.levels(idx - 1)._1})/L${snapshot.levels(idx)._1}, $sumSize/$curSize>$sizeRatioTrigger")
           }
           if (idx + 1 == levelSizes.length) {
             assert(sumSize.toDouble / curSize <= maxSizeAmplificationPercent.toDouble / 100.0,
-              s"violation of space amp: sum(⬆️L${snapshot.levels(idx - 1)._1})/L${snapshot.levels(idx)._1}, ${sumSize}/${curSize}>${maxSizeAmplificationPercent}%"
+              s"violation of space amp: sum(⬆️L${snapshot.levels(idx - 1)._1})/L${snapshot.levels(idx)._1}, $sumSize/$curSize>$maxSizeAmplificationPercent%"
             )
           }
           sumSize += curSize
         }
         assert(numTiers <= (numMemtables + numTiers + extraIterators),
-          s"we found ${numIters} iterators in your implementation, (l0SstNum=${l0SstNum}, numMemtables=${numMemtables}, numTiers=${numTiers}) did you use concat iterators?")
+          s"we found $numIters iterators in your implementation, (l0SstNum=$l0SstNum, numMemtables=$numMemtables, numTiers=$numTiers) did you use concat iterators?")
       case LeveledCompactionOptions(levelSizeMultiplier, level0FileNumCompactionTrigger, maxLevels, baseLevelSizeMb) =>
         assert(l0SstNum < level0FileNumCompactionTrigger)
         assert(levelSizes.length <= maxLevels)
@@ -201,12 +200,12 @@ object TestUtils {
           multiplier *= levelSizeMultiplier.toDouble
           val curSize = levelSizes(idx - 1)
           assert((curSize.toDouble / lastLevelSize) <= (1.0 / multiplier + 0.5),
-            s"L${snapshot.levels(idx - 1)._1}/L_max, ${curSize}/${lastLevelSize}>>1.0/${multiplier}"
+            s"L${snapshot.levels(idx - 1)._1}/L_max, $curSize/$lastLevelSize>>1.0/$multiplier"
           )
         }
         assert(
           numTiers <= (l0SstNum + numMemtables + maxLevels + extraIterators),
-          s"we found ${numIters} iterators in your implementation, (l0SstNum=${l0SstNum}, numMemtables=${numMemtables}, maxLevels=${maxLevels}) did you use concat iterators?"
+          s"we found $numIters iterators in your implementation, (l0SstNum=$l0SstNum, numMemtables=$numMemtables, maxLevels=$maxLevels) did you use concat iterators?"
         );
       case _ =>
   }
