@@ -1,7 +1,10 @@
 package io.github.leibnizhu.tinylsm.compact
 
 import io.github.leibnizhu.tinylsm.iterator.{MergeIterator, SsTableIterator, TwoMergeIterator}
-import io.github.leibnizhu.tinylsm.{LsmStorageInner, SsTable}
+import io.github.leibnizhu.tinylsm.{LsmStorageInner, LsmStorageState, SsTable}
+
+import scala.collection.mutable.ListBuffer
+import scala.collection.mutable
 
 case class FullCompactionTask(l0SsTableIds: List[Int], l1SsTableIds: List[Int]) extends CompactionTask {
   override def doCompact(storage: LsmStorageInner): List[SsTable] = {
@@ -14,6 +17,17 @@ case class FullCompactionTask(l0SsTableIds: List[Int], l1SsTableIds: List[Int]) 
       //SstConcatIterator.createAndSeekToFirst(l1SsTables)
     )
     storage.compactGenerateSstFromIter(iter, compactToBottomLevel())
+  }
+
+  override def applyCompactionResult(state: LsmStorageState, output: List[Int]): List[Int] = {
+    // 修改 levels 1
+    state.levels = state.levels.updated(0, (1, output))
+
+    // 更新 L0
+    val l0SsTablesSet = mutable.HashSet(l0SsTableIds: _*)
+    state.l0SsTables = state.l0SsTables.filter(s => !l0SsTablesSet.remove(s))
+    assert(l0SsTablesSet.isEmpty)
+    l0SsTableIds ++ l1SsTableIds
   }
 
   override def compactToBottomLevel(): Boolean = true

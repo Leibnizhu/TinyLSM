@@ -27,7 +27,7 @@ case class LsmStorageState(
                             var immutableMemTables: List[MemTable],
                             // L0 SST 从最新到最早的
                             var l0SsTables: List[Int],
-                            // TODO 按key 范围排序的SsTable， L1 -> Lmax
+                            // 按key 范围排序的SsTable， L1 -> Lmax，每层是 (L几，List(包含的SST ID))
                             var levels: List[(Int, List[Int])] = List((1, List())),
                             // SST 对象
                             var ssTables: Map[Int, SsTable] = Map()
@@ -256,7 +256,12 @@ private[tinylsm] class LsmStorageInner(
 
       // 移除MemTable、加入到L0 table
       state.immutableMemTables = state.immutableMemTables.slice(0, state.immutableMemTables.length - 1)
-      state.l0SsTables = sstId :: state.l0SsTables
+      // Tiered compaction不能flush到L0
+      if (compactionController.flushToL0()) {
+        state.l0SsTables = sstId :: state.l0SsTables
+      } else {
+        state.levels = (sstId, List(sstId)) :: state.levels
+      }
       state.ssTables = state.ssTables + (sstId -> sst)
 
       // 删除WAL文件
@@ -304,42 +309,11 @@ private[tinylsm] class LsmStorageInner(
     val compactionTask = FullCompactionTask(l0SsTables, l1SsTables)
     log.info("Force full compaction: {}", compactionTask)
     val newSsTables = compactionTask.doCompact(this)
-
-    // 替换state的sst
-    val sstIds = new ListBuffer[Int]()
-    try {
-      state.stateLock.lock()
-      // 从 ssTables 移除旧SST
-      val tempSsTableMap = mutable.Map[Int, SsTable]() ++ state.ssTables
-      for (sstId <- l0SsTables ++ l1SsTables) {
-        val removed = tempSsTableMap.remove(sstId)
-        assert(removed.isDefined)
-      }
-      // 向 sstTables加入新SST
-      for (newSst <- newSsTables) {
-        sstIds += newSst.sstId()
-        tempSsTableMap += (newSst.sstId() -> newSst)
-      }
-      state.ssTables = tempSsTableMap.toMap
-
-      // 修改 levels 1
-      state.levels = state.levels.updated(0, (1, sstIds.toList))
-
-      // 更新 L0
-      val l0SsTablesSet = mutable.HashSet(l0SsTables: _*)
-      state.l0SsTables = state.l0SsTables.filter(s => !l0SsTablesSet.remove(s))
-      assert(l0SsTablesSet.isEmpty)
-    } finally {
-      state.stateLock.unlock()
-    }
-
-    // 删除旧sst
-    for (sstId <- l0SsTables ++ l1SsTables) {
-      val sstFile = fileOfSst(sstId)
-      val deleted = sstFile.delete()
-      log.info("Deleted sst file: {} {}", sstFile.getAbsolutePath, if (deleted) "success" else "failed")
-    }
-    log.info("force full compaction done, new SSTs: {}", sstIds.toList)
+    val newSstIds = newSsTables.map(_.sstId())
+    val sstToRemove = compactionController.applyCompactionToState(state, newSsTables, compactionTask)
+    // 释放锁之后再做文件IO
+    deleteSstFiles(sstToRemove)
+    log.info("force full compaction done, new SSTs: {}", newSstIds)
   }
 
   /**
@@ -441,26 +415,16 @@ private[tinylsm] class LsmStorageInner(
     val task = compactTask.get
     dumpState()
     log.info("running compaction task: {}", task)
-    val ssTables = task.doCompact(this)
-    val newSstIds = ssTables.map(_.sstId())
+    val newSsTables = task.doCompact(this)
+    val newSstIds = newSsTables.map(_.sstId())
     log.info("compaction task finished: {}, new SST: {}", task, newSstIds)
-    val sstToRemove = new ListBuffer[Int]()
-    try {
-      state.stateLock.lock()
-      val snapshot = state.read(_.copy())
-      state.ssTables = state.ssTables ++ ssTables.map(sst => (sst.sstId() -> sst))
-      val sstFileToRemove = task.applyCompactionResult(state, newSstIds)
-      sstFileToRemove.foreach(sstId => {
-        if (state.ssTables.contains(sstId)) {
-          state.ssTables = state.ssTables - sstId
-          sstToRemove += sstId
-        }
-      })
-    } finally {
-      state.stateLock.unlock()
-    }
+    val sstToRemove = compactionController.applyCompactionToState(state, newSsTables, task)
     // 释放锁之后再做文件IO
-    for (sstId <- sstToRemove) {
+    deleteSstFiles(sstToRemove)
+  }
+
+  private def deleteSstFiles(sstIds: List[Int]): Unit = {
+    for (sstId <- sstIds) {
       val sstFile = fileOfSst(sstId)
       val deleted = sstFile.delete()
       log.info("Deleted SST table file: {} {}", sstFile.getAbsolutePath, if (deleted) "success" else "failed")

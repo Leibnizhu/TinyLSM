@@ -1,12 +1,80 @@
 package io.github.leibnizhu.tinylsm.compact
 
-import io.github.leibnizhu.tinylsm.{LsmStorageInner, SsTable}
+import io.github.leibnizhu.tinylsm.iterator.{MergeIterator, SstConcatIterator}
+import io.github.leibnizhu.tinylsm.{LsmStorageInner, LsmStorageState, SsTable}
+import org.slf4j.LoggerFactory
 
-case class TieredCompactionTask() extends CompactionTask {
+case class TieredCompactionTask(tiers: List[(Int, List[Int])],
+                                bottomTierIncluded: Boolean,
+                               ) extends CompactionTask {
   override def doCompact(storage: LsmStorageInner): List[SsTable] = {
-    // TODO
-    null
+    val snapshot = storage.state.copy()
+    val iters = tiers.map((_, sstIds) =>
+      SstConcatIterator.createAndSeekToFirst(sstIds.map(snapshot.ssTables(_))))
+    val mergeIter = MergeIterator(iters)
+    storage.compactGenerateSstFromIter(mergeIter, bottomTierIncluded)
   }
 
-  override def compactToBottomLevel(): Boolean = true
+  override def applyCompactionResult(state: LsmStorageState, output: List[Int]): List[Int] = {
+    assert(snapshot.l0SsTables.isEmpty, "should not add l0 ssts in tiered compaction")
+    val snapshot = state.copy()
+    
+    List()
+  }
+
+  override def compactToBottomLevel(): Boolean = bottomTierIncluded
+}
+
+object TieredCompactionTask {
+  private val log = LoggerFactory.getLogger(classOf[TieredCompactionTask])
+
+  /**
+   *
+   * @param options  Compaction配置
+   * @param snapshot Lsm内部状态 snapshot
+   * @return 压缩任务。如果无需Compaction则返回None
+   */
+  def generate(options: CompactionOptions.TieredCompactionOptions, snapshot: LsmStorageState): Option[TieredCompactionTask] = {
+    assert(snapshot.l0SsTables.isEmpty, "should not add l0 ssts in tiered compaction")
+    val levels = snapshot.levels
+    if (levels.length < options.numTiers) {
+      // tier 层数不够多
+      return None
+    }
+    // 1. 考虑空间放大率 space amplification ratio
+    // 应该是 engineSize / lastLevelSize 实际可以用 除最底以外所有level的总size / 最底level的size
+    val lowestSize = levels.last._2.length
+    val allUpperSize = levels.map(_._2.length).sum - lowestSize
+    val spaceAmpRatio = 100 * allUpperSize.toDouble / lowestSize
+    if (spaceAmpRatio >= options.maxSizeAmplificationPercent) {
+      log.info("compaction triggered by space amplification ratio: {}", "%.3f".format(spaceAmpRatio))
+      Some(TieredCompactionTask(List(levels: _*), true))
+    }
+
+    // 2. 考虑 size 比例
+    // 记录当前的所有上层的总大小
+    val sizeRatioThreshold = (100.0 + options.sizeRatio.toDouble) / 100
+    var upperSizeSum = 0
+    for (id <- 0 until levels.length - 1) {
+      upperSizeSum += levels(id)._2.length
+      val nextLevelSize = levels(id + 1)._2.length
+      val curSizeRatio = upperSizeSum.toDouble / nextLevelSize
+      // 两个条件，既要sizeRatio超了阈值，同时要compact的层数超过 minMergeWidth。
+      // 因为id 是从0开始的，当前一共 id+1层，加上下一层，所以是 id +2
+      if (curSizeRatio >= sizeRatioThreshold && id + 2 >= options.minMergeWidth) {
+        log.info("compaction triggered by size ratio: {}", "%.3f".format(curSizeRatio * 100))
+        // FIXME 直接for里return不够优雅
+        return Some(TieredCompactionTask(levels.take(id + 2), id + 2 >= levels.length))
+      }
+    }
+
+    // 最后确保 tier 数量少于 numTiers
+    if (snapshot.levels.length > options.numTiers) {
+      val numTiersToTake = snapshot.levels.length - options.numTiers + 2
+      // FIXME rust 代码里是 levels.length >= numTiersToTake
+      Some(TieredCompactionTask(levels.take(numTiersToTake), numTiersToTake >= levels.length))
+    } else {
+      None
+    }
+  }
 }
