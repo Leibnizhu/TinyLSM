@@ -21,8 +21,12 @@ class TieredCompactionTaskTest extends AnyFunSuite {
     // 不能再压缩了
     assert(compactTask.isEmpty)
 
-    // TODO 压缩参数校验
-    
+    // 压缩参数校验
+    // tier数限制
+    val levels = snapshot.levels
+    assert(levels.length <= numTiers)
+    assert(snapshot.immutableMemTables.isEmpty)
+    assert(snapshot.l0SsTables.isEmpty)
   }
 
 }

@@ -114,6 +114,8 @@ object TestUtils {
     while (!storage.inner.state.read(_.immutableMemTables.isEmpty)) {
       storage.inner.forceFlushNextImmutableMemTable()
     }
+    println("====> After flush MemTables")
+    storage.inner.dumpState()
 
     var prevSnapshot = storage.inner.state.copy()
     while ( {
@@ -126,8 +128,9 @@ object TestUtils {
     }) {
       println("waiting for compaction to converge")
     }
-
+    println("====> After compaction")
     storage.inner.dumpState()
+    
     val expectedEntries = new ListBuffer[MemTableEntry]()
     for (i <- 0 until maxKey + 40000) {
       val key = genKey(i)

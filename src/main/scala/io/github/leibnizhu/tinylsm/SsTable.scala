@@ -233,7 +233,7 @@ class SsTableBuilder(val blockSize: Int) {
 
     // 生成sst文件
     val file = FileObject.create(path, buffer.toArray)
-    log.info(s"Created new SST file: ${file.file.get.getPath}")
+    log.info(s"Created new SST file: ${file.file.get.getName}")
     new SsTable(
       file = file,
       id = id,

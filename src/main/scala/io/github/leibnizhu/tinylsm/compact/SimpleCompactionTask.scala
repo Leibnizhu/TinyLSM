@@ -93,7 +93,7 @@ object SimpleCompactionTask {
         val lowerLevel = curLevel + 1
         val sizeRatio = levelSizes(lowerLevel).toDouble / levelSizes(curLevel).toDouble
         if (sizeRatio < options.sizeRatioPercent.toDouble / 100.0) {
-          log.info("compaction triggered at level {} and {} with size ratio {}", curLevel, lowerLevel, sizeRatio);
+          log.info("Compaction triggered at level {} and {} with size ratio {}", curLevel, lowerLevel, sizeRatio);
           targetLevel = Some(curLevel)
         }
       }

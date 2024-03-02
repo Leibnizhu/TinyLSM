@@ -17,6 +17,7 @@ package object tinylsm {
   type MemTableValue = Array[Byte]
   type MemTableEntry = java.util.Map.Entry[ByteArrayKey, MemTableValue]
   type MemTableStorageIterator = StorageIterator[MemTableKey, MemTableValue]
+  type Level = (Int, List[Int])
 
   def byteArrayHash(bytes: Array[Byte]): Int = {
     MurmurHash3.seqHash(bytes)

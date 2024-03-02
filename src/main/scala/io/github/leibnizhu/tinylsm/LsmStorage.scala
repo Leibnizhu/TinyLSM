@@ -28,7 +28,7 @@ case class LsmStorageState(
                             // L0 SST 从最新到最早的
                             var l0SsTables: List[Int],
                             // 按key 范围排序的SsTable， L1 -> Lmax，每层是 (L几，List(包含的SST ID))
-                            var levels: List[(Int, List[Int])] = List((1, List())),
+                            var levels: List[Level] = List((1, List())),
                             // SST 对象
                             var ssTables: Map[Int, SsTable] = Map()
                           ) {
@@ -74,14 +74,12 @@ case class LsmStorageState(
   def dumpState(): Unit = {
     val snapshot = this.read(_.copy())
     println(s"Current MemTable: ${snapshot.memTable.id}")
-    println(s"Frozen MemTables: ${snapshot.immutableMemTables.map(_.id)}")
-    if (snapshot.l0SsTables.nonEmpty) {
-      println(s"L0 (${snapshot.l0SsTables.length}): ${snapshot.l0SsTables}")
-    }
+    println(s"Frozen MemTables: [${snapshot.immutableMemTables.map(_.id).mkString(",")}]")
+    println(s"L0\t(${snapshot.l0SsTables.length}): [${snapshot.l0SsTables.mkString(",")}]")
     for ((level, files) <- snapshot.levels) {
-      println(s"L$level (${files.length}): ${files}")
+      println(s"L$level\t(${files.length}): [${files.mkString(",")}]")
     }
-    println(s"SST: ${snapshot.ssTables.keys}")
+    println(s"SST: {${snapshot.ssTables.keys.mkString(",")}}")
   }
 }
 
@@ -96,7 +94,7 @@ object LsmStorageState {
     new LsmStorageState(MemTable(0), List[MemTable](), List(), levels)
   }
 
-  private def makeLevelsByMax(maxLevels: Int): List[(Int, List[Int])] =
+  private def makeLevelsByMax(maxLevels: Int): List[Level] =
     (1 to maxLevels).map((_, List[Int]())).toList
 }
 
@@ -256,10 +254,10 @@ private[tinylsm] class LsmStorageInner(
 
       // 移除MemTable、加入到L0 table
       state.immutableMemTables = state.immutableMemTables.slice(0, state.immutableMemTables.length - 1)
-      // Tiered compaction不能flush到L0
       if (compactionController.flushToL0()) {
         state.l0SsTables = sstId :: state.l0SsTables
       } else {
+        // Tiered compaction不能flush到L0, 每次都写到levels的最前面，Tier ID是对应第一个SST的ID
         state.levels = (sstId, List(sstId)) :: state.levels
       }
       state.ssTables = state.ssTables + (sstId -> sst)
@@ -414,10 +412,10 @@ private[tinylsm] class LsmStorageInner(
     }
     val task = compactTask.get
     dumpState()
-    log.info("running compaction task: {}", task)
+    log.info("Running compaction task: {}", task)
     val newSsTables = task.doCompact(this)
     val newSstIds = newSsTables.map(_.sstId())
-    log.info("compaction task finished: {}, new SST: {}", task, newSstIds)
+    log.info("Compaction task finished: {}, new SST: {}", task, newSstIds)
     val sstToRemove = compactionController.applyCompactionToState(state, newSsTables, task)
     // 释放锁之后再做文件IO
     deleteSstFiles(sstToRemove)
@@ -427,16 +425,19 @@ private[tinylsm] class LsmStorageInner(
     for (sstId <- sstIds) {
       val sstFile = fileOfSst(sstId)
       val deleted = sstFile.delete()
-      log.info("Deleted SST table file: {} {}", sstFile.getAbsolutePath, if (deleted) "success" else "failed")
+      log.info("Deleted SST table file: {} {}", sstFile.getName, if (deleted) "success" else "failed")
     }
   }
 }
 
 object LsmStorageInner {
+  private val log = LoggerFactory.getLogger(classOf[LsmStorageInner])
+
   def apply(path: File, options: LsmStorageOptions): LsmStorageInner = {
     val state = LsmStorageState(options)
     val blockCache = BlockCache.apply(128)
     val compactionController = CompactionController(options.compactionOptions)
+    log.info("Start LsmStorageInner with lsm dir: {}", path.getAbsolutePath)
     new LsmStorageInner(path, state, blockCache, options, AtomicInteger(0), compactionController)
   }
 
