@@ -2,10 +2,11 @@ package io.github.leibnizhu.tinylsm
 
 import io.github.leibnizhu.tinylsm.block.BlockCache
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions
+import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{LeveledCompactionOptions, SimpleCompactionOptions, TieredCompactionOptions}
 import io.github.leibnizhu.tinylsm.iterator.{MergeIterator, SsTableIterator}
 import io.github.leibnizhu.tinylsm.utils.Unbounded
 import org.scalatest.Assertions.{assertResult, assertThrows}
-import org.scalatest.Entry
+import org.scalatest.{Entry, stats}
 
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -130,7 +131,7 @@ object TestUtils {
     }
     println("====> After compaction")
     storage.inner.dumpState()
-    
+
     val expectedEntries = new ListBuffer[MemTableEntry]()
     for (i <- 0 until maxKey + 40000) {
       val key = genKey(i)
@@ -144,5 +145,69 @@ object TestUtils {
         case None => assert(value.isEmpty)
     }
     checkIterator(expectedEntries.toList, storage.scan(Unbounded(), Unbounded()), false)
+  }
+
+  def checkCompactionRatio(storage: TinyLsm): Unit = {
+    val snapshot = storage.inner.state.read(_.copy())
+    val compactionOptions = storage.inner.options.compactionOptions
+    val l0SstNum = snapshot.l0SsTables.length
+    val levelSizes = snapshot.levels.map((_, sstIds) => compactionOptions match
+      case l: LeveledCompactionOptions => sstIds.map(snapshot.ssTables(_).tableSize()).sum
+      case _ => sstIds.length.toLong
+    )
+    val extraIterators = if (TS_ENABLED) 1 else 0
+    val numIters = storage.scan(Unbounded(), Unbounded()).numActiveIterators()
+    val numMemtables = snapshot.immutableMemTables.length + 1
+    compactionOptions match
+      case SimpleCompactionOptions(sizeRatioPercent, level0FileNumCompactionTrigger, maxLevels) =>
+        assert(l0SstNum < level0FileNumCompactionTrigger)
+        assert(levelSizes.length <= maxLevels)
+        for (idx <- 1 until levelSizes.length) {
+          val prevSize = levelSizes(idx - 1)
+          val curSize = levelSizes(idx)
+          if (prevSize != 0 && curSize != 0) {
+            assert((curSize.toDouble / prevSize) >= sizeRatioPercent.toDouble / 100,
+              s"L${snapshot.levels(idx - 1)._1}/L${snapshot.levels(idx)._1}, ${curSize}/${prevSize}<${sizeRatioPercent}%")
+          }
+        }
+        assert(numIters <= (l0SstNum + numMemtables + maxLevels + extraIterators),
+          s"we found ${numIters} iterators in your implementation, (l0SstNum=${l0SstNum}, numMemtables=${numMemtables}, maxLevels=${maxLevels}) did you use concat iterators?")
+      case TieredCompactionOptions(maxSizeAmplificationPercent, sizeRatio, minMergeWidth, numTiers) =>
+        val sizeRatioTrigger = (100.0 + sizeRatio.toDouble) / 100.0
+        assertResult(0)(l0SstNum)
+        assert(levelSizes.length <= numTiers)
+        var sumSize = levelSizes(0)
+        for (idx <- 1 until levelSizes.length) {
+          val curSize = levelSizes(idx)
+          if (levelSizes.length > minMergeWidth) {
+            assert(sumSize.toDouble / curSize <= sizeRatioTrigger,
+              s"violation of size ratio: sum(⬆️L${snapshot.levels(idx - 1)._1})/L${snapshot.levels(idx)._1}, ${sumSize}/${curSize}>${sizeRatioTrigger}")
+          }
+          if (idx + 1 == levelSizes.length) {
+            assert(sumSize.toDouble / curSize <= maxSizeAmplificationPercent.toDouble / 100.0,
+              s"violation of space amp: sum(⬆️L${snapshot.levels(idx - 1)._1})/L${snapshot.levels(idx)._1}, ${sumSize}/${curSize}>${maxSizeAmplificationPercent}%"
+            )
+          }
+          sumSize += curSize
+        }
+        assert(numTiers <= (numMemtables + numTiers + extraIterators),
+          s"we found ${numIters} iterators in your implementation, (l0SstNum=${l0SstNum}, numMemtables=${numMemtables}, numTiers=${numTiers}) did you use concat iterators?")
+      case LeveledCompactionOptions(levelSizeMultiplier, level0FileNumCompactionTrigger, maxLevels, baseLevelSizeMb) =>
+        assert(l0SstNum < level0FileNumCompactionTrigger)
+        assert(levelSizes.length <= maxLevels)
+        val lastLevelSize = levelSizes.last
+        var multiplier = 1.0
+        for (idx <- (1 until levelSizes.length).reverse) {
+          multiplier *= levelSizeMultiplier.toDouble
+          val curSize = levelSizes(idx - 1)
+          assert((curSize.toDouble / lastLevelSize) <= (1.0 / multiplier + 0.5),
+            s"L${snapshot.levels(idx - 1)._1}/L_max, ${curSize}/${lastLevelSize}>>1.0/${multiplier}"
+          )
+        }
+        assert(
+          numTiers <= (l0SstNum + numMemtables + maxLevels + extraIterators),
+          s"we found ${numIters} iterators in your implementation, (l0SstNum=${l0SstNum}, numMemtables=${numMemtables}, maxLevels=${maxLevels}) did you use concat iterators?"
+        );
+      case _ =>
   }
 }

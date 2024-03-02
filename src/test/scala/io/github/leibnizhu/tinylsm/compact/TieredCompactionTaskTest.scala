@@ -1,6 +1,6 @@
 package io.github.leibnizhu.tinylsm.compact
 
-import io.github.leibnizhu.tinylsm.TestUtils.{compactionBench, compactionOption, tempDir}
+import io.github.leibnizhu.tinylsm.TestUtils.{checkCompactionRatio, compactionBench, compactionOption, tempDir}
 import io.github.leibnizhu.tinylsm.TinyLsm
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -14,6 +14,7 @@ class TieredCompactionTaskTest extends AnyFunSuite {
     val compactOption = compactionOption(CompactionOptions.TieredCompactionOptions(maxSizeAmplificationPercent, sizeRatio, minMergeWidth, numTiers))
     val storage = TinyLsm(tempDir(), compactOption)
     compactionBench(storage)
+    checkCompactionRatio(storage)
 
     val state = storage.inner.state
     val snapshot = state.read(_.copy())
