@@ -189,7 +189,7 @@ object TestUtils {
           }
           sumSize += curSize
         }
-        assert(numTiers <= (numMemtables + numTiers + extraIterators),
+        assert(numIters <= (numMemtables + numTiers + extraIterators),
           s"we found $numIters iterators in your implementation, (l0SstNum=$l0SstNum, numMemtables=$numMemtables, numTiers=$numTiers) did you use concat iterators?")
       case LeveledCompactionOptions(levelSizeMultiplier, level0FileNumCompactionTrigger, maxLevels, baseLevelSizeMb) =>
         assert(l0SstNum < level0FileNumCompactionTrigger)
@@ -204,7 +204,7 @@ object TestUtils {
           )
         }
         assert(
-          numTiers <= (l0SstNum + numMemtables + maxLevels + extraIterators),
+          numIters <= (l0SstNum + numMemtables + maxLevels + extraIterators),
           s"we found $numIters iterators in your implementation, (l0SstNum=$l0SstNum, numMemtables=$numMemtables, maxLevels=$maxLevels) did you use concat iterators?"
         );
       case _ =>

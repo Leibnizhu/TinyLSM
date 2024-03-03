@@ -16,25 +16,8 @@ case class SimpleCompactionTask(
                                  isLowerLevelBottomLevel: Boolean,
                                ) extends CompactionTask {
   override def doCompact(storage: LsmStorageInner): List[SsTable] = this.upperLevel match
-    case None => doCompactL0(storage)
-    case Some(level) => doCompactLevel(storage, level)
-
-  private def doCompactL0(storage: LsmStorageInner): List[SsTable] = {
-    val snapshot = storage.state.copy()
-    // upper 是L0, 没有compact过，所以不能用 SstConcatIterator，得用 MergeIterator
-    val upperIter = MergeIterator(upperLevelSstIds.map(snapshot.ssTables(_))
-      .map(SsTableIterator.createAndSeekToFirst))
-    val lowerIter = SstConcatIterator.createAndSeekToFirst(lowerLevelSstIds.map(snapshot.ssTables(_)))
-    storage.compactGenerateSstFromIter(TwoMergeIterator(upperIter, lowerIter), isLowerLevelBottomLevel)
-  }
-
-  private def doCompactLevel(storage: LsmStorageInner, level: Int): List[SsTable] = {
-    val snapshot = storage.state.copy()
-    // upper lower 都是L1或以上，可以都用 SstConcatIterator 提高效率
-    val upperIter = SstConcatIterator.createAndSeekToFirst(upperLevelSstIds.map(snapshot.ssTables(_)))
-    val lowerIter = SstConcatIterator.createAndSeekToFirst(lowerLevelSstIds.map(snapshot.ssTables(_)))
-    storage.compactGenerateSstFromIter(TwoMergeIterator(upperIter, lowerIter), isLowerLevelBottomLevel)
-  }
+    case None => SimpleCompactionTask.doCompactL0(storage, upperLevelSstIds, lowerLevelSstIds, isLowerLevelBottomLevel)
+    case Some(level) => SimpleCompactionTask.doCompactLevel(storage, level, upperLevelSstIds, lowerLevelSstIds, isLowerLevelBottomLevel)
 
   override def applyCompactionResult(state: LsmStorageState, output: List[Int]): List[Int] = {
     val snapshot = state.copy()
@@ -112,5 +95,22 @@ object SimpleCompactionTask {
       //      snapshot.dumpState()
       None
     }
+  }
+  
+  def doCompactL0(storage: LsmStorageInner, upperLevelSstIds: List[Int],lowerLevelSstIds: List[Int],isLowerLevelBottomLevel: Boolean): List[SsTable] = {
+    val snapshot = storage.state.copy()
+    // upper 是L0, 没有compact过，所以不能用 SstConcatIterator，得用 MergeIterator
+    val upperIter = MergeIterator(upperLevelSstIds.map(snapshot.ssTables(_))
+      .map(SsTableIterator.createAndSeekToFirst))
+    val lowerIter = SstConcatIterator.createAndSeekToFirst(lowerLevelSstIds.map(snapshot.ssTables(_)))
+    storage.compactGenerateSstFromIter(TwoMergeIterator(upperIter, lowerIter), isLowerLevelBottomLevel)
+  }
+
+  def doCompactLevel(storage: LsmStorageInner, level: Int, upperLevelSstIds: List[Int],lowerLevelSstIds: List[Int],isLowerLevelBottomLevel: Boolean): List[SsTable] = {
+    val snapshot = storage.state.copy()
+    // upper lower 都是L1或以上，可以都用 SstConcatIterator 提高效率
+    val upperIter = SstConcatIterator.createAndSeekToFirst(upperLevelSstIds.map(snapshot.ssTables(_)))
+    val lowerIter = SstConcatIterator.createAndSeekToFirst(lowerLevelSstIds.map(snapshot.ssTables(_)))
+    storage.compactGenerateSstFromIter(TwoMergeIterator(upperIter, lowerIter), isLowerLevelBottomLevel)
   }
 }

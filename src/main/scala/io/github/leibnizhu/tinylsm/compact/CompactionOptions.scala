@@ -12,10 +12,35 @@ enum CompactionOptions {
    */
   case FullCompaction extends CompactionOptions
 
+  /**
+   * Tiered 和 Simple 在合并压缩时都无法删除旧文件，需要占用两倍空间
+   * 另外如果中间的level为空的话，Simple策略会将一个sst从L0一路刷到最底部，
+   * Leveled 根据 baseLevelSizeMb 和 levelSizeMultiplier、maxLevels 维护每一层的 targetSize
+   * 压缩L0时，选择第一个 targetSize > 0 的level进行压缩
+   * 优先级：
+   * 1. L0 压缩有最高优先级，达到阈值后优先和其他level合并
+   * 2. 通过 curSize / targetSize 计算每个level的压缩优先级，只压缩 > 1.0 的，并选择比例最大的level与其下一级进行合并
+   * 决定压缩level后，从上层取最旧的sst（也可以用其他方法决定sst，如逻辑删除的数量）
+   * 然后从下层找所有与之key范围重叠的sst（如果key分布均匀，下层level 应该大概是有 levelSizeMultiplier 个对应sst）
+   * 
+   */
   case LeveledCompactionOptions(
                                  levelSizeMultiplier: Int,
+
+                                 /**
+                                  * L0 sst文件数量到达这个阈值触发压缩
+                                  */
                                  level0FileNumCompactionTrigger: Int,
                                  maxLevels: Int,
+
+                                 /**
+                                  * 启用一个新level的阈值。最多只能有一个非空level的大小小于 baseLevelSizeMb
+                                  * 在最底层超过 baseLevelSizeMb 之前，其他中间级别的目标大小都将为 0
+                                  * 当最底层 >= baseLevelSizeMb，倒数第二层目标大小是 baseLevelSizeMb / levelSizeMultiplier
+                                  * 比如说 maxLevel=3, baseLevelSizeMb=100MB, levelSizeMultiplier=10
+                                  * 那么一开始 [0,0,0] => [0,0,100MB] 可以启用新level => [0,10MB,100MB]
+                                  * 逐渐地 [0,100MB,1000GB] 启用新level => [10MB,100MB,1000MB]
+                                  */
                                  baseLevelSizeMb: Int,
                                ) extends CompactionOptions
 

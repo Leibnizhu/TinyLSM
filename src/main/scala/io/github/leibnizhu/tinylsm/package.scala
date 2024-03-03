@@ -2,6 +2,7 @@ package io.github.leibnizhu
 
 import io.github.leibnizhu.tinylsm.iterator.StorageIterator
 
+import java.util.Comparator
 import scala.util.hashing.MurmurHash3
 
 package object tinylsm {
@@ -18,6 +19,11 @@ package object tinylsm {
   type MemTableEntry = java.util.Map.Entry[ByteArrayKey, MemTableValue]
   type MemTableStorageIterator = StorageIterator[MemTableKey, MemTableValue]
   type Level = (Int, List[Int])
+
+  implicit val keyComparator: Comparator[MemTableKey] = new java.util.Comparator[MemTableKey]() {
+    override def compare(o1: MemTableKey, o2: MemTableKey): Int =
+      java.util.Arrays.compare(o1, o2)
+  }
 
   def byteArrayHash(bytes: Array[Byte]): Int = {
     MurmurHash3.seqHash(bytes)
