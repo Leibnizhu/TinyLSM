@@ -80,7 +80,9 @@ object LeveledCompactionTask {
     // 从底部开始遍历,查找 baseLevel，(1-N，不是下标，是level层数)
     var baseLevel = options.maxLevels
     val targetLevelSize = (options.maxLevels - 2 to 0 by -1).foldLeft(List(lastLevelTargetSize))((levelSizes, i) => {
+      // levelSizes 是已经计算的 targetSize 数组，i+1 是当前的level数 
       val curLevelSize = levelSizes.head / options.levelSizeMultiplier
+      //      println(s"${levelSizes} ==> $curLevelSize")
       if (levelSizes.head > baseLevelSizeBytes) {
         baseLevel = i + 1
         curLevelSize :: levelSizes
@@ -110,7 +112,7 @@ object LeveledCompactionTask {
         targetLevelSize.map(size => "%.3fMB".format(size.toDouble / 1024.0 / 1024.0)),
         realLevelSize.map(size => "%.3fMB".format(size.toDouble / 1024.0 / 1024.0)), baseLevel)
       val selectedSst = snapshot.levels(level - 1)._2.min
-      log.info("compaction triggered by priority: {} out of {}, select {} for compaction", level, priority, selectedSst)
+      log.info("compaction triggered by priority: {} out of {}, select {} for compaction", level, "%.4f".format(priority), selectedSst)
       val lowerSstIds = findOverlappingSsts(snapshot, List(selectedSst), level + 1)
       Some(LeveledCompactionTask(
         upperLevel = Some(level), upperLevelSstIds = List(selectedSst),

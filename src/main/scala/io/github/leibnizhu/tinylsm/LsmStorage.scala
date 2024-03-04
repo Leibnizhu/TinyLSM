@@ -74,12 +74,12 @@ case class LsmStorageState(
   def dumpState(): Unit = {
     val snapshot = this.read(_.copy())
     println(s"Current MemTable: ${snapshot.memTable.id}")
-    println(s"Frozen MemTables: [${snapshot.immutableMemTables.map(_.id).mkString(",")}]")
-    println(s"L0\t(${snapshot.l0SsTables.length}): [${snapshot.l0SsTables.mkString(",")}]")
+    println(s"Frozen MemTables: [${snapshot.immutableMemTables.map(_.id).mkString(", ")}]")
+    println(s"L0\t(${snapshot.l0SsTables.length}): [${snapshot.l0SsTables.mkString(", ")}]")
     for ((level, files) <- snapshot.levels) {
-      println(s"L$level\t(${files.length}): [${files.mkString(",")}]")
+      println(s"L$level\t(${files.length}): [${files.mkString(", ")}]")
     }
-    println(s"SST: {${snapshot.ssTables.keys.mkString(",")}}")
+    println(s"SST: {${snapshot.ssTables.keys.mkString(", ")}}")
   }
 }
 
@@ -411,8 +411,8 @@ private[tinylsm] class LsmStorageInner(
       return
     }
     val task = compactTask.get
-    dumpState()
     log.info("Running compaction task: {}", task)
+    dumpState()
     val newSsTables = task.doCompact(this)
     val newSstIds = newSsTables.map(_.sstId())
     log.info("Compaction task finished: {}, new SST: {}", task, newSstIds)
