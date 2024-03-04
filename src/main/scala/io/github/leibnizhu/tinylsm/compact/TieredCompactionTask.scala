@@ -1,8 +1,7 @@
 package io.github.leibnizhu.tinylsm.compact
 
-import io.github.leibnizhu.tinylsm.Level
 import io.github.leibnizhu.tinylsm.iterator.{MergeIterator, SstConcatIterator}
-import io.github.leibnizhu.tinylsm.{LsmStorageInner, LsmStorageState, SsTable}
+import io.github.leibnizhu.tinylsm.{Level, LsmStorageInner, LsmStorageState, SsTable}
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable.ListBuffer

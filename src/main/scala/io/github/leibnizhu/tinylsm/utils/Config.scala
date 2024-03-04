@@ -3,20 +3,29 @@ package io.github.leibnizhu.tinylsm.utils
 import java.io.{File, FileInputStream}
 import java.util.Properties
 
-enum Config(private val envName: String, val defaultVal: String) {
+enum Config(private val name: String, val defaultVal: String) {
+  private val envName = "TINY_LSM_" + name.toUpperCase
 
-  private val sysPropName = Config.toPropertyName(envName)
+  private val sysPropName = Config.toPropertyName(name)
 
-  case Port extends Config("TINY_LSM_PORT", "9527")
-  case Host extends Config("TINY_LSM_LISTEN", "0.0.0.0")
-  case BlockSize extends Config("TINY_LSM_BLOCK_SIZE", "4096")
-  case TargetSstSize extends Config("TINY_LSM_TARGET_SST_SIZE", (2 << 20).toString)
-  case MemTableLimitNum extends Config("TINY_LSM_MEMTABLE_NUM", "50")
-  // TODO Compaction配置
-  //  compactionOptions: CompactionOptions,
-  case EnableWal extends Config("TINY_LSM_ENABLE_WAL", "true")
-  case Serializable extends Config("TINY_LSM_SERIALIZABLE", "true")
-  case DataDir extends Config("TINY_LSM_DATA_DIR", "/etc/tinylsm/data")
+  case Port extends Config("PORT", "9527")
+  case Host extends Config("LISTEN", "0.0.0.0")
+  case BlockSize extends Config("BLOCK_SIZE", "4096")
+  case TargetSstSize extends Config("TARGET_SST_SIZE", (2 << 20).toString)
+  case MemTableLimitNum extends Config("MEMTABLE_NUM", "50")
+  case EnableWal extends Config("ENABLE_WAL", "true")
+  case Serializable extends Config("SERIALIZABLE", "true")
+  case DataDir extends Config("DATA_DIR", "/etc/tinylsm/data")
+
+  // Compaction配置
+  case CompactionStrategy extends Config("COMPACTION_STRATEGY", "leveled")
+  case CompactionMaxLevels extends Config("COMPACTION_MAX_LEVELS", "5")
+  case CompactionLevel0FileNumTrigger extends Config("COMPACTION_LEVEL0_FILE_NUM_TRIGGER", "5")
+  case CompactionSizeRatioPercent extends Config("COMPACTION_SIZE_RATIO_PERCENT", "200")
+  case CompactionLevelSizeMultiplier extends Config("COMPACTION_LEVEL_SIZE_MULTIPLIER", "4")
+  case CompactionBaseLevelSizeMb extends Config("COMPACTION_BASE_LEVEL_SIZE_MB", "100")
+  case CompactionMaxSizeAmpPercent extends Config("COMPACTION_MAX_SIZE_AMP_PERCENT", "200")
+  case CompactionMinMergeWidth extends Config("COMPACTION_MIN_MERGE_WIDTH", "2")
 
 
   /**
@@ -52,7 +61,7 @@ object Config {
   private val envFileProperties = loadEnvFile()
   private val configFileProperties = loadConfigFile()
 
-  private def toPropertyName(str: String): String = str.replaceAll("^TINY_LSM_", "").replace("_", ".").toLowerCase
+  private def toPropertyName(str: String): String = str.replace("_", ".").toLowerCase
 
   private def loadEnvFile(): Properties = {
     val prop = Properties()
@@ -65,7 +74,7 @@ object Config {
 
   private def loadConfigFile(): Properties = {
     val configFileEnvName = "TINY_LSM_CONFIG_FILE"
-    val configFileSysPropName = toPropertyName(configFileEnvName)
+    val configFileSysPropName = toPropertyName("CONFIG_FILE")
     val configFile = System.getProperty(configFileSysPropName,
       System.getenv().getOrDefault(configFileEnvName, "/etc/tinylsm/tinylsm.conf"))
     val prop = Properties()

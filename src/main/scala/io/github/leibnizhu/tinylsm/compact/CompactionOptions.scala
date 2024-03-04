@@ -1,5 +1,7 @@
 package io.github.leibnizhu.tinylsm.compact
 
+import io.github.leibnizhu.tinylsm.utils.Config
+
 enum CompactionOptions {
 
   /**
@@ -22,7 +24,7 @@ enum CompactionOptions {
    * 2. 通过 curSize / targetSize 计算每个level的压缩优先级，只压缩 > 1.0 的，并选择比例最大的level与其下一级进行合并
    * 决定压缩level后，从上层取最旧的sst（也可以用其他方法决定sst，如逻辑删除的数量）
    * 然后从下层找所有与之key范围重叠的sst（如果key分布均匀，下层level 应该大概是有 levelSizeMultiplier 个对应sst）
-   * 
+   *
    */
   case LeveledCompactionOptions(
                                  levelSizeMultiplier: Int,
@@ -65,6 +67,7 @@ enum CompactionOptions {
                                  */
                                 sizeRatio: Int,
                                 minMergeWidth: Int,
+
                                 /**
                                  * universal compaction第三个触发因素是 Tier数
                                  * Tier数 大于 numTiers 时触发 compaction
@@ -95,4 +98,31 @@ enum CompactionOptions {
                                  */
                                 maxLevels: Int,
                               ) extends CompactionOptions
+}
+
+object CompactionOptions {
+  def fromConfig(): CompactionOptions = {
+    Config.CompactionStrategy.get().toLowerCase match {
+      case "leveled" => LeveledCompactionOptions(
+        levelSizeMultiplier = Config.CompactionLevelSizeMultiplier.getInt,
+        level0FileNumCompactionTrigger = Config.CompactionLevel0FileNumTrigger.getInt,
+        maxLevels = Config.CompactionMaxLevels.getInt,
+        baseLevelSizeMb = Config.CompactionBaseLevelSizeMb.getInt
+      )
+      case "simple" => SimpleCompactionOptions(
+        sizeRatioPercent = Config.CompactionSizeRatioPercent.getInt,
+        level0FileNumCompactionTrigger = Config.CompactionLevel0FileNumTrigger.getInt,
+        maxLevels = Config.CompactionMaxLevels.getInt
+      )
+      case "tiered" => TieredCompactionOptions(
+        maxSizeAmplificationPercent = Config.CompactionMaxSizeAmpPercent.getInt,
+        sizeRatio = Config.CompactionSizeRatioPercent.getInt,
+        minMergeWidth = Config.CompactionMinMergeWidth.getInt,
+        numTiers = Config.CompactionMaxLevels.getInt
+      )
+      case "full" => FullCompaction
+      case "none" | "no" => NoCompaction
+      case s: String => throw new IllegalArgumentException("Unsupported compaction strategy: " + s)
+    }
+  }
 }

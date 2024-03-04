@@ -33,7 +33,7 @@ case class LsmStorageState(
                             var ssTables: Map[Int, SsTable] = Map()
                           ) {
   // 对 MemTable 做 freeze 操作的读写锁
-  val rwLock: ReadWriteLock = ReentrantReadWriteLock()
+  private val rwLock: ReadWriteLock = ReentrantReadWriteLock()
   // MemTable 做 freeze 时，保证只有一个线程执行 freeze 的锁
   val stateLock: Lock = ReentrantLock()
 
@@ -288,7 +288,7 @@ private[tinylsm] class LsmStorageInner(
         .map(snapshot.ssTables(_))
         .filter(sst => rangeOverlap(lower, upper, sst.firstKey, sst.lastKey))
       SstConcatIterator.createByLowerBound(levelSsts, lower)
-    }).toList
+    })
     val levelTablesIter = MergeIterator(levelIters)
     val mergedIter = TwoMergeIterator(TwoMergeIterator(memTablesIter, l0ssTablesIter), levelTablesIter)
     FusedIterator(LsmIterator(mergedIter, upper))
@@ -374,12 +374,12 @@ private[tinylsm] class LsmStorageInner(
     userEnd match
       case Excluded(r: MemTableKey) if util.Arrays.compare(r, sstBegin) <= 0 => return false
       case Included(r: MemTableKey) if util.Arrays.compare(r, sstBegin) < 0 => return false
-      case _ => {}
+      case _ =>
     // 判断scan的左边界如果大于SST的最右边最后一个key，那么这个sst肯定不包含这个scan范围
     userBegin match
       case Excluded(r: MemTableKey) if util.Arrays.compare(r, sstEnd) >= 0 => return false
       case Included(r: MemTableKey) if util.Arrays.compare(r, sstEnd) > 0 => return false
-      case _ => {}
+      case _ =>
     true
   }
 
@@ -465,13 +465,13 @@ class TinyLsm(val inner: LsmStorageInner) {
 
   def forceFullCompaction(): Unit = inner.forceFullCompaction()
 
-  def spawnFlushThread(): Timer = {
+  private def spawnFlushThread(): Timer = {
     val timer = new Timer()
     timer.schedule(() => inner.triggerFlush(), 0, 50)
     timer
   }
 
-  def spawnCompactionThread(): Timer = {
+  private def spawnCompactionThread(): Timer = {
     val timer = new Timer()
     timer.schedule(() => inner.triggerCompact(), 0, 50)
     timer
@@ -526,8 +526,7 @@ object LsmStorageOptions {
     Config.BlockSize.getInt,
     Config.TargetSstSize.getInt,
     Config.MemTableLimitNum.getInt,
-    // TODO
-    CompactionOptions.NoCompaction,
+    CompactionOptions.fromConfig(),
     Config.EnableWal.getBoolean,
     Config.Serializable.getBoolean
   )

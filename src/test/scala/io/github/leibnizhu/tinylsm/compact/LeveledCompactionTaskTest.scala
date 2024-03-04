@@ -1,9 +1,8 @@
 package io.github.leibnizhu.tinylsm.compact
 
 import io.github.leibnizhu.tinylsm.TestUtils.{checkCompactionRatio, compactionBench, compactionOption, tempDir}
-import io.github.leibnizhu.tinylsm.TinyLsm
+import io.github.leibnizhu.tinylsm.{TinyLsm, keyComparator}
 import org.scalatest.funsuite.AnyFunSuite
-import io.github.leibnizhu.tinylsm.keyComparator
 
 class LeveledCompactionTaskTest extends AnyFunSuite {
 

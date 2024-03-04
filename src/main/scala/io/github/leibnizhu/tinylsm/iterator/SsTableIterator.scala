@@ -50,7 +50,7 @@ object SsTableIterator {
     SsTableIterator(table, iterator, index)
   }
 
-  def seekToKey(table: SsTable, key: MemTableKey): Tuple2[BlockIterator, Int] = {
+  def seekToKey(table: SsTable, key: MemTableKey): (BlockIterator, Int) = {
     var blockIndex = table.findBlockIndex(key)
     var block = table.readBlockCached(blockIndex)
     var blockIter = BlockIterator.createAndSeekToKey(block, key)

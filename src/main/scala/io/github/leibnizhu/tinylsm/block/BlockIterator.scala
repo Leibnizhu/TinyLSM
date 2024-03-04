@@ -6,7 +6,7 @@ import io.github.leibnizhu.tinylsm.utils.ByteArrayReader
 import java.util.Arrays
 
 class BlockIterator(block: Block) extends MemTableStorageIterator {
-  private var index: Int = 0;
+  private var index: Int = 0
   /**
    * 当前迭代到的key，初始化和迭代完之后都是 None
    */

@@ -5,7 +5,7 @@ import io.github.leibnizhu.tinylsm.*
 /**
  * 定义key边界相关的类
  */
-sealed class Bound;
+sealed class Bound
 
 object Bound {
   def apply(boundType: String, boundKey: String): Bound = boundType.toLowerCase match
@@ -17,7 +17,7 @@ object Bound {
 /**
  * 无边界
  */
-case class Unbounded() extends Bound;
+case class Unbounded() extends Bound
 
 /**
  * 有边界
@@ -25,7 +25,7 @@ case class Unbounded() extends Bound;
  * @param bound     边界值
  * @param inclusive 是否包含边界值
  */
-class Bounded(val bound: Array[Byte], val inclusive: Boolean) extends Bound;
+class Bounded(val bound: Array[Byte], val inclusive: Boolean) extends Bound
 
 object Bounded {
   def apply(bound: Array[Byte], inclusive: Boolean): Bounded = {
@@ -46,7 +46,7 @@ object Bounded {
  *
  * @param b 边界值
  */
-case class Included(val b: Array[Byte]) extends Bounded(b, true);
+case class Included(b: Array[Byte]) extends Bounded(b, true)
 
 object Included {
   def apply(str: String): Included = Included(str.getBytes)
@@ -57,7 +57,7 @@ object Included {
  *
  * @param b 边界值
  */
-case class Excluded(val b: Array[Byte]) extends Bounded(b, false);
+case class Excluded(b: Array[Byte]) extends Bounded(b, false)
 
 object Excluded {
   def apply(str: String): Excluded = Excluded(str.getBytes)

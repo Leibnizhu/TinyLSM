@@ -9,11 +9,10 @@ import scala.collection.mutable.ListBuffer
 case class CompactionController(option: CompactionOptions) {
   def generateCompactionTask(snapshot: LsmStorageState): Option[CompactionTask] = option match
     case NoCompaction => None
-    case FullCompaction => {
+    case FullCompaction =>
       val l0SsTables = List(snapshot.l0SsTables: _*)
       val l1SsTables = if (snapshot.levels.isEmpty) List() else List(snapshot.levels.head._2: _*)
       Some(FullCompactionTask(l0SsTables, l1SsTables))
-    }
     case simpleOption: SimpleCompactionOptions =>
       SimpleCompactionTask.generate(simpleOption, snapshot)
     case leveledOption: LeveledCompactionOptions =>
@@ -32,7 +31,7 @@ case class CompactionController(option: CompactionOptions) {
     try {
       state.stateLock.lock()
       val snapshot = state.read(_.copy())
-      state.ssTables = state.ssTables ++ newSsTables.map(sst => (sst.sstId() -> sst))
+      state.ssTables = state.ssTables ++ newSsTables.map(sst => sst.sstId() -> sst)
       val sstFileToRemove = task.applyCompactionResult(state, newSstIds)
       sstFileToRemove.foreach(sstId => {
         if (state.ssTables.contains(sstId)) {

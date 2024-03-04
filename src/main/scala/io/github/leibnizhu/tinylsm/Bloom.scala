@@ -54,7 +54,7 @@ object Bloom {
     nBits = filter.size()
     for (h <- hashes) {
       var hash = h
-      val delta = (hash >> 17) | (hash << 15);
+      val delta = (hash >> 17) | (hash << 15)
       for (_ <- 0 until k) {
         val bitPos = Math.abs(hash) % nBits
         // 将hash对应bit置1

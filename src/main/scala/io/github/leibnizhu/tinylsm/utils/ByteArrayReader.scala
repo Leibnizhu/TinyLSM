@@ -3,7 +3,7 @@ package io.github.leibnizhu.tinylsm.utils
 import io.github.leibnizhu.tinylsm.utils.ByteTransOps.{bytesToInt, low2BytesToInt}
 
 class ByteArrayReader(val bytes: Array[Byte]) {
-  private var curPos = 0;
+  private var curPos = 0
 
   /**
    * @return 剩余未读的byte数
