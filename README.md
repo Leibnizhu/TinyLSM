@@ -23,17 +23,46 @@ Configuration lookup order:
 4. config file specified by JVM system properties `config.file` or operation system environment `TINY_LSM_CONFIG_FILE`,
    using JVM system properties key
 
-| environment key          | system properties name | meaning                                                                      | default value             |
-|--------------------------|------------------------|------------------------------------------------------------------------------|---------------------------|
-| TINY_LSM_PORT            | port                   |                                                                              | 9527                      |
-| TINY_LSM_LISTEN          | listen                 |                                                                              | 0.0.0.0                   |
-| TINY_LSM_BLOCK_SIZE      | block.size             | Block size in bytes                                                          | 4096                      |
-| TINY_LSM_TARGET_SST_SIZE | target.sst.size        | SST size in bytes, also the approximate memtable capacity limit              | 2 << 20 (2MB)             |
-| TINY_LSM_MEMTABLE_NUM    | memtable.num           | Maximum number of memtables in memory, flush to L0 when exceeding this limit | 50                        |
-| TINY_LSM_ENABLE_WAL      | enable.wal             |                                                                              | true                      |
-| TINY_LSM_SERIALIZABLE    | serializable           |                                                                              | false                     |
-| TINY_LSM_DATA_DIR        | data.dir               |                                                                              | /etc/tinylsm/data         |
-| TINY_LSM_CONFIG_FILE     | config.file            |                                                                              | /etc/tinylsm/tinylsm.conf |
+| environment key              | system properties name | meaning                                                                      | default value             |
+|------------------------------|------------------------|------------------------------------------------------------------------------|---------------------------|
+| TINY_LSM_PORT                | port                   |                                                                              | 9527                      |
+| TINY_LSM_LISTEN              | listen                 |                                                                              | 0.0.0.0                   |
+| TINY_LSM_BLOCK_SIZE          | block.size             | Block size in bytes                                                          | 4096                      |
+| TINY_LSM_TARGET_SST_SIZE     | target.sst.size        | SST size in bytes, also the approximate memtable capacity limit              | 2 << 20 (2MB)             |
+| TINY_LSM_MEMTABLE_NUM        | memtable.num           | Maximum number of memtables in memory, flush to L0 when exceeding this limit | 50                        |
+| TINY_LSM_ENABLE_WAL          | enable.wal             |                                                                              | true                      |
+| TINY_LSM_SERIALIZABLE        | serializable           |                                                                              | false                     |
+| TINY_LSM_DATA_DIR            | data.dir               |                                                                              | /etc/tinylsm/data         |
+| TINY_LSM_CONFIG_FILE         | config.file            |                                                                              | /etc/tinylsm/tinylsm.conf |
+| TINY_LSM_COMPACTION_STRATEGY | compaction.strategy    | leveled/tiered/simple/full/none                                              | leveled                   |
+
+Compaction strategy config detail as below.
+
+Leveled compaction configs:
+
+| environment key                             | system properties name             | meaning | default |
+|---------------------------------------------|------------------------------------|---------|---------|
+| TINY_LSM_COMPACTION_LEVEL_SIZE_MULTIPLIER   | compaction.level.size.multiplier   |         | 4       |
+| TINY_LSM_COMPACTION_LEVEL0_FILE_NUM_TRIGGER | compaction.level0.file.num.trigger |         | 5       |
+| TINY_LSM_COMPACTION_MAX_LEVELS              | compaction.max.levels              |         | 5       |
+| TINY_LSM_COMPACTION_BASE_LEVEL_SIZE_MB      | compaction.base.level.size.mb      |         | 100     |
+
+Tiered compaction configs:
+
+| environment key                          | system properties name          | meaning | default |
+|------------------------------------------|---------------------------------|---------|---------|
+| TINY_LSM_COMPACTION_MAX_SIZE_AMP_PERCENT | compaction.max.size.amp.percent |         | 200     |
+| TINY_LSM_COMPACTION_SIZE_RATIO_PERCENT   | compaction.size.ratio.percent   |         | 200     |
+| TINY_LSM_COMPACTION_MIN_MERGE_WIDTH      | compaction.min.merge.width      |         | 2       |
+| TINY_LSM_COMPACTION_MAX_LEVELS           | compaction.max.levels           |         | 5       |
+
+Simple compaction configs:
+
+| environment key                             | system properties name             | meaning | default |
+|---------------------------------------------|------------------------------------|---------|---------|
+| TINY_LSM_COMPACTION_SIZE_RATIO_PERCENT      | compaction.size.ratio.percent      |         | 200     |
+| TINY_LSM_COMPACTION_LEVEL0_FILE_NUM_TRIGGER | compaction.level0.file.num.trigger |         | 5       |
+| TINY_LSM_COMPACTION_MAX_LEVELS              | compaction.max.levels              |         | 5       |
 
 For example, write a config file in `/path/to/tinylsm.conf` :
 
@@ -46,6 +75,11 @@ memtable.num=50
 enable.wal=true
 serializable=false
 data.dir=/etc/tinylsm/data
+compaction.strategy=leveled
+compaction.level.size.multiplier=5
+compaction.level0.file.num.trigger=5
+compaction.max.levels=5
+base.level.size.mb=100
 ```
 
 then `export TINY_LSM_CONFIG_FILE=/path/to/tinylsm.conf`( or `-e TINY_LSM_CONFIG_FILE=/path/to/tinylsm.conf` for docker
