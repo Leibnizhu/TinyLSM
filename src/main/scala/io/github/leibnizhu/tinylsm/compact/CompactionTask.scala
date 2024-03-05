@@ -1,7 +1,20 @@
 package io.github.leibnizhu.tinylsm.compact
 
+import com.fasterxml.jackson.annotation.JsonSubTypes.Type
+import com.fasterxml.jackson.annotation.{JsonSubTypes, JsonTypeInfo}
 import io.github.leibnizhu.tinylsm.{LsmStorageInner, LsmStorageState, SsTable}
 
+@JsonTypeInfo(
+  use = JsonTypeInfo.Id.NAME,
+  include = JsonTypeInfo.As.PROPERTY,
+  property = "type"
+)
+@JsonSubTypes(Array(
+  new Type(value = classOf[SimpleCompactionTask], name = "simple"),
+  new Type(value = classOf[FullCompactionTask], name = "full"),
+  new Type(value = classOf[TieredCompactionTask], name = "tiered"),
+  new Type(value = classOf[LeveledCompactionTask], name = "leveled"),
+))
 trait CompactionTask {
   /**
    * 执行compact操作，按需合并SST，生成新SST，但无需修改 LsmStorageInner 状态
