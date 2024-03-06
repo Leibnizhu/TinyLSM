@@ -133,7 +133,8 @@ class LsmStorageTest extends AnyFunSuite {
 
   test("week1_day5_task2_storage_scan") {
     val options = LsmStorageOptions.defaultOption()
-    val storage = LsmStorageInner(tempDir(), options)
+    val rootDir = tempDir()
+    val storage = LsmStorageInner(rootDir, options)
     storage.put("1", "233")
     storage.put("2", "2333")
     storage.put("00", "2333")
@@ -141,12 +142,12 @@ class LsmStorageTest extends AnyFunSuite {
     storage.put("3", "23333")
     storage.delete("1")
 
-    val sst1 = generateSst(10, new File(tempDir(), "10.sst"), List(
+    val sst1 = generateSst(10, new File(rootDir, "10.sst"), List(
       entry("0", "2333333"),
       entry("00", "2333333"),
       entry("4", "23")
     ), Some(storage.blockCache))
-    val sst2 = generateSst(11, new File(tempDir(), "11.sst"), List(
+    val sst2 = generateSst(11, new File(rootDir, "11.sst"), List(
       entry("4", "")
     ), Some(storage.blockCache))
 
@@ -183,7 +184,8 @@ class LsmStorageTest extends AnyFunSuite {
 
   test("week1_day5_task3_storage_get") {
     val options = LsmStorageOptions.defaultOption()
-    val storage = LsmStorageInner(tempDir(), options)
+    val rootDir = tempDir()
+    val storage = LsmStorageInner(rootDir, options)
     storage.put("1", "233")
     storage.put("2", "2333")
     storage.put("00", "2333")
@@ -191,12 +193,12 @@ class LsmStorageTest extends AnyFunSuite {
     storage.put("3", "23333")
     storage.delete("1")
 
-    val sst1 = generateSst(10, new File(tempDir(), "10.sst"), List(
+    val sst1 = generateSst(10, new File(rootDir, "10.sst"), List(
       entry("0", "2333333"),
       entry("00", "2333333"),
       entry("4", "23")
     ), Some(storage.blockCache))
-    val sst2 = generateSst(11, new File(tempDir(), "11.sst"), List(
+    val sst2 = generateSst(11, new File(rootDir, "11.sst"), List(
       entry("4", "")
     ), Some(storage.blockCache))
 

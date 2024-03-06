@@ -222,7 +222,7 @@ private[tinylsm] class LsmStorageInner(
     val newMemTableId = nextSstId.incrementAndGet()
     val newMemTable = if (options.enableWal) MemTable(newMemTableId, Some(fileOfWal(newMemTableId))) else MemTable(newMemTableId)
     freezeMemTableWithMemTable(newMemTable)
-    // TODO 文件操作
+    manifest.foreach(_.addRecord(ManifestNewMemtable(newMemTableId)))
   }
 
   private def freezeMemTableWithMemTable(newMemTable: MemTable): Unit = {
@@ -263,6 +263,7 @@ private[tinylsm] class LsmStorageInner(
       if (options.enableWal) {
         fileOfWal(sstId).delete()
       }
+      manifest.foreach(_.addRecord(ManifestFlush(sstId)))
     } finally {
       state.stateLock.unlock()
     }
