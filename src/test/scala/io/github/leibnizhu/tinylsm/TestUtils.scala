@@ -41,14 +41,22 @@ object TestUtils {
     Entry(ByteArrayKey(k.getBytes), v.getBytes)
   }
 
+  private val tempDirs = new ListBuffer[File]
+
+  Runtime.getRuntime.addShutdownHook(new Thread(() => {
+    for (dir <- tempDirs) {
+      dir.listFiles().foreach(_.delete())
+      dir.delete()
+    }
+  }))
+
   def tempDir(): File = {
     val tempDirPath = System.getProperty("java.io.tmpdir") + File.separator + "LsmTest" + File.separator + System.currentTimeMillis()
     val tempDir = new File(tempDirPath)
     if (!tempDir.exists()) {
       tempDir.mkdirs()
     }
-    // FIXME 不支持删目录，所以实际没删除
-    tempDir.deleteOnExit()
+    tempDirs += tempDir
     tempDir
   }
 
