@@ -157,7 +157,7 @@ object SsTable {
  * @param blockSize Block大小
  */
 class SsTableBuilder(val blockSize: Int) {
-  private val log = LoggerFactory.getLogger(classOf[LsmStorageInner])
+  private val log = LoggerFactory.getLogger(classOf[SsTableBuilder])
   // 当前Block的builder
   private var builder = BlockBuilder(blockSize)
   // 当前Block的第一个和最后一个Key

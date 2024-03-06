@@ -307,6 +307,7 @@ private[tinylsm] class LsmStorageInner(
     val newSsTables = compactionTask.doCompact(this)
     val newSstIds = newSsTables.map(_.sstId())
     val sstToRemove = compactionController.applyCompactionToState(state, newSsTables, compactionTask)
+    manifest.foreach(_.addRecord(ManifestCompaction(compactionTask, newSstIds)))
     // 释放锁之后再做文件IO
     deleteSstFiles(sstToRemove)
     log.info("force full compaction done, new SSTs: {}", newSstIds)
@@ -415,6 +416,7 @@ private[tinylsm] class LsmStorageInner(
     val newSstIds = newSsTables.map(_.sstId())
     log.info("Compaction task finished: {}, new SST: {}", task, newSstIds)
     val sstToRemove = compactionController.applyCompactionToState(state, newSsTables, task)
+    manifest.foreach(_.addRecord(ManifestCompaction(task, newSstIds)))
     // 释放锁之后再做文件IO
     deleteSstFiles(sstToRemove)
   }
@@ -497,6 +499,7 @@ object LsmStorageInner {
 }
 
 class TinyLsm(val inner: LsmStorageInner) {
+  private val log = LoggerFactory.getLogger(classOf[TinyLsm])
   private val flushThread = spawnFlushThread()
   private val compactionThread = spawnCompactionThread()
 
@@ -536,7 +539,8 @@ class TinyLsm(val inner: LsmStorageInner) {
     if (inner.options.enableWal) {
       // TODO 同步wal目录
     }
-    while (!inner.state.read(st => st.immutableMemTables.nonEmpty)) {
+    while (inner.state.read(st => st.immutableMemTables.nonEmpty)) {
+      log.info("Still {} frozen MemTables is not flushed", inner.state.read(st => st.immutableMemTables.length))
       inner.forceFlushNextImmutableMemTable()
     }
     //TODO sst目录

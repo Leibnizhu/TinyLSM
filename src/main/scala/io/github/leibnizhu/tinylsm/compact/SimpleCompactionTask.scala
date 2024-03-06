@@ -5,7 +5,6 @@ import io.github.leibnizhu.tinylsm.{LsmStorageInner, LsmStorageState, SsTable}
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable.ListBuffer
-import scala.util.boundary
 
 case class SimpleCompactionTask(
                                  // None 则对应 L0 compaction
@@ -44,6 +43,7 @@ case class SimpleCompactionTask(
       "lower level's compact SST ID mismatch")
     sstToRemove ++= snapshot.levels(lowerLevel - 1)._2
     tempLevels = tempLevels.updated(lowerLevel - 1, (lowerLevel, output))
+    //    println(s"old level: ${state.levels}, new level: ${tempLevels}")
     state.write(st => {
       st.levels = tempLevels
       newL0.foreach(st.l0SsTables = _)

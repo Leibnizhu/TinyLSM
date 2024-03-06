@@ -2,8 +2,9 @@ package io.github.leibnizhu.tinylsm
 
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import io.github.leibnizhu.tinylsm.TestUtils.tempDir
-import io.github.leibnizhu.tinylsm.compact.{FullCompactionTask, LeveledCompactionTask, SimpleCompactionTask, TieredCompactionTask}
+import io.github.leibnizhu.tinylsm.TestUtils.{compactionOption, tempDir,dumpFilesInDir}
+import io.github.leibnizhu.tinylsm.compact.*
+import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{LeveledCompactionOptions, SimpleCompactionOptions, TieredCompactionOptions}
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File
@@ -23,7 +24,7 @@ class ManifestTest extends AnyFunSuite {
     assertResult(record)(record1)
   }
 
-  test("manifest_encode_decode_test") {
+  test("week2_day5_manifest_encode_decode_test") {
     val manifestFile = new File(tempDir(), System.currentTimeMillis() + "-MANIFEST")
     val manifest = new Manifest(manifestFile)
     val flush = ManifestFlush(123)
@@ -46,5 +47,66 @@ class ManifestTest extends AnyFunSuite {
     ))(records)
 
     manifestFile.delete()
+  }
+
+  test("week2_day5_integration_leveled") {
+    manifestIntegrationTest(LeveledCompactionOptions(
+      levelSizeMultiplier = 2,
+      level0FileNumCompactionTrigger = 2,
+      maxLevels = 3,
+      baseLevelSizeMb = 1
+    ))
+  }
+
+  test("week2_day5_integration_tiered") {
+    manifestIntegrationTest(TieredCompactionOptions(
+      maxSizeAmplificationPercent = 200,
+      sizeRatio = 1,
+      minMergeWidth = 3,
+      numTiers = 3
+    ))
+  }
+
+  test("week2_day5_integration_simple") {
+    manifestIntegrationTest(SimpleCompactionOptions(
+      sizeRatioPercent = 200,
+      level0FileNumCompactionTrigger = 2,
+      maxLevels = 3
+    ))
+  }
+
+  private def manifestIntegrationTest(options: CompactionOptions): Unit = {
+    val rootDir = tempDir()
+    val storage = TinyLsm(rootDir, compactionOption(options))
+    for (i <- 0 to 20) {
+      storage.put("0", s"v$i")
+      if (i % 2 == 0) {
+        storage.put("1", s"v$i")
+      } else {
+        storage.delete("1")
+      }
+      if (i % 2 == 1) {
+        storage.put("2", s"v$i")
+      } else {
+        storage.delete("2")
+      }
+      storage.inner.forceFreezeMemTable()
+      storage.inner.forceFlushNextImmutableMemTable()
+    }
+    Thread.sleep(100)
+    storage.inner.dumpState()
+    storage.close()
+
+    // 所有sst都被flush了
+    assert(storage.inner.state.memTable.isEmpty)
+    assert(storage.inner.state.immutableMemTables.isEmpty)
+    storage.inner.dumpState()
+    dumpFilesInDir(rootDir)
+
+    // 使用manifest恢复LSM
+    val newStorage = TinyLsm(rootDir, compactionOption(options))
+    assertResult("v20")(newStorage.get("0").get)
+    assertResult("v20")(newStorage.get("1").get)
+    assert(newStorage.get("2").isEmpty)
   }
 }

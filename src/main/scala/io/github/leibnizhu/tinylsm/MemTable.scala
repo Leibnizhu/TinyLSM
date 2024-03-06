@@ -70,6 +70,8 @@ case class MemTable(
   def flush(builder: SsTableBuilder): Unit = {
     map.forEach((k, v) => builder.add(k.bytes, v))
   }
+
+  def isEmpty: Boolean = map.isEmpty
 }
 
 object MemTable {

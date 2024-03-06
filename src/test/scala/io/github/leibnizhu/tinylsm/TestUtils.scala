@@ -219,4 +219,11 @@ object TestUtils {
         );
       case _ =>
   }
+
+  def dumpFilesInDir(path: File): Unit = {
+    println("--- DIR DUMP ---")
+    for (file <- path.listFiles()) {
+      println(s"${file.getAbsolutePath}, size=${"%.3f".format(file.length() / 1024.0)}KB")
+    }
+  }
 }
