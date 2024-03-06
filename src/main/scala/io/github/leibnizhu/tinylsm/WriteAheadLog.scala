@@ -1,9 +1,58 @@
 package io.github.leibnizhu.tinylsm
 
-import java.io.File
+import io.github.leibnizhu.tinylsm.utils.{ByteArrayReader, ByteArrayWriter}
 
-case class WriteAheadLog(walPath: File) {
-  def put(key: Array[Byte], value: Array[Byte]): Unit = {
-    //TODO
+import java.io.{BufferedOutputStream, File, FileInputStream, FileOutputStream}
+import java.util.concurrent.locks.{ReadWriteLock, ReentrantReadWriteLock}
+import scala.collection.mutable.ListBuffer
+import scala.util.hashing.MurmurHash3
+
+/**
+ * WAL 格式
+ * | key_len | key | value_len | value |
+ *
+ * @param walFile WAL文件对象
+ */
+case class WriteAheadLog(walFile: File) {
+  private val writer = new BufferedOutputStream(FileOutputStream(walFile))
+  private val rwLock: ReadWriteLock = ReentrantReadWriteLock()
+
+  def recover(toMap: java.util.Map[ByteArrayKey, MemTableValue]): WriteAheadLog = {
+    val readLock = rwLock.readLock()
+    try {
+      readLock.lock()
+      val buffer = new ByteArrayReader(FileInputStream(walFile).readAllBytes())
+      while (buffer.remaining > 0) {
+        val keyLen = buffer.readUint16()
+        val key = buffer.readBytes(keyLen)
+        val valueLen = buffer.readUint16()
+        val value = buffer.readBytes(valueLen)
+        val checksum = MurmurHash3.seqHash(Array(key.length, key, value.length, value))
+        val readHash = buffer.readUint32()
+        if (checksum != readHash) {
+          throw new IllegalStateException("WAL checksum mismatch")
+        }
+        toMap.put(ByteArrayKey(key), value)
+      }
+      this
+    } finally {
+      readLock.unlock()
+    }
   }
+
+  def put(key: Array[Byte], value: Array[Byte]): Unit = {
+    val writeLock = rwLock.writeLock()
+    try {
+      writeLock.lock()
+      val buffer = new ByteArrayWriter(key.length + value.length + SIZE_OF_U16 * 2)
+      buffer.putUint16(key.length).putBytes(key).putUint16(value.length).putBytes(value)
+      val hash = MurmurHash3.seqHash(Array(key.length, key, value.length, value))
+      buffer.putUint32(hash)
+      writer.write(buffer.toArray)
+    } finally {
+      writeLock.unlock()
+    }
+  }
+
+  def sync(): Unit = writer.flush()
 }

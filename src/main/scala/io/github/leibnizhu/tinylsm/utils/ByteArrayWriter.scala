@@ -5,6 +5,11 @@ import io.github.leibnizhu.tinylsm.utils.ByteTransOps.{intLow2Bytes, intToByteAr
 import scala.collection.mutable.ArrayBuffer
 
 class ByteArrayWriter {
+  def this(size: Int) {
+    this()
+    reserve(size)
+  }
+
   private val buffer = new ArrayBuffer[Byte]()
 
   def length: Int = buffer.length
