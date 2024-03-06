@@ -99,13 +99,14 @@ object LsmStorageState {
 }
 
 private[tinylsm] class LsmStorageInner(
-                                        // wal的根目录
+                                        // TinyLSM 的根目录
                                         path: File,
                                         val state: LsmStorageState,
                                         val blockCache: BlockCache,
                                         val options: LsmStorageOptions,
                                         nextSstId: AtomicInteger,
-                                        val compactionController: CompactionController) {
+                                        val compactionController: CompactionController,
+                                        val manifest: Option[Manifest] = None) {
   private val log = LoggerFactory.getLogger(classOf[LsmStorageInner])
 
   /**
@@ -231,13 +232,9 @@ private[tinylsm] class LsmStorageInner(
     })
   }
 
-  private def fileOfWal(sstId: Int): File = {
-    new File(path, "%05d.wal".format(sstId))
-  }
+  private def fileOfWal(walId: Int): File = LsmStorageInner.fileOfWal(path, walId)
 
-  private def fileOfSst(sstId: Int): File = {
-    new File(path, "%05d.sst".format(sstId))
-  }
+  private def fileOfSst(sstId: Int): File = LsmStorageInner.fileOfSst(path, sstId)
 
   /**
    * 强制将最早的一个ImmutableMemTable 刷入磁盘
@@ -435,12 +432,67 @@ object LsmStorageInner {
 
   def apply(path: File, options: LsmStorageOptions): LsmStorageInner = {
     val state = LsmStorageState(options)
+    val nextSstId = AtomicInteger(0)
     val blockCache = BlockCache.apply(128)
     val compactionController = CompactionController(options.compactionOptions)
+    val manifestFile = new File(path, "MANIFEST")
+    val manifest = new Manifest(manifestFile)
+    if (manifestFile.exists()) {
+      // manifest 已存在则需要恢复 LSM 状态
+      val records = manifest.recover()
+      val memTables = new mutable.HashSet[Int]()
+      // 根据 manifest的记录顺序重做 state。注意 ssTables 还是空的，这一步先不处理
+      for (record <- records) record match
+        case ManifestNewMemtable(memtableId) =>
+          nextSstId.set(nextSstId.get().max(memtableId))
+          memTables += memtableId
+        case ManifestFlush(sstId) =>
+          assert(memTables(sstId), "memtable not exist?")
+          memTables -= sstId
+          if (compactionController.flushToL0()) {
+            state.l0SsTables = sstId :: state.l0SsTables
+          } else {
+            state.levels = (sstId, List(sstId)) :: state.levels
+          }
+        case ManifestCompaction(task, output) =>
+          task.applyCompactionResult(state, output)
+          nextSstId.set(nextSstId.get().max(output.max))
+
+      // 恢复 SST ssTables
+      var sstCnt = 0
+      for (sstId <- state.l0SsTables ++ state.levels.flatMap(_._2)) {
+        val sstFileObj = FileObject.open(fileOfSst(path, sstId))
+        val sst = SsTable.open(sstId, Some(blockCache), sstFileObj)
+        state.ssTables = state.ssTables + (sstId -> sst)
+        sstCnt += 1
+      }
+      log.info("{} SST opened", sstCnt)
+
+      if (options.enableWal) {
+        // TODO 从 wal 恢复Memtable
+
+      } else {
+        // 由于前面恢复了SST，所以此时要更新 Memtable
+        state.memTable = MemTable(nextSstId.get())
+      }
+      manifest.addRecord(ManifestNewMemtable(state.memTable.id))
+      nextSstId.getAndIncrement()
+    } else {
+      // manifest 不存在，则直接创建新的
+      if (options.enableWal) {
+        //  用WAL重新创建Memtable
+        val memTableId = state.memTable.id
+        state.memTable = MemTable(memTableId, Some(fileOfWal(path, memTableId)))
+      }
+      manifest.addRecord(ManifestNewMemtable(state.memTable.id))
+    }
     log.info("Start LsmStorageInner with lsm dir: {}", path.getAbsolutePath)
-    new LsmStorageInner(path, state, blockCache, options, AtomicInteger(0), compactionController)
+    new LsmStorageInner(path, state, blockCache, options, nextSstId, compactionController, Some(manifest))
   }
 
+  def fileOfWal(path: File, walId: Int): File = new File(path, "%05d.wal".format(walId))
+
+  def fileOfSst(path: File, sstId: Int): File = new File(path, "%05d.sst".format(sstId))
 }
 
 class TinyLsm(val inner: LsmStorageInner) {

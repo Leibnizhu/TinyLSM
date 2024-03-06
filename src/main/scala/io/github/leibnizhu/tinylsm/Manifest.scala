@@ -54,11 +54,11 @@ class Manifest(file: File) {
   new Type(value = classOf[ManifestNewMemtable], name = "memtable"),
   new Type(value = classOf[ManifestCompaction], name = "compaction"),
 ))
-trait ManifestRecord
+sealed trait ManifestRecord
 
-case class ManifestFlush(flush: Int) extends ManifestRecord
+case class ManifestFlush(sstId: Int) extends ManifestRecord
 
 case class ManifestNewMemtable(memtableId: Int) extends ManifestRecord
 
-case class ManifestCompaction(compactionTask: CompactionTask, compactionNewSstId: List[Int])
+case class ManifestCompaction(task: CompactionTask, output: List[Int])
   extends ManifestRecord

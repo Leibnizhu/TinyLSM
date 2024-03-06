@@ -29,7 +29,7 @@ trait CompactionTask {
    * 这个函数应该只更改 “l0SsTables” 和 “levels” ，而不更改各个 MemTable 和 “ssTables” 映射。
    * 虽然应该只有一个线程运行压缩作业，但您应该考虑当压缩器生成新的 SST 时 L0 SST 被刷新的情况
    *
-   * @param state  LsmStorageState 请用 stateLock 更新其状态，不用处理ssTables
+   * @param state  LsmStorageState。调用该方法时已上了 stateLock 锁，请直接更新状态。不用处理ssTables
    * @param output 新的 sst ID 列表
    * @return 需要删除的 SST 文件的 SST ID
    */
