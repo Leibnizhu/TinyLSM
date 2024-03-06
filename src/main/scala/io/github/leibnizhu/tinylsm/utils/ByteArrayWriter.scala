@@ -5,7 +5,7 @@ import io.github.leibnizhu.tinylsm.utils.ByteTransOps.{intLow2Bytes, intToByteAr
 import scala.collection.mutable.ArrayBuffer
 
 class ByteArrayWriter {
-  def this(size: Int) {
+  def this(size: Int) = {
     this()
     reserve(size)
   }
