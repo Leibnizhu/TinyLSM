@@ -9,7 +9,6 @@ import java.util
 import java.util.concurrent.ConcurrentSkipListMap
 import java.util.concurrent.atomic.AtomicInteger
 import scala.jdk.CollectionConverters.*
-import scala.util.hashing.MurmurHash3
 
 /**
  * MemTable。
@@ -71,7 +70,11 @@ case class MemTable(
     map.forEach((k, v) => builder.add(k.bytes, v))
   }
 
+  def syncWal(): Unit = wal.foreach(_.sync())
+
   def isEmpty: Boolean = map.isEmpty
+
+  def nonEmpty: Boolean = !map.isEmpty
 }
 
 object MemTable {
@@ -85,6 +88,12 @@ object MemTable {
     new ConcurrentSkipListMap[ByteArrayKey, MemTableValue](),
     walPath.map(p => WriteAheadLog(p)),
     AtomicInteger(0))
+
+  def recoverFromWal(id: Int, walPath: File): MemTable = {
+    val map = new ConcurrentSkipListMap[ByteArrayKey, MemTableValue]()
+    val wal = new WriteAheadLog(walPath).recover(map)
+    new MemTable(id, map, Some(wal), AtomicInteger(0))
+  }
 }
 
 case class ByteArrayKey(bytes: MemTableKey) extends Comparable[ByteArrayKey] {

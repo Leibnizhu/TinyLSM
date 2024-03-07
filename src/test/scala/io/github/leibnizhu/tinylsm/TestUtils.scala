@@ -6,7 +6,7 @@ import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{LeveledCompactionO
 import io.github.leibnizhu.tinylsm.iterator.{MergeIterator, SsTableIterator}
 import io.github.leibnizhu.tinylsm.utils.Unbounded
 import org.scalatest.Assertions.{assertResult, assertThrows}
-import org.scalatest.{Entry, stats}
+import org.scalatest.Entry
 
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -86,12 +86,12 @@ object TestUtils {
     MergeIterator(iters.toList)
   }
 
-  def compactionOption(compactOpt: CompactionOptions): LsmStorageOptions = LsmStorageOptions(
+  def compactionOption(compactOpt: CompactionOptions, enableWal: Boolean = false): LsmStorageOptions = LsmStorageOptions(
     4096,
     1 << 20,
     2,
     compactOpt,
-    false,
+    enableWal,
     false)
 
   def compactionBench(storage: TinyLsm): Unit = {

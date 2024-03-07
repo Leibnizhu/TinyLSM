@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.{Lock, ReadWriteLock, ReentrantLock, ReentrantReadWriteLock}
 import java.util.{Arrays, Timer}
 import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+import scala.collection.mutable.ArrayBuffer
 import scala.util.boundary
 
 /**
@@ -227,8 +227,11 @@ private[tinylsm] class LsmStorageInner(
 
   private def freezeMemTableWithMemTable(newMemTable: MemTable): Unit = {
     state.write(st => {
-      st.immutableMemTables = st.memTable :: st.immutableMemTables
+      val oldMemTable = st.memTable
       st.memTable = newMemTable
+      st.immutableMemTables = oldMemTable :: st.immutableMemTables
+
+      oldMemTable.syncWal()
     })
   }
 
@@ -261,7 +264,8 @@ private[tinylsm] class LsmStorageInner(
 
       // 删除WAL文件
       if (options.enableWal) {
-        fileOfWal(sstId).delete()
+        val deleteWal = fileOfWal(sstId).delete()
+        log.info("Deleted WAL file {} {}", fileOfWal(sstId).getName, if (deleteWal) "success" else "failed")
       }
       manifest.foreach(_.addRecord(ManifestFlush(sstId)))
     } finally {
@@ -428,6 +432,8 @@ private[tinylsm] class LsmStorageInner(
       log.info("Deleted SST table file: {} {}", sstFile.getName, if (deleted) "success" else "failed")
     }
   }
+
+  def syncWal(): Unit = state.memTable.syncWal()
 }
 
 object LsmStorageInner {
@@ -471,12 +477,22 @@ object LsmStorageInner {
       }
       log.info("{} SST opened", sstCnt)
 
+      val newMemtableId = nextSstId.get()
       if (options.enableWal) {
-        // TODO 从 wal 恢复Memtable
-
+        // 从 wal 恢复Memtable,到了这里，memTables 里面是从Manifest恢复的、没flush的Memtable
+        var walCnt = 0
+        for (mtId <- memTables) {
+          val memTable = MemTable.recoverFromWal(mtId, fileOfWal(path, mtId))
+          if (memTable.nonEmpty) {
+            state.immutableMemTables = memTable :: state.immutableMemTables
+            walCnt += 1
+          }
+        }
+        log.info("{} MemTable recovered from wal", walCnt)
+        state.memTable = MemTable(newMemtableId, Some(fileOfWal(path, newMemtableId)))
       } else {
         // 由于前面恢复了SST，所以此时要更新 Memtable
-        state.memTable = MemTable(nextSstId.get())
+        state.memTable = MemTable(newMemtableId)
       }
       manifest.addRecord(ManifestNewMemtable(state.memTable.id))
       nextSstId.getAndIncrement()
@@ -537,7 +553,7 @@ class TinyLsm(val inner: LsmStorageInner) {
     flushThread.cancel()
     compactionThread.cancel()
     if (inner.options.enableWal) {
-      // TODO 同步wal目录
+      inner.syncWal()
     }
     while (inner.state.read(st => st.immutableMemTables.nonEmpty)) {
       log.info("Still {} frozen MemTables is not flushed", inner.state.read(st => st.immutableMemTables.length))
