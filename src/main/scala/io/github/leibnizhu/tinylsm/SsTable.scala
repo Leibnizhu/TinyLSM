@@ -47,7 +47,7 @@ class SsTable(val file: FileObject,
     val checksum = blockDataWithChecksum.readUint32()
     // 校验hash
     if (MurmurHash3.seqHash(blockData) != checksum) {
-      throw new IllegalArgumentException("Block data checksum mismatched!!!")
+      throw new IllegalStateException("Block data checksum mismatched!!!")
     }
     Block.decode(blockData)
   }
@@ -340,7 +340,7 @@ object BlockMeta {
     }
     // 校验hash
     if (buffer.readUint32() != checkSum) {
-      throw new IllegalArgumentException("Block meta checksum mismatched!!!")
+      throw new IllegalStateException("Block meta checksum mismatched!!!")
     }
     blockMetas.toArray
   }

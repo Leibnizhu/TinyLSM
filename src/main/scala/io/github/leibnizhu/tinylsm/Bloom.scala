@@ -88,7 +88,7 @@ object Bloom {
     val buffer = new ByteArrayReader(bytes)
     val checksum = buffer.readTailUnit32()
     if (checksum != MurmurHash3.seqHash(bytes.slice(0, bytes.length - SIZE_OF_INT))) {
-      throw new IllegalArgumentException("Bloom filter checksum mismatch")
+      throw new IllegalStateException("Bloom filter checksum mismatched")
     }
     val filter = buffer.readBytes(bytes.length - SIZE_OF_INT - 1)
     val k = buffer.readByte().toInt

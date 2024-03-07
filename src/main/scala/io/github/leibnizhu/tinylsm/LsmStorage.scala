@@ -104,7 +104,7 @@ private[tinylsm] class LsmStorageInner(
                                         val state: LsmStorageState,
                                         val blockCache: BlockCache,
                                         val options: LsmStorageOptions,
-                                        nextSstId: AtomicInteger,
+                                        val nextSstId: AtomicInteger,
                                         val compactionController: CompactionController,
                                         val manifest: Option[Manifest] = None) {
   private val log = LoggerFactory.getLogger(classOf[LsmStorageInner])
@@ -225,7 +225,7 @@ private[tinylsm] class LsmStorageInner(
     manifest.foreach(_.addRecord(ManifestNewMemtable(newMemTableId)))
   }
 
-  private def freezeMemTableWithMemTable(newMemTable: MemTable): Unit = {
+  def freezeMemTableWithMemTable(newMemTable: MemTable): Unit = {
     state.write(st => {
       val oldMemTable = st.memTable
       st.memTable = newMemTable
@@ -552,14 +552,19 @@ class TinyLsm(val inner: LsmStorageInner) {
   def close(): Unit = {
     flushThread.cancel()
     compactionThread.cancel()
+    // 开了wal的话只要确保Memtable写入WAL即可
     if (inner.options.enableWal) {
       inner.syncWal()
+      return
+    }
+    // 没开wal的话需要把MemTable写入sst
+    if (inner.state.read(_.memTable.nonEmpty)) {
+      inner.freezeMemTableWithMemTable(MemTable(inner.nextSstId.get()))
     }
     while (inner.state.read(st => st.immutableMemTables.nonEmpty)) {
       log.info("Still {} frozen MemTables is not flushed", inner.state.read(st => st.immutableMemTables.length))
       inner.forceFlushNextImmutableMemTable()
     }
-    //TODO sst目录
   }
 }
 

@@ -104,9 +104,9 @@ class ManifestTest extends AnyFunSuite {
     dumpFilesInDir(rootDir)
 
     // 使用manifest恢复LSM
-    val newStorage = TinyLsm(rootDir, compactionOption(options))
-    assertResult("v20")(newStorage.get("0").get)
-    assertResult("v20")(newStorage.get("1").get)
-    assert(newStorage.get("2").isEmpty)
+    val recovered = TinyLsm(rootDir, compactionOption(options))
+    assertResult("v20")(recovered.get("0").get)
+    assertResult("v20")(recovered.get("1").get)
+    assert(recovered.get("2").isEmpty)
   }
 }
