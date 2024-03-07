@@ -1,6 +1,6 @@
-package io.github.leibnizhu.tinylsm
+package io.github.leibnizhu.tinylsm.utils
 
-import io.github.leibnizhu.tinylsm.utils.{ByteArrayReader, ByteArrayWriter}
+import io.github.leibnizhu.tinylsm.SIZE_OF_INT
 
 import java.util
 import scala.util.boundary

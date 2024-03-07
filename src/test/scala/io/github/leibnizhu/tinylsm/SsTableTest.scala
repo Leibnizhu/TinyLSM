@@ -3,6 +3,7 @@ package io.github.leibnizhu.tinylsm
 import io.github.leibnizhu.tinylsm.TestUtils.{TS_ENABLED, tempDir}
 import io.github.leibnizhu.tinylsm.block.{BlockCache, BlockIterator}
 import io.github.leibnizhu.tinylsm.iterator.*
+import io.github.leibnizhu.tinylsm.utils.FileObject
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File

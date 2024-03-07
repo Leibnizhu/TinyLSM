@@ -12,8 +12,9 @@ import scala.collection.mutable.ListBuffer
 
 /**
  * TODO 合并Manifest，缩小体积
- *   定时任务，如果Manifest体积超过一定阈值，则重写Manifest内容，只记录当前快照。
- *   要上锁
+ * 定时任务，如果Manifest体积超过一定阈值，则重写Manifest内容，只记录当前快照。
+ * 要上锁
+ *
  * @param file Manifest 文件
  */
 class Manifest(file: File) {

@@ -3,8 +3,6 @@ package io.github.leibnizhu.tinylsm.block
 import io.github.leibnizhu.tinylsm.*
 import io.github.leibnizhu.tinylsm.utils.{ByteArrayReader, ByteArrayWriter}
 
-import scala.collection.mutable.ArrayBuffer
-
 /**
  * Block 结构：
  * ----------------------------------------------------------------------------------------------------

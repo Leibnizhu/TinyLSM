@@ -1,7 +1,6 @@
 package io.github.leibnizhu.tinylsm
 
 import io.github.leibnizhu.tinylsm.block.BlockCache
-import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{FullCompaction, LeveledCompactionOptions, SimpleCompactionOptions, TieredCompactionOptions}
 import io.github.leibnizhu.tinylsm.compact.{CompactionController, CompactionOptions, FullCompactionTask}
 import io.github.leibnizhu.tinylsm.iterator.*
 import io.github.leibnizhu.tinylsm.utils.*
@@ -10,92 +9,86 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.util
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.locks.{Lock, ReadWriteLock, ReentrantLock, ReentrantReadWriteLock}
-import java.util.{Arrays, Timer}
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.boundary
 
-/**
- * 全是var，var里面是immutable的，需要snapshot的话直接copy这个state就可以
- * state.read(_.copy())
- */
-case class LsmStorageState(
-                            // 当前Memtable
-                            var memTable: MemTable,
-                            // 不可变的Memtable，从最近到最早的
-                            var immutableMemTables: List[MemTable],
-                            // L0 SST 从最新到最早的
-                            var l0SsTables: List[Int],
-                            // 按key 范围排序的SsTable， L1 -> Lmax，每层是 (L几，List(包含的SST ID))
-                            var levels: List[Level] = List((1, List())),
-                            // SST 对象
-                            var ssTables: Map[Int, SsTable] = Map()
-                          ) {
-  // 对 MemTable 做 freeze 操作的读写锁
-  private val rwLock: ReadWriteLock = ReentrantReadWriteLock()
-  // MemTable 做 freeze 时，保证只有一个线程执行 freeze 的锁
-  val stateLock: Lock = ReentrantLock()
+object LsmStorageInner {
+  private val log = LoggerFactory.getLogger(classOf[LsmStorageInner])
 
-  /**
-   * 封装只读操作
-   *
-   * @param f 只读的操作
-   * @tparam T 只读的响应类型
-   * @return 只读的结果
-   */
-  def read[T](f: LsmStorageState => T): T = {
-    val readLock = rwLock.readLock()
-    try {
-      readLock.lock()
-      f(this)
-    } finally {
-      readLock.unlock()
+  def apply(path: File, options: LsmStorageOptions): LsmStorageInner = {
+    val state = LsmStorageState(options)
+    val nextSstId = AtomicInteger(0)
+    val blockCache = BlockCache.apply(128)
+    val compactionController = CompactionController(options.compactionOptions)
+    val manifestFile = new File(path, "MANIFEST")
+    val manifest = new Manifest(manifestFile)
+    if (manifestFile.exists()) {
+      // manifest 已存在则需要恢复 LSM 状态
+      val records = manifest.recover()
+      val memTables = new mutable.HashSet[Int]()
+      // 根据 manifest的记录顺序重做 state。注意 ssTables 还是空的，这一步先不处理
+      for (record <- records) record match
+        case ManifestNewMemtable(memtableId) =>
+          nextSstId.set(nextSstId.get().max(memtableId))
+          memTables += memtableId
+        case ManifestFlush(sstId) =>
+          assert(memTables(sstId), "memtable not exist?")
+          memTables -= sstId
+          if (compactionController.flushToL0()) {
+            state.l0SsTables = sstId :: state.l0SsTables
+          } else {
+            state.levels = (sstId, List(sstId)) :: state.levels
+          }
+        case ManifestCompaction(task, output) =>
+          task.applyCompactionResult(state, output)
+          nextSstId.set(nextSstId.get().max(output.max))
+
+      // 恢复 SST ssTables
+      var sstCnt = 0
+      for (sstId <- state.l0SsTables ++ state.levels.flatMap(_._2)) {
+        val sstFileObj = FileObject.open(fileOfSst(path, sstId))
+        val sst = SsTable.open(sstId, Some(blockCache), sstFileObj)
+        state.ssTables = state.ssTables + (sstId -> sst)
+        sstCnt += 1
+      }
+      log.info("{} SST opened", sstCnt)
+
+      val newMemtableId = nextSstId.get()
+      if (options.enableWal) {
+        // 从 wal 恢复Memtable,到了这里，memTables 里面是从Manifest恢复的、没flush的Memtable
+        var walCnt = 0
+        for (mtId <- memTables) {
+          val memTable = MemTable.recoverFromWal(mtId, fileOfWal(path, mtId))
+          if (memTable.nonEmpty) {
+            state.immutableMemTables = memTable :: state.immutableMemTables
+            walCnt += 1
+          }
+        }
+        log.info("{} MemTable recovered from wal", walCnt)
+        state.memTable = MemTable(newMemtableId, Some(fileOfWal(path, newMemtableId)))
+      } else {
+        // 由于前面恢复了SST，所以此时要更新 Memtable
+        state.memTable = MemTable(newMemtableId)
+      }
+      manifest.addRecord(ManifestNewMemtable(state.memTable.id))
+      nextSstId.getAndIncrement()
+    } else {
+      // manifest 不存在，则直接创建新的
+      if (options.enableWal) {
+        //  用WAL重新创建Memtable
+        val memTableId = state.memTable.id
+        state.memTable = MemTable(memTableId, Some(fileOfWal(path, memTableId)))
+      }
+      manifest.addRecord(ManifestNewMemtable(state.memTable.id))
     }
+    log.info("Start LsmStorageInner with lsm dir: {}", path.getAbsolutePath)
+    new LsmStorageInner(path, state, blockCache, options, nextSstId, compactionController, Some(manifest))
   }
 
-  /**
-   * 封装写操作
-   *
-   * @param f 写的操作
-   * @tparam T 写操作的响应类型
-   * @return 写的结果
-   */
-  def write[T](f: LsmStorageState => T): T = {
-    val writeLock = rwLock.writeLock()
-    try {
-      writeLock.lock()
-      f(this)
-    } finally {
-      writeLock.unlock()
-    }
-  }
+  def fileOfWal(path: File, walId: Int): File = new File(path, "%05d.wal".format(walId))
 
-  def dumpState(): Unit = {
-    val snapshot = this.read(_.copy())
-    println(s"Current MemTable: ${snapshot.memTable.id}")
-    println(s"Frozen MemTables: [${snapshot.immutableMemTables.map(_.id).mkString(", ")}]")
-    println(s"L0\t(${snapshot.l0SsTables.length}): [${snapshot.l0SsTables.mkString(", ")}]")
-    for ((level, files) <- snapshot.levels) {
-      println(s"L$level\t(${files.length}): [${files.mkString(", ")}]")
-    }
-    println(s"SST: {${snapshot.ssTables.keys.mkString(", ")}}")
-  }
-}
-
-object LsmStorageState {
-  def apply(options: LsmStorageOptions): LsmStorageState = {
-    val levels = options.compactionOptions match
-      case SimpleCompactionOptions(_, _, maxLevels) => makeLevelsByMax(maxLevels)
-      case LeveledCompactionOptions(_, _, maxLevels, _) => makeLevelsByMax(maxLevels)
-      case FullCompaction => makeLevelsByMax(1)
-      case t: TieredCompactionOptions => List()
-      case _ => List()
-    new LsmStorageState(MemTable(0), List[MemTable](), List(), levels)
-  }
-
-  private def makeLevelsByMax(maxLevels: Int): List[Level] =
-    (1 to maxLevels).map((_, List[Int]())).toList
+  def fileOfSst(path: File, sstId: Int): File = new File(path, "%05d.sst".format(sstId))
 }
 
 private[tinylsm] class LsmStorageInner(
@@ -434,178 +427,4 @@ private[tinylsm] class LsmStorageInner(
   }
 
   def syncWal(): Unit = state.memTable.syncWal()
-}
-
-object LsmStorageInner {
-  private val log = LoggerFactory.getLogger(classOf[LsmStorageInner])
-
-  def apply(path: File, options: LsmStorageOptions): LsmStorageInner = {
-    val state = LsmStorageState(options)
-    val nextSstId = AtomicInteger(0)
-    val blockCache = BlockCache.apply(128)
-    val compactionController = CompactionController(options.compactionOptions)
-    val manifestFile = new File(path, "MANIFEST")
-    val manifest = new Manifest(manifestFile)
-    if (manifestFile.exists()) {
-      // manifest 已存在则需要恢复 LSM 状态
-      val records = manifest.recover()
-      val memTables = new mutable.HashSet[Int]()
-      // 根据 manifest的记录顺序重做 state。注意 ssTables 还是空的，这一步先不处理
-      for (record <- records) record match
-        case ManifestNewMemtable(memtableId) =>
-          nextSstId.set(nextSstId.get().max(memtableId))
-          memTables += memtableId
-        case ManifestFlush(sstId) =>
-          assert(memTables(sstId), "memtable not exist?")
-          memTables -= sstId
-          if (compactionController.flushToL0()) {
-            state.l0SsTables = sstId :: state.l0SsTables
-          } else {
-            state.levels = (sstId, List(sstId)) :: state.levels
-          }
-        case ManifestCompaction(task, output) =>
-          task.applyCompactionResult(state, output)
-          nextSstId.set(nextSstId.get().max(output.max))
-
-      // 恢复 SST ssTables
-      var sstCnt = 0
-      for (sstId <- state.l0SsTables ++ state.levels.flatMap(_._2)) {
-        val sstFileObj = FileObject.open(fileOfSst(path, sstId))
-        val sst = SsTable.open(sstId, Some(blockCache), sstFileObj)
-        state.ssTables = state.ssTables + (sstId -> sst)
-        sstCnt += 1
-      }
-      log.info("{} SST opened", sstCnt)
-
-      val newMemtableId = nextSstId.get()
-      if (options.enableWal) {
-        // 从 wal 恢复Memtable,到了这里，memTables 里面是从Manifest恢复的、没flush的Memtable
-        var walCnt = 0
-        for (mtId <- memTables) {
-          val memTable = MemTable.recoverFromWal(mtId, fileOfWal(path, mtId))
-          if (memTable.nonEmpty) {
-            state.immutableMemTables = memTable :: state.immutableMemTables
-            walCnt += 1
-          }
-        }
-        log.info("{} MemTable recovered from wal", walCnt)
-        state.memTable = MemTable(newMemtableId, Some(fileOfWal(path, newMemtableId)))
-      } else {
-        // 由于前面恢复了SST，所以此时要更新 Memtable
-        state.memTable = MemTable(newMemtableId)
-      }
-      manifest.addRecord(ManifestNewMemtable(state.memTable.id))
-      nextSstId.getAndIncrement()
-    } else {
-      // manifest 不存在，则直接创建新的
-      if (options.enableWal) {
-        //  用WAL重新创建Memtable
-        val memTableId = state.memTable.id
-        state.memTable = MemTable(memTableId, Some(fileOfWal(path, memTableId)))
-      }
-      manifest.addRecord(ManifestNewMemtable(state.memTable.id))
-    }
-    log.info("Start LsmStorageInner with lsm dir: {}", path.getAbsolutePath)
-    new LsmStorageInner(path, state, blockCache, options, nextSstId, compactionController, Some(manifest))
-  }
-
-  def fileOfWal(path: File, walId: Int): File = new File(path, "%05d.wal".format(walId))
-
-  def fileOfSst(path: File, sstId: Int): File = new File(path, "%05d.sst".format(sstId))
-}
-
-class TinyLsm(val inner: LsmStorageInner) {
-  private val log = LoggerFactory.getLogger(classOf[TinyLsm])
-  private val flushThread = spawnFlushThread()
-  private val compactionThread = spawnCompactionThread()
-
-  def get(key: MemTableKey): Option[MemTableValue] = inner.get(key)
-
-  def get(key: String): Option[String] = inner.get(key)
-
-  def put(key: MemTableKey, value: MemTableValue): Unit = inner.put(key, value)
-
-  def put(key: String, value: String): Unit = inner.put(key, value)
-
-  def delete(key: MemTableKey): Unit = inner.delete(key)
-
-  def delete(key: String): Unit = inner.delete(key)
-
-  def scan(lower: Bound, upper: Bound): FusedIterator[MemTableKey, MemTableValue] = inner.scan(lower, upper)
-
-  def newTxn(): Unit = inner.newTxn()
-
-  def forceFullCompaction(): Unit = inner.forceFullCompaction()
-
-  private def spawnFlushThread(): Timer = {
-    val timer = new Timer()
-    timer.schedule(() => inner.triggerFlush(), 0, 50)
-    timer
-  }
-
-  private def spawnCompactionThread(): Timer = {
-    val timer = new Timer()
-    timer.schedule(() => inner.triggerCompact(), 0, 50)
-    timer
-  }
-
-  def close(): Unit = {
-    flushThread.cancel()
-    compactionThread.cancel()
-    // 开了wal的话只要确保Memtable写入WAL即可
-    if (inner.options.enableWal) {
-      inner.syncWal()
-      return
-    }
-    // 没开wal的话需要把MemTable写入sst
-    if (inner.state.read(_.memTable.nonEmpty)) {
-      inner.freezeMemTableWithMemTable(MemTable(inner.nextSstId.get()))
-    }
-    while (inner.state.read(st => st.immutableMemTables.nonEmpty)) {
-      log.info("Still {} frozen MemTables is not flushed", inner.state.read(st => st.immutableMemTables.length))
-      inner.forceFlushNextImmutableMemTable()
-    }
-  }
-}
-
-object TinyLsm {
-  def apply(path: File, options: LsmStorageOptions): TinyLsm = {
-    new TinyLsm(LsmStorageInner(path, options))
-  }
-
-}
-
-case class LsmStorageOptions
-(
-  // Block大小，单位是 bytes，应该小于或等于这个值
-  blockSize: Int,
-  // SST大小，单位是 bytes, 同时也是MemTable容量限制的近似值
-  targetSstSize: Int,
-  // MemTable在内存中的最多个数, 超过这么多MemTable后会 flush 到 L0
-  numMemTableLimit: Int,
-  // Compaction配置
-  compactionOptions: CompactionOptions,
-  // 是否启用WAL
-  enableWal: Boolean,
-  // 是否可序列化
-  serializable: Boolean
-)
-
-object LsmStorageOptions {
-  def defaultOption(): LsmStorageOptions = LsmStorageOptions(
-    4096,
-    2 << 20,
-    50,
-    CompactionOptions.NoCompaction,
-    false,
-    false)
-
-  def fromConfig(): LsmStorageOptions = LsmStorageOptions(
-    Config.BlockSize.getInt,
-    Config.TargetSstSize.getInt,
-    Config.MemTableLimitNum.getInt,
-    CompactionOptions.fromConfig(),
-    Config.EnableWal.getBoolean,
-    Config.Serializable.getBoolean
-  )
 }
