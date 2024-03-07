@@ -166,11 +166,7 @@ private[tinylsm] class LsmStorageInner(
    * @param key   key
    * @param value 如果要执行delete操作，可以传入null
    */
-  def put(key: MemTableKey, value: MemTableValue): Unit = {
-    assert(key != null && !key.isEmpty, "key cannot be empty")
-    assert(value != null, "value cannot be empty")
-    doPut(key, value)
-  }
+  def put(key: MemTableKey, value: MemTableValue): Unit = writeBatch(Array(WriteBatchRecord.Put(key, value)))
 
   def put(key: String, value: String): Unit = put(key.getBytes, value.getBytes)
 
@@ -179,17 +175,32 @@ private[tinylsm] class LsmStorageInner(
    *
    * @param key key
    */
-  def delete(key: MemTableKey): Unit = put(key, DELETE_TOMBSTONE)
+  def delete(key: MemTableKey): Unit = writeBatch(Array(WriteBatchRecord.Del(key)))
 
   def delete(key: String): Unit = delete(key.getBytes)
 
+  def writeBatch(batch: Seq[WriteBatchRecord]): Unit = for (record <- batch) {
+    record match
+      case WriteBatchRecord.Del(key: MemTableKey) =>
+        assert(key != null && !key.isEmpty, "key cannot be empty")
+        // 这里 MemTable 自己的线程安全由 ConcurrentHashMap 保证，所以只要读锁
+        val estimatedSize = state.read(st => {
+          st.memTable.put(key, DELETE_TOMBSTONE)
+          st.memTable.approximateSize.get()
+        })
+        tryFreezeMemTable(estimatedSize)
+      case WriteBatchRecord.Put(key: MemTableKey, value: MemTableValue) =>
+        assert(key != null && !key.isEmpty, "key cannot be empty")
+        assert(value != null, "value cannot be empty")
+        // 这里 MemTable 自己的线程安全由 ConcurrentHashMap 保证，所以只要读锁
+        val estimatedSize = state.read(st => {
+          st.memTable.put(key, value)
+          st.memTable.approximateSize.get()
+        })
+        tryFreezeMemTable(estimatedSize)
+  }
+
   private def doPut(key: MemTableKey, value: MemTableValue): Unit = {
-    // 这里 MemTable 自己的线程安全由 ConcurrentHashMap 保证，所以只要读锁
-    val estimatedSize = state.read(st => {
-      st.memTable.put(key, value)
-      st.memTable.approximateSize.get()
-    })
-    tryFreezeMemTable(estimatedSize)
   }
 
   private def tryFreezeMemTable(estimatedSize: Int): Unit = {
@@ -427,4 +438,10 @@ private[tinylsm] class LsmStorageInner(
   }
 
   def syncWal(): Unit = state.memTable.syncWal()
+}
+
+enum WriteBatchRecord {
+  case Del(key: MemTableKey) extends WriteBatchRecord
+
+  case Put(key: MemTableKey, value: MemTableValue) extends WriteBatchRecord
 }

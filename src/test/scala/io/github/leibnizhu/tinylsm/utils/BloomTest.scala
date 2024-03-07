@@ -1,4 +1,4 @@
-package io.github.leibnizhu.tinylsm
+package io.github.leibnizhu.tinylsm.utils
 
 import io.github.leibnizhu.tinylsm.byteArrayHash
 import io.github.leibnizhu.tinylsm.utils.Bloom
