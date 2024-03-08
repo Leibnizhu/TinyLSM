@@ -1,23 +1,19 @@
 package io.github.leibnizhu.tinylsm.app
 
-import cask.model.Response
 import io.github.leibnizhu.tinylsm.utils.{Bound, Config}
 import io.github.leibnizhu.tinylsm.{LsmStorageInner, LsmStorageOptions}
-import org.jline.reader.impl.completer.{AggregateCompleter, ArgumentCompleter, NullCompleter, StringsCompleter}
-import org.jline.reader.{Completer, EndOfFileException, LineReaderBuilder, UserInterruptException}
-import org.jline.terminal.TerminalBuilder
 import requests.{RequestFailedException, get}
 
-import java.io.{File, FileInputStream}
+import java.io.File
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
-import java.util.{Properties, StringJoiner}
-import scala.collection.mutable
+import java.util.StringJoiner
 import scala.jdk.CollectionConverters.*
 
 
 class CliContext(playgroundMode: Boolean,
                  playgroundLsm: Option[LsmStorageInner],
+                 debugMode: Boolean,
                  host: String,
                  port: Int) {
 
@@ -89,6 +85,10 @@ class CliContext(playgroundMode: Boolean,
   }
 
   def flush(): Unit = {
+    if(!debugMode) {
+      println("flush command can only be used in debug mode!")
+      return
+    }
     if (playgroundMode) {
       playgroundLsm.get.forceFreezeMemTable()
       playgroundLsm.get.forceFlushNextImmutableMemTable()
@@ -101,12 +101,14 @@ class CliContext(playgroundMode: Boolean,
 object CliContext {
   def apply(argMap: Map[String, Any]): CliContext = {
     val playgroundMode = argMap.getOrElse("playground", false).asInstanceOf[Boolean]
+    val debugMode = argMap.getOrElse("debug", false).asInstanceOf[Boolean]
     val playgroundLsm = if (playgroundMode) {
       val tempDir = new File(System.getProperty("java.io.tmpdir") + File.separator + "TinyLsmPlayground")
       if (tempDir.exists()) {
         tempDir.delete()
       }
       tempDir.mkdirs()
+      println(s"Start a playground TinyLSM instance...")
       Some(LsmStorageInner(tempDir, LsmStorageOptions.defaultOption()))
     } else {
       None
@@ -114,6 +116,7 @@ object CliContext {
     new CliContext(
       playgroundMode,
       playgroundLsm,
+      debugMode,
       argMap.getOrElse("host", "localhost").asInstanceOf[String],
       argMap.getOrElse("port", Config.Port.defaultVal.toInt).asInstanceOf[Int]
     )

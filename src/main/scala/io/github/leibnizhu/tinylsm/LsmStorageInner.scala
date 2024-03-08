@@ -227,6 +227,10 @@ private[tinylsm] class LsmStorageInner(
    * 冻结当前MemTable，创建一个新的
    */
   def forceFreezeMemTable(): Unit = {
+    if (state.read(_.memTable.isEmpty)) {
+      log.info("Current MemTable is empty, skip freezing")
+      return
+    }
     val newMemTableId = nextSstId.incrementAndGet()
     val newMemTable = if (options.enableWal) MemTable(newMemTableId, Some(fileOfWal(newMemTableId))) else MemTable(newMemTableId)
     freezeMemTableWithMemTable(newMemTable)
@@ -251,6 +255,10 @@ private[tinylsm] class LsmStorageInner(
    * 强制将最早的一个ImmutableMemTable 刷入磁盘
    */
   def forceFlushNextImmutableMemTable(): Unit = {
+    if (state.immutableMemTables.isEmpty) {
+      log.info("No frozen MemTable, skip flush")
+      return
+    }
     try {
       state.stateLock.lock()
       val flushMemTable = state.immutableMemTables.last

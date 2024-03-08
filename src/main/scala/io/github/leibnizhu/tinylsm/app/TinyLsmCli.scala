@@ -39,7 +39,7 @@ object TinyLsmCli {
 
   private def executeCommand(words: mutable.Buffer[String], cliContext: CliContext): Unit = {
     words.head match
-      case ":quit" => System.exit(0)
+      case ":quit" | ":exit" => System.exit(0)
       case ":help" => printHelp()
       case "get" => if (words.length < 2) {
         println("Invalid command, use: get <key>")
@@ -62,19 +62,26 @@ object TinyLsmCli {
         cliContext.scan(words(1), words(2), words(3), words(4))
       }
       case "flush" => cliContext.flush()
-      case _ => println("Unsupported command: " + words.head)
+      case _ => println(s"Unsupported command: '${words.head}', you can type :help for more information or <TAB> for auto complete")
   }
 
   private def printHelp(): Unit = println(
     """
-      |Help
+      |TinyLSM Help
+      |Cli args:
+      |  --playground : playground mode. start a temp internal TinyLSM server and connect to it.
+      |  --debug : enable debug mode. flush etc. command can be use.
+      |  --help: show help info.
+      |  -h: TinyLSM host, default value is localhost.
+      |  -p: TinyLSM port, default value is 9527.
+      |Commands:
       |  get <key> : Get value by key.
       |  delete <key> : Delete a key.
       |  put <key> <value> : Put value by key.
-      |  scan <Unbound|Excluded|Included> <fromKey> <Unbound|Excluded|Included> <toKey> : scan by key range
-      |  flush : force flush MemTable to SST
+      |  scan <Unbound|Excluded|Included> <fromKey> <Unbound|Excluded|Included> <toKey> : scan by key range.
+      |  flush : force flush MemTable to SST.
       |  :help : Show this help info.
-      |  :quit : Quit TinyLsm cli.""".stripMargin)
+      |  :quit or :exit : Quit TinyLsm cli.""".stripMargin)
 
   private def getCompleter: Completer =
     val boundCompleter = new StringsCompleter("Unbounded", "Excluded", "Included")
@@ -99,12 +106,17 @@ object TinyLsmCli {
         cur match
           case "--playground" =>
             result.put("playground", true)
+          case "--debug" =>
+            result.put("debug", true)
           case "-h" =>
             result.put("host", args(i + 1))
             i += 1
           case "-p" =>
             result.put("port", args(i + 1).toInt)
             i += 1
+          case "--help" =>
+            printHelp()
+            System.exit(0)
           case _ =>
             println("Unsupported argument: " + cur)
         i += 1

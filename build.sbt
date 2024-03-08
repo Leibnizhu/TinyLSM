@@ -21,3 +21,10 @@ lazy val app = (project in file("."))
     assembly / mainClass := Some("io.github.leibnizhu.tinylsm.ap.TinyLsmWebServer"),
     assembly / assemblyJarName := "TinyLsmAssembly.jar",
   )
+
+assemblyMergeStrategy in assembly := {
+  case x if x.endsWith("module-info.class") => MergeStrategy.discard
+  case x =>
+    val oldStrategy = (assemblyMergeStrategy in assembly).value
+    oldStrategy(x)
+}
