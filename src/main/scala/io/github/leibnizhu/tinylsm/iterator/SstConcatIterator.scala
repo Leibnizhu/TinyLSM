@@ -101,5 +101,6 @@ object SstConcatIterator {
         iter.next()
       }
       iter
+    case _ => throw new IllegalArgumentException("Unsupported Bound type: " + lower.getClass)
   }
 }

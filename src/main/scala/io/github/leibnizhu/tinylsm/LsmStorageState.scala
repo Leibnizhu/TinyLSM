@@ -4,7 +4,7 @@ import io.github.leibnizhu.tinylsm.compact.CompactionOptions
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{FullCompaction, LeveledCompactionOptions, SimpleCompactionOptions, TieredCompactionOptions}
 
 import java.util
-import java.util.concurrent.locks.{Lock, ReadWriteLock, ReentrantLock, ReentrantReadWriteLock}
+import java.util.concurrent.locks.{Lock, ReentrantLock, ReentrantReadWriteLock}
 
 /**
  * 全是var，var里面是immutable的，需要snapshot的话直接copy这个state就可以
@@ -23,7 +23,10 @@ case class LsmStorageState(
                             var ssTables: Map[Int, SsTable] = Map()
                           ) {
   // 对 MemTable 做 freeze 操作的读写锁
-  private val rwLock: ReadWriteLock = ReentrantReadWriteLock()
+  private val (readLock, writeLock) = {
+    val rwLock = ReentrantReadWriteLock()
+    (rwLock.readLock(), rwLock.writeLock())
+  }
   // MemTable 做 freeze 时，保证只有一个线程执行 freeze 的锁
   val stateLock: Lock = ReentrantLock()
 
@@ -35,7 +38,6 @@ case class LsmStorageState(
    * @return 只读的结果
    */
   def read[T](f: LsmStorageState => T): T = {
-    val readLock = rwLock.readLock()
     try {
       readLock.lock()
       f(this)
@@ -52,7 +54,6 @@ case class LsmStorageState(
    * @return 写的结果
    */
   def write[T](f: LsmStorageState => T): T = {
-    val writeLock = rwLock.writeLock()
     try {
       writeLock.lock()
       f(this)

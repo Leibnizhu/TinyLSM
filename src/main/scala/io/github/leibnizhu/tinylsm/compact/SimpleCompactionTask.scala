@@ -56,7 +56,7 @@ case class SimpleCompactionTask(
 
 
 object SimpleCompactionTask {
-  private val log = LoggerFactory.getLogger(classOf[SimpleCompactionTask])
+  private val log = LoggerFactory.getLogger(this.getClass)
 
   /**
    * 注意SimpleCompactionTask中SST顺序

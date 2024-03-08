@@ -4,7 +4,6 @@ import io.github.leibnizhu.tinylsm.{LsmStorageInner, LsmStorageState, SsTable, k
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
 
 
 case class LeveledCompactionTask(
@@ -62,7 +61,7 @@ case class LeveledCompactionTask(
 }
 
 object LeveledCompactionTask {
-  private val log = LoggerFactory.getLogger(classOf[LeveledCompactionTask])
+  private val log = LoggerFactory.getLogger(this.getClass)
 
   /**
    *

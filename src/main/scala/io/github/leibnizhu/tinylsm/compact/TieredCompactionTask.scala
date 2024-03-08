@@ -5,6 +5,7 @@ import io.github.leibnizhu.tinylsm.{Level, LsmStorageInner, LsmStorageState, SsT
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable.ListBuffer
+import scala.util.boundary
 
 case class TieredCompactionTask(tiers: List[Level],
                                 bottomTierIncluded: Boolean,
@@ -45,7 +46,7 @@ case class TieredCompactionTask(tiers: List[Level],
 }
 
 object TieredCompactionTask {
-  private val log = LoggerFactory.getLogger(classOf[TieredCompactionTask])
+  private val log = LoggerFactory.getLogger(this.getClass)
 
   /**
    *
@@ -67,24 +68,29 @@ object TieredCompactionTask {
     val spaceAmpRatio = 100 * allUpperSize.toDouble / lowestSize
     if (spaceAmpRatio >= options.maxSizeAmplificationPercent) {
       log.info("Compaction triggered by space amplification ratio: {}", "%.3f".format(spaceAmpRatio))
-      Some(TieredCompactionTask(List(levels: _*), true))
+      return Some(TieredCompactionTask(List(levels: _*), true))
     }
 
     // 2. 考虑 size 比例
     // 记录当前的所有上层的总大小
     val sizeRatioThreshold = (100.0 + options.sizeRatio.toDouble) / 100
     var upperSizeSum = 0
-    for (id <- 0 until levels.length - 1) {
-      upperSizeSum += levels(id)._2.length
-      val nextLevelSize = levels(id + 1)._2.length
-      val curSizeRatio = upperSizeSum.toDouble / nextLevelSize
-      // 两个条件，既要sizeRatio超了阈值，同时要compact的层数超过 minMergeWidth。
-      // 因为id 是从0开始的，当前一共 id+1层，加上下一层，所以是 id +2
-      if (curSizeRatio >= sizeRatioThreshold && id + 2 >= options.minMergeWidth) {
-        log.info("Compaction triggered by size ratio: {}", "%.3f".format(curSizeRatio * 100))
-        // FIXME 直接for里return不够优雅
-        return Some(TieredCompactionTask(levels.take(id + 2), id + 2 >= levels.length))
-      }
+    val sizeRationLevel = {
+      boundary:
+        for (id <- 0 until levels.length - 1) {
+          upperSizeSum += levels(id)._2.length
+          val curSizeRatio = upperSizeSum.toDouble / levels(id + 1)._2.length
+          // 两个条件，既要sizeRatio超了阈值，同时要compact的层数超过 minMergeWidth。
+          // 因为id 是从0开始的，当前一共 id+1层，加上下一层，所以是 id +2
+          if (curSizeRatio >= sizeRatioThreshold && id + 2 >= options.minMergeWidth) {
+            log.info("Compaction triggered by size ratio: {}", "%.3f".format(curSizeRatio * 100))
+            boundary.break(Some(id + 2))
+          }
+        }
+        None
+    }
+    if (sizeRationLevel.isDefined) {
+      return Some(TieredCompactionTask(levels.take(sizeRationLevel.get), sizeRationLevel.get >= levels.length))
     }
 
     // 最后确保 tier 数量少于 numTiers

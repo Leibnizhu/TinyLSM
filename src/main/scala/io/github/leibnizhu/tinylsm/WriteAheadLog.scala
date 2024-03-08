@@ -14,10 +14,12 @@ import scala.util.hashing.MurmurHash3
  */
 case class WriteAheadLog(walFile: File) {
   private lazy val writer = new BufferedOutputStream(FileOutputStream(walFile))
-  private val rwLock: ReadWriteLock = ReentrantReadWriteLock()
+  private val (readLock, writeLock) = {
+    val rwLock = ReentrantReadWriteLock()
+    (rwLock.readLock(), rwLock.writeLock())
+  }
 
   def recover(toMap: java.util.Map[ByteArrayKey, MemTableValue]): WriteAheadLog = {
-    val readLock = rwLock.readLock()
     try {
       readLock.lock()
       val buffer = new ByteArrayReader(FileInputStream(walFile).readAllBytes())
@@ -41,7 +43,6 @@ case class WriteAheadLog(walFile: File) {
   }
 
   def put(key: Array[Byte], value: Array[Byte]): Unit = {
-    val writeLock = rwLock.writeLock()
     try {
       writeLock.lock()
       val buffer = new ByteArrayWriter(key.length + value.length + SIZE_OF_U16 * 4)
