@@ -14,7 +14,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.boundary
 
 object LsmStorageInner {
-  private val log = LoggerFactory.getLogger(classOf[LsmStorageInner])
+  private val log = LoggerFactory.getLogger(this.getClass)
 
   def apply(path: File, options: LsmStorageOptions): LsmStorageInner = {
     val state = LsmStorageState(options)
@@ -22,13 +22,17 @@ object LsmStorageInner {
     val blockCache = BlockCache.apply(128)
     val compactionController = CompactionController(options.compactionOptions)
     val manifestFile = new File(path, "MANIFEST")
-    val manifest = new Manifest(manifestFile)
+    val manifest = new Manifest(manifestFile, options.targetManifestSize)
     if (manifestFile.exists()) {
       // manifest 已存在则需要恢复 LSM 状态
       val records = manifest.recover()
       val memTables = new mutable.HashSet[Int]()
       // 根据 manifest的记录顺序重做 state。注意 ssTables 还是空的，这一步先不处理
       for (record <- records) record match
+        case ManifestSnapshot(frozenMt, l0, levels) =>
+          memTables ++= frozenMt
+          state.l0SsTables = l0
+          state.levels = levels
         case ManifestNewMemtable(memtableId) =>
           nextSstId.set(nextSstId.get().max(memtableId))
           memTables += memtableId
@@ -100,7 +104,7 @@ private[tinylsm] class LsmStorageInner(
                                         val nextSstId: AtomicInteger,
                                         val compactionController: CompactionController,
                                         val manifest: Option[Manifest] = None) {
-  private val log = LoggerFactory.getLogger(classOf[LsmStorageInner])
+  private val log = LoggerFactory.getLogger(this.getClass)
 
   /**
    * 按key获取
@@ -427,6 +431,10 @@ private[tinylsm] class LsmStorageInner(
     manifest.foreach(_.addRecord(ManifestCompaction(task, newSstIds)))
     // 释放锁之后再做文件IO
     deleteSstFiles(sstToRemove)
+  }
+
+  def triggerManifestCompact(): Unit = {
+    manifest.foreach(_.tryCompact(state.read(_.copy())))
   }
 
   private def deleteSstFiles(sstIds: List[Int]): Unit = {

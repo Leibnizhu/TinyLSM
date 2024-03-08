@@ -3,7 +3,6 @@ package io.github.leibnizhu.tinylsm.iterator
 import io.github.leibnizhu.tinylsm.*
 import io.github.leibnizhu.tinylsm.TestUtils.*
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions
-import io.github.leibnizhu.tinylsm.iterator.*
 import io.github.leibnizhu.tinylsm.utils.{Excluded, Included, Unbounded}
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -52,7 +51,7 @@ class LsmStorageTest extends AnyFunSuite {
   }
 
   test("week1_day1_task3_freeze_on_capacity") {
-    val options = LsmStorageOptions(4096, 1024, 1000, CompactionOptions.NoCompaction, false, false)
+    val options = LsmStorageOptions(4096, 1024, 1024, 1000, CompactionOptions.NoCompaction, false, false)
     val storage = LsmStorageInner(tempDir(), options)
 
     for (i <- 0 until 1000) {
@@ -68,7 +67,7 @@ class LsmStorageTest extends AnyFunSuite {
   }
 
   test("week1_day1_task4_storage_integration") {
-    val options = LsmStorageOptions(4096, 1024, 1000, CompactionOptions.NoCompaction, false, false)
+    val options = LsmStorageOptions(4096, 1024, 1024, 1000, CompactionOptions.NoCompaction, false, false)
     val storage = LsmStorageInner(tempDir(), options)
 
     assert(storage.get("0").isEmpty)
@@ -287,7 +286,7 @@ class LsmStorageTest extends AnyFunSuite {
   }
 
   test("week1_day6_task2_auto_flush") {
-    val options = LsmStorageOptions(4096, 2 << 20, 2, CompactionOptions.NoCompaction, false, false)
+    val options = LsmStorageOptions(4096, 2 << 20, 1024, 2, CompactionOptions.NoCompaction, false, false)
     val storage = TinyLsm(tempDir(), options)
     val value = "1" * 1024
     for (i <- 0 until 6000) {

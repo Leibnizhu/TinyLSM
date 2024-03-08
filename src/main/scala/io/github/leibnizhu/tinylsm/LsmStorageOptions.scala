@@ -9,6 +9,8 @@ case class LsmStorageOptions
   blockSize: Int,
   // SST大小，单位是 bytes, 同时也是MemTable容量限制的近似值
   targetSstSize: Int,
+  // Manifest大小，单位是 bytes
+  targetManifestSize: Int,
   // MemTable在内存中的最多个数, 超过这么多MemTable后会 flush 到 L0
   numMemTableLimit: Int,
   // Compaction配置
@@ -23,6 +25,7 @@ object LsmStorageOptions {
   def defaultOption(): LsmStorageOptions = LsmStorageOptions(
     4096,
     2 << 20,
+    1 << 20,
     50,
     CompactionOptions.NoCompaction,
     false,
@@ -31,6 +34,7 @@ object LsmStorageOptions {
   def fromConfig(): LsmStorageOptions = LsmStorageOptions(
     Config.BlockSize.getInt,
     Config.TargetSstSize.getInt,
+    Config.TargetManifestSize.getInt,
     Config.MemTableLimitNum.getInt,
     CompactionOptions.fromConfig(),
     Config.EnableWal.getBoolean,

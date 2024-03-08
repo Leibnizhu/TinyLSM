@@ -15,9 +15,10 @@ object TinyLsm {
 }
 
 class TinyLsm(val inner: LsmStorageInner) {
-  private val log = LoggerFactory.getLogger(classOf[TinyLsm])
+  private val log = LoggerFactory.getLogger(this.getClass)
   private val flushThread = spawnFlushThread()
   private val compactionThread = spawnCompactionThread()
+  private val manifestCompactionThread = spawnManifestCompactionThread()
 
   def get(key: MemTableKey): Option[MemTableValue] = inner.get(key)
 
@@ -46,6 +47,12 @@ class TinyLsm(val inner: LsmStorageInner) {
   private def spawnCompactionThread(): Timer = {
     val timer = new Timer()
     timer.schedule(() => inner.triggerCompact(), 0, 50)
+    timer
+  }
+
+  private def spawnManifestCompactionThread(): Timer = {
+    val timer = new Timer()
+    timer.schedule(() => inner.triggerManifestCompact(), 0, 100)
     timer
   }
 

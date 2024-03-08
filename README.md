@@ -23,18 +23,19 @@ Configuration lookup order:
 4. config file specified by JVM system properties `config.file` or operation system environment `TINY_LSM_CONFIG_FILE`,
    using JVM system properties key
 
-| environment key              | system properties name | meaning                                                                      | default value             |
-|------------------------------|------------------------|------------------------------------------------------------------------------|---------------------------|
-| TINY_LSM_PORT                | port                   |                                                                              | 9527                      |
-| TINY_LSM_LISTEN              | listen                 |                                                                              | 0.0.0.0                   |
-| TINY_LSM_BLOCK_SIZE          | block.size             | Block size in bytes                                                          | 4096                      |
-| TINY_LSM_TARGET_SST_SIZE     | target.sst.size        | SST size in bytes, also the approximate memtable capacity limit              | 2 << 20 (2MB)             |
-| TINY_LSM_MEMTABLE_NUM        | memtable.num           | Maximum number of memtables in memory, flush to L0 when exceeding this limit | 50                        |
-| TINY_LSM_ENABLE_WAL          | enable.wal             |                                                                              | true                      |
-| TINY_LSM_SERIALIZABLE        | serializable           |                                                                              | false                     |
-| TINY_LSM_DATA_DIR            | data.dir               |                                                                              | /etc/tinylsm/data         |
-| TINY_LSM_CONFIG_FILE         | config.file            |                                                                              | /etc/tinylsm/tinylsm.conf |
-| TINY_LSM_COMPACTION_STRATEGY | compaction.strategy    | leveled/tiered/simple/full/none                                              | leveled                   |
+| environment key               | system properties name | meaning                                                                      | default value             |
+|-------------------------------|------------------------|------------------------------------------------------------------------------|---------------------------|
+| TINY_LSM_PORT                 | port                   |                                                                              | 9527                      |
+| TINY_LSM_LISTEN               | listen                 |                                                                              | 0.0.0.0                   |
+| TINY_LSM_BLOCK_SIZE           | block.size             | Block size in bytes                                                          | 4096                      |
+| TINY_LSM_TARGET_SST_SIZE      | target.sst.size        | SST size in bytes, also the approximate memtable capacity limit              | 2 << 20 (2MB)             |
+| TINY_LSM_TARGET_MANIFEST_SIZE | target.manifest.size   | Manifest size in bytes                                                       | 1 << 20 (1MB)             |
+| TINY_LSM_MEMTABLE_NUM         | memtable.num           | Maximum number of memtables in memory, flush to L0 when exceeding this limit | 50                        |
+| TINY_LSM_ENABLE_WAL           | enable.wal             |                                                                              | true                      |
+| TINY_LSM_SERIALIZABLE         | serializable           |                                                                              | false                     |
+| TINY_LSM_DATA_DIR             | data.dir               |                                                                              | /etc/tinylsm/data         |
+| TINY_LSM_CONFIG_FILE          | config.file            |                                                                              | /etc/tinylsm/tinylsm.conf |
+| TINY_LSM_COMPACTION_STRATEGY  | compaction.strategy    | leveled/tiered/simple/full/none                                              | leveled                   |
 
 Compaction strategy config detail as below.
 

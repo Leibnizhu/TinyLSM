@@ -2,7 +2,7 @@ package io.github.leibnizhu.tinylsm
 
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import io.github.leibnizhu.tinylsm.TestUtils.{compactionOption, tempDir,dumpFilesInDir}
+import io.github.leibnizhu.tinylsm.TestUtils.{compactionOption, dumpFilesInDir, tempDir}
 import io.github.leibnizhu.tinylsm.compact.*
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{LeveledCompactionOptions, SimpleCompactionOptions, TieredCompactionOptions}
 import org.scalatest.funsuite.AnyFunSuite
@@ -77,7 +77,14 @@ class ManifestTest extends AnyFunSuite {
 
   private def manifestIntegrationTest(options: CompactionOptions): Unit = {
     val rootDir = tempDir()
-    val storage = TinyLsm(rootDir, compactionOption(options))
+    val storage = TinyLsm(rootDir, LsmStorageOptions(
+      4096,
+      1 << 20,
+      1024,
+      2,
+      options,
+      false,
+      false))
     for (i <- 0 to 20) {
       storage.put("0", s"v$i")
       if (i % 2 == 0) {

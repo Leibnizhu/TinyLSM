@@ -12,6 +12,7 @@ enum Config(private val name: String, val defaultVal: String) {
   case Host extends Config("LISTEN", "0.0.0.0")
   case BlockSize extends Config("BLOCK_SIZE", "4096")
   case TargetSstSize extends Config("TARGET_SST_SIZE", (2 << 20).toString)
+  case TargetManifestSize extends Config("TARGET_MANIFEST_SIZE", (1 << 20).toString)
   case MemTableLimitNum extends Config("MEMTABLE_NUM", "50")
   case EnableWal extends Config("ENABLE_WAL", "true")
   case Serializable extends Config("SERIALIZABLE", "true")

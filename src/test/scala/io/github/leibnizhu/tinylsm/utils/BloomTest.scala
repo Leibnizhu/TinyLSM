@@ -1,7 +1,6 @@
 package io.github.leibnizhu.tinylsm.utils
 
 import io.github.leibnizhu.tinylsm.byteArrayHash
-import io.github.leibnizhu.tinylsm.utils.Bloom
 import org.scalatest.funsuite.AnyFunSuite
 
 import scala.collection.mutable.ListBuffer

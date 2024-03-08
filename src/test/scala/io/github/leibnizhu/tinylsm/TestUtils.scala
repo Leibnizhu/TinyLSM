@@ -89,6 +89,7 @@ object TestUtils {
   def compactionOption(compactOpt: CompactionOptions, enableWal: Boolean = false): LsmStorageOptions = LsmStorageOptions(
     4096,
     1 << 20,
+    1 << 20,
     2,
     compactOpt,
     enableWal,
