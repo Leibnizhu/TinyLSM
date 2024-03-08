@@ -1,6 +1,6 @@
 scalaVersion := "3.3.1"
 name := "ScalaTinyLsm"
-version := "0.2"
+version := "0.3-SNAPSHOT"
 parallelExecution in Test := false
 
 libraryDependencies ++= Seq(
