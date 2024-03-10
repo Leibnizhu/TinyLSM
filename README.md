@@ -93,13 +93,14 @@ command) and start TinyLsm.
 Make sure `docker` is installed, and then execute:
 
 ```shell
-docker build . -f Dockerfile -t ${DOCKER_IMAGE_TAG:-tiny-lsm:0.0.1} --network=host --target prod
+docker build . -f Dockerfile -t tiny-lsm:0.2 --network=host --target prod
 ```
 
 ### Run
 
 ```shell
-docker run --rm -d --name tinylsm ${DOCKER_IMAGE_TAG:-tiny-lsm:0.0.1}
+# or use leibniz/tiny-lsm:0.2 from docker hub
+docker run --rm -d --name tinylsm -v /path/to/tinylsm:/etc/tinylsm tiny-lsm:0.2
 docker exec -it tinylsm bash
 
 # in container's bash

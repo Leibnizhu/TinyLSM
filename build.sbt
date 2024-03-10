@@ -1,7 +1,7 @@
 scalaVersion := "3.3.1"
 name := "ScalaTinyLsm"
 version := "0.3-SNAPSHOT"
-parallelExecution in Test := false
+Test / parallelExecution := false
 
 libraryDependencies ++= Seq(
   "com.lihaoyi" %% "cask" % "0.9.2" % "compile",
@@ -22,9 +22,9 @@ lazy val app = (project in file("."))
     assembly / assemblyJarName := "TinyLsmAssembly.jar",
   )
 
-assemblyMergeStrategy in assembly := {
+assembly / assemblyMergeStrategy := {
   case x if x.endsWith("module-info.class") => MergeStrategy.discard
   case x =>
-    val oldStrategy = (assemblyMergeStrategy in assembly).value
+    val oldStrategy = (assembly / assemblyMergeStrategy).value
     oldStrategy(x)
 }
