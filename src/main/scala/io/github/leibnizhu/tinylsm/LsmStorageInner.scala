@@ -154,7 +154,7 @@ private[tinylsm] class LsmStorageInner(
     })
     // 合成sst迭代器
     val sstIter = TwoMergeIterator(MergeIterator(l0SsTableIters), MergeIterator(levelIters))
-    if (sstIter.isValid && sstIter.key().sameElements(key) && !sstIter.value().sameElements(DELETE_TOMBSTONE)) {
+    if (sstIter.isValid && sstIter.key().equals(key) && !sstIter.value().sameElements(DELETE_TOMBSTONE)) {
       // l0 sst 有效、有当前查询的key、且值不为空，即找到了value
       return Some(sstIter.value())
     }
@@ -162,7 +162,7 @@ private[tinylsm] class LsmStorageInner(
   }
 
 
-  def get(key: String): Option[String] = get(key.getBytes).map(new String(_))
+  def get(key: String): Option[String] = get(MemTableKey(key.getBytes)).map(new String(_))
 
   /**
    * 插入或更新
@@ -172,7 +172,7 @@ private[tinylsm] class LsmStorageInner(
    */
   def put(key: MemTableKey, value: MemTableValue): Unit = writeBatch(Array(WriteBatchRecord.Put(key, value)))
 
-  def put(key: String, value: String): Unit = put(key.getBytes, value.getBytes)
+  def put(key: String, value: String): Unit = put(MemTableKey(key.getBytes), value.getBytes)
 
   /**
    * 按key删除
@@ -181,7 +181,7 @@ private[tinylsm] class LsmStorageInner(
    */
   def delete(key: MemTableKey): Unit = writeBatch(Array(WriteBatchRecord.Del(key)))
 
-  def delete(key: String): Unit = delete(key.getBytes)
+  def delete(key: String): Unit = delete(MemTableKey(key.getBytes))
 
   def writeBatch(batch: Seq[WriteBatchRecord]): Unit = for (record <- batch) {
     record match
@@ -391,13 +391,13 @@ private[tinylsm] class LsmStorageInner(
                            sstBegin: MemTableKey, sstEnd: MemTableKey): Boolean = {
     // 判断scan的右边界如果小于SST的最左边第一个key，那么这个sst肯定不包含这个scan范围
     userEnd match
-      case Excluded(r: MemTableKey) if util.Arrays.compare(r, sstBegin) <= 0 => return false
-      case Included(r: MemTableKey) if util.Arrays.compare(r, sstBegin) < 0 => return false
+      case Excluded(r: MemTableKey) if r.compareTo(sstBegin) <= 0 => return false
+      case Included(r: MemTableKey) if r.compareTo(sstBegin) < 0 => return false
       case _ =>
     // 判断scan的左边界如果大于SST的最右边最后一个key，那么这个sst肯定不包含这个scan范围
     userBegin match
-      case Excluded(r: MemTableKey) if util.Arrays.compare(r, sstEnd) >= 0 => return false
-      case Included(r: MemTableKey) if util.Arrays.compare(r, sstEnd) > 0 => return false
+      case Excluded(r: MemTableKey) if r.compareTo(sstEnd) >= 0 => return false
+      case Included(r: MemTableKey) if r.compareTo(sstEnd) > 0 => return false
       case _ =>
     true
   }
@@ -406,7 +406,7 @@ private[tinylsm] class LsmStorageInner(
     val itr = scan(Unbounded(), Unbounded())
     print("Storage content: ")
     while (itr.isValid) {
-      print(s"${new String(itr.key())} => ${new String(itr.value())}, ")
+      print(s"${new String(itr.key().bytes)}@${itr.key().ts} => ${new String(itr.value())}, ")
       itr.next()
     }
     println()

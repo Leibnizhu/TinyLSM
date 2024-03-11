@@ -2,7 +2,7 @@ package io.github.leibnizhu.tinylsm.iterator
 
 import io.github.leibnizhu.tinylsm.TestUtils.*
 import io.github.leibnizhu.tinylsm.iterator.{MemTableIterator, *}
-import io.github.leibnizhu.tinylsm.{ByteArrayKey, MemTableEntry}
+import io.github.leibnizhu.tinylsm.{MemTableEntry}
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.Entry
 import org.scalatest.funsuite.AnyFunSuite
@@ -144,9 +144,5 @@ class MergeIteratorTest extends AnyFunSuite {
       MemTableIterator(errIter)))
     // your implementation should correctly throw an error instead of panic
     expectIteratorError(iter)
-  }
-
-  private def entry(k: String, v: String): MemTableEntry = {
-    Entry(ByteArrayKey(k.getBytes), v.getBytes)
   }
 }

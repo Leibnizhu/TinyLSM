@@ -15,13 +15,13 @@ import scala.jdk.CollectionConverters.*
  * 其大小增长到 LsmStorageOptions.targetSstSize 之后，需要冻结，并flush到磁盘
  *
  * @param id              MemTable唯一标识，应该是自增的，或至少是单调增的
- * @param map             内部存储的Map，Key用了ByteArrayKey，自定义了有效的equals方法；否则如果用Array[Byte]，equals和hashCode使用的是对象ID
+ * @param map             内部存储的Map，Key用了 MemTableKey，自定义了有效的equals方法；否则如果用Array[Byte]，equals和hashCode使用的是对象ID
  * @param wal             可选的WriteAheadLog
  * @param approximateSize 记录当前的预估大小
  */
 case class MemTable(
                      id: Int,
-                     map: ConcurrentSkipListMap[ByteArrayKey, MemTableValue],
+                     map: ConcurrentSkipListMap[MemTableKey, MemTableValue],
                      wal: Option[WriteAheadLog],
                      approximateSize: AtomicInteger) {
 
@@ -32,7 +32,7 @@ case class MemTable(
    * @return 不存在Key则为None，如果put进来是空Array返回也是空Array，注意区分两种
    */
   def get(key: MemTableKey): Option[MemTableValue] = {
-    Option(map.get(ByteArrayKey(key)))
+    Option(map.get(key))
   }
 
   /**
@@ -43,7 +43,7 @@ case class MemTable(
    */
   def put(key: MemTableKey, value: MemTableValue): Unit = {
     val estimateSize = key.length + (if (value == null) 0 else value.length)
-    map.put(ByteArrayKey(key), value)
+    map.put(key, value)
     approximateSize.addAndGet(estimateSize)
     wal.foreach(_wal => _wal.put(key, value))
   }
@@ -59,15 +59,15 @@ case class MemTable(
     case (Unbounded(), Unbounded()) =>
       new MemTableIterator(map.entrySet().iterator().asScala)
     case (Unbounded(), Bounded(r: MemTableKey, inclusive: Boolean)) =>
-      new MemTableIterator(map.headMap(ByteArrayKey(r), inclusive).entrySet().iterator().asScala)
+      new MemTableIterator(map.headMap(r, inclusive).entrySet().iterator().asScala)
     case (Bounded(l: MemTableKey, inclusive: Boolean), Unbounded()) =>
-      new MemTableIterator(map.tailMap(ByteArrayKey(l), inclusive).entrySet().iterator().asScala)
+      new MemTableIterator(map.tailMap(l, inclusive).entrySet().iterator().asScala)
     case (Bounded(l: MemTableKey, il: Boolean), Bounded(r: MemTableKey, ir: Boolean)) =>
-      new MemTableIterator(map.subMap(ByteArrayKey(l), il, ByteArrayKey(r), ir).entrySet().iterator().asScala)
+      new MemTableIterator(map.subMap(l, il, r, ir).entrySet().iterator().asScala)
     case (_, _) => null
 
   def flush(builder: SsTableBuilder): Unit = {
-    map.forEach((k, v) => builder.add(k.bytes, v))
+    map.forEach((k, v) => builder.add(k, v))
   }
 
   def syncWal(): Unit = wal.foreach(_.sync())
@@ -85,51 +85,13 @@ object MemTable {
    * @return MemTable实例
    */
   def apply(id: Int, walPath: Option[File] = None): MemTable = new MemTable(id,
-    new ConcurrentSkipListMap[ByteArrayKey, MemTableValue](),
+    new ConcurrentSkipListMap[MemTableKey, MemTableValue](),
     walPath.map(p => WriteAheadLog(p)),
     AtomicInteger(0))
 
   def recoverFromWal(id: Int, walPath: File): MemTable = {
-    val map = new ConcurrentSkipListMap[ByteArrayKey, MemTableValue]()
+    val map = new ConcurrentSkipListMap[MemTableKey, MemTableValue]()
     val wal = new WriteAheadLog(walPath).recover(map)
     new MemTable(id, map, Some(wal), AtomicInteger(0))
   }
-}
-
-case class ByteArrayKey(bytes: MemTableKey) extends Comparable[ByteArrayKey] {
-  override def compareTo(other: ByteArrayKey): Int = {
-    util.Arrays.compare(this.bytes, other.bytes)
-  }
-
-  override def hashCode(): Int = byteArrayHash(this.bytes)
-
-  override def equals(other: Any): Boolean = other match
-    case ByteArrayKey(bs) => bs.sameElements(this.bytes)
-    case _ => false
-
-  override def toString: String = bytes.mkString("[", ", ", "]")
-
-  /**
-   * 如果有边界值，则大于(等于)边界
-   *
-   * @param lower 下边界
-   * @return 是否满足下边界
-   */
-  def lowerBound(lower: Bound): Boolean = lower match
-    case Unbounded() => true
-    case Excluded(bound: MemTableKey) => this.compareTo(ByteArrayKey(bound)) > 0
-    case Included(bound: MemTableKey) => this.compareTo(ByteArrayKey(bound)) >= 0
-    case _ => false
-
-  /**
-   * 如果有边界值，则小于(等于)边界
-   *
-   * @param upper 上边界
-   * @return 是否满足上边界
-   */
-  def upperBound(upper: Bound): Boolean = upper match
-    case Unbounded() => true
-    case Excluded(bound: MemTableKey) => this.compareTo(ByteArrayKey(bound)) < 0
-    case Included(bound: MemTableKey) => this.compareTo(ByteArrayKey(bound)) <= 0
-    case _ => false
 }

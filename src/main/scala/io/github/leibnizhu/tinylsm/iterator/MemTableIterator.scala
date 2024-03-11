@@ -16,7 +16,7 @@ class MemTableIterator(val iterator: Iterator[MemTableEntry])
    * 当前key
    */
   override def key(): MemTableKey = {
-    currentEntry.getKey.bytes
+    currentEntry.getKey
   }
 
   /**

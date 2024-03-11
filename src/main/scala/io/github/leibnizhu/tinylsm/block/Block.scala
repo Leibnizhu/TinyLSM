@@ -14,7 +14,7 @@ import io.github.leibnizhu.tinylsm.utils.{ByteArrayReader, ByteArrayWriter}
  * -----------------------------------------------------------------------
  * |                           Entry #1                            | ... |
  * -----------------------------------------------------------------------
- * | key_len (2B) | key (keylen) | value_len (2B) | value (varlen) | ... |
+ * | key_overlap_len (u16) | remaining_key_len (u16) | key (remaining_key_len) | timestamp (u64) | value_len (2B) | value (varlen) | ... |
  * -----------------------------------------------------------------------
  */
 class Block(val data: Array[Byte], val offsets: Array[Int]) {
@@ -37,7 +37,8 @@ class Block(val data: Array[Byte], val offsets: Array[Int]) {
     val overlapLen = buffer.readUint16()
     assert(overlapLen == 0)
     val keyLen = buffer.readUint16()
-    buffer.readBytes(keyLen)
+    val keyBytes = buffer.readBytes(keyLen)
+    MemTableKey(keyBytes, buffer.readUint64())
   }
 }
 

@@ -27,6 +27,17 @@ object ByteTransOps {
     (i & 0xFF).asInstanceOf[Byte]
   )
 
+  def longToByteArray(l: Long): Array[Byte] = Array(
+    ((l >> 56) & 0xFF).asInstanceOf[Byte],
+    ((l >> 48) & 0xFF).asInstanceOf[Byte],
+    ((l >> 40) & 0xFF).asInstanceOf[Byte],
+    ((l >> 32) & 0xFF).asInstanceOf[Byte],
+    ((l >> 24) & 0xFF).asInstanceOf[Byte],
+    ((l >> 16) & 0xFF).asInstanceOf[Byte],
+    ((l >> 8) & 0xFF).asInstanceOf[Byte],
+    (l & 0xFF).asInstanceOf[Byte]
+  )
+
   def bytesToInt(bytes: Array[Byte]): Int = {
     bytesToInt(bytes(0), bytes(1), bytes(2), bytes(3))
   }
@@ -37,5 +48,17 @@ object ByteTransOps {
     val safeB1: Int = if (b1 < 0) b1 + 256 else b1
     val safeB0: Int = if (b0 < 0) b0 + 256 else b0
     (safeB3 << 24) + (safeB2 << 16) + (safeB1 << 8) + safeB0
+  }
+
+  def bytesToLong(b7: Byte, b6: Byte, b5: Byte, b4: Byte, b3: Byte, b2: Byte, b1: Byte, b0: Byte): Int = {
+    val safeB7: Int = if (b7 < 0) b7 + 256 else b7
+    val safeB6: Int = if (b6 < 0) b6 + 256 else b6
+    val safeB5: Int = if (b5 < 0) b5 + 256 else b5
+    val safeB4: Int = if (b4 < 0) b4 + 256 else b4
+    val safeB3: Int = if (b3 < 0) b3 + 256 else b3
+    val safeB2: Int = if (b2 < 0) b2 + 256 else b2
+    val safeB1: Int = if (b1 < 0) b1 + 256 else b1
+    val safeB0: Int = if (b0 < 0) b0 + 256 else b0
+    (safeB7 << 56) + (safeB6 << 48) + (safeB5 << 40) + (safeB4 << 32) + (safeB3 << 24) + (safeB2 << 16) + (safeB1 << 8) + safeB0
   }
 }

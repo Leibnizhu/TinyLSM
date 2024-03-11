@@ -57,7 +57,7 @@ class MergeIterator[I <: MemTableStorageIterator]
     val toOffer = ArrayBuffer[HeapWrapper[I]]()
     while (itersItr.hasNext) {
       val itr: HeapWrapper[I] = itersItr.next()
-      if (curIter != itr && curKey.sameElements(itr.key())) {
+      if (curIter != itr && curKey.equals(itr.key())) {
         itersItr.remove()
         itr.next()
         if (itr.isValid) {
@@ -125,7 +125,7 @@ case class HeapWrapper[I <: MemTableStorageIterator](index: Int, itr: MemTableSt
 
   override def compareTo(other: HeapWrapper[I]): Int = {
     // 先按key进行比较，同key的时候更新（index更小的）的优先
-    val keyCompare = java.util.Arrays.compare(this.itr.key(), other.itr.key())
+    val keyCompare = this.itr.key().compareTo(other.itr.key())
     if (keyCompare == 0) {
       // 小的index就是更新的迭代器
       this.index - other.index
@@ -134,13 +134,13 @@ case class HeapWrapper[I <: MemTableStorageIterator](index: Int, itr: MemTableSt
     }
   }
 
-  override def hashCode(): Int = MurmurHash3.seqHash(Array(index) ++ itr.key())
+  override def hashCode(): Int = MurmurHash3.seqHash(index +: itr.key().bytes)
 
   override def equals(other: Any): Boolean = other match
     case otherHw: HeapWrapper[?] => otherHw.index == this.index &&
-      otherHw.itr.key().sameElements(this.itr.key())
+      otherHw.itr.key().equals(this.itr.key())
     case _ => false
 
   override def toString: String = if (itr.isValid)
-    s"Index=$index, current: ${new String(itr.key())} => ${new String(itr.value())}})" else s"Index=$index, current invalid"
+    s"Index=$index, current: ${itr.key()} => ${new String(itr.value())}})" else s"Index=$index, current invalid"
 }

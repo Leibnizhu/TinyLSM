@@ -31,13 +31,13 @@ class TwoMergeIterator[A <: MemTableStorageIterator, B <: MemTableStorageIterato
       true
     } else {
       // a b 都可用，那么用key较小的。调用 useA() 之前调用 skipB() 则不会出现两个key相等的情况
-      util.Arrays.compare(a.key(), b.key()) < 0
+      a.key().compareTo( b.key()) < 0
     }
   }
 
   private def skipB(): Unit = {
     // 如果 a b 都可用且key相同，那么优先用a的，将b的跳过
-    if (a.isValid && b.isValid && a.key().sameElements(b.key())) {
+    if (a.isValid && b.isValid && a.key().equals(b.key())) {
       b.next()
     }
   }

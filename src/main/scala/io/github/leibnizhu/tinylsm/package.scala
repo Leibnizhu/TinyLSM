@@ -10,19 +10,21 @@ package object tinylsm {
   val SIZE_OF_U16 = 2
   // Int的byte数
   val SIZE_OF_INT = 4
+  // Long 的byte数
+  val SIZE_OF_LONG = 8
 
   // 已删除的key对应的value
   val DELETE_TOMBSTONE: Array[Byte] = Array()
 
-  type MemTableKey = Array[Byte]
+
   type MemTableValue = Array[Byte]
-  type MemTableEntry = java.util.Map.Entry[ByteArrayKey, MemTableValue]
+  type MemTableEntry = java.util.Map.Entry[MemTableKey, MemTableValue]
   type MemTableStorageIterator = StorageIterator[MemTableKey, MemTableValue]
   type Level = (Int, List[Int])
 
   implicit val keyComparator: Comparator[MemTableKey] = new java.util.Comparator[MemTableKey]() {
     override def compare(o1: MemTableKey, o2: MemTableKey): Int =
-      java.util.Arrays.compare(o1, o2)
+      java.util.Arrays.compare(o1.bytes, o2.bytes)
   }
 
   def byteArrayHash(bytes: Array[Byte]): Int = {

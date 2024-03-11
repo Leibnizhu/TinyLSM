@@ -1,6 +1,7 @@
 package io.github.leibnizhu.tinylsm.utils
 
-import io.github.leibnizhu.tinylsm.utils.ByteTransOps.{intLow2Bytes, intToByteArray}
+import io.github.leibnizhu.tinylsm.MemTableKey
+import io.github.leibnizhu.tinylsm.utils.ByteTransOps.{intLow2Bytes, intToByteArray, longToByteArray}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -30,9 +31,18 @@ class ByteArrayWriter {
     this
   }
 
+  def putUint64(l: Long): ByteArrayWriter = {
+    buffer.appendAll(longToByteArray(l))
+    this
+  }
+
   def putBytes(bytes: Array[Byte]): ByteArrayWriter = {
     buffer.appendAll(bytes)
     this
+  }
+  
+  def putKey(key: MemTableKey): ByteArrayWriter = {
+    this.putBytes(key.bytes).putUint64(key.ts)
   }
 
   def putByte(byte: Byte): ByteArrayWriter = {

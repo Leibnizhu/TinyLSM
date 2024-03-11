@@ -1,7 +1,7 @@
 package io.github.leibnizhu.tinylsm.iterator
 
 import io.github.leibnizhu.tinylsm.TestUtils.tempDir
-import io.github.leibnizhu.tinylsm.{SsTable, SsTableBuilder}
+import io.github.leibnizhu.tinylsm.{MemTableKey, SsTable, SsTableBuilder}
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File
@@ -13,21 +13,21 @@ class SstConcatIteratorTest extends AnyFunSuite {
     val lsmDir = tempDir()
     val ssTables = (1 to 10).map(i => generateConcatSst(i * 10, (i + 1) * 10, lsmDir, i)).toList
     for (key <- 0 until 120) {
-      val iter = SstConcatIterator.createAndSeekToKey(ssTables, "%05d".format(key).getBytes)
+      val iter = SstConcatIterator.createAndSeekToKey(ssTables, MemTableKey.applyForTest("%05d".format(key)))
       if (key < 10) {
         assert(iter.isValid)
-        assertResult("00010")(new String(iter.key()))
+        assertResult("00010")(new String(iter.key().bytes))
       } else if (key >= 110) {
         assert(!iter.isValid)
       } else {
         assert(iter.isValid)
-        assertResult("%05d".format(key))(new String(iter.key()))
+        assertResult("%05d".format(key))(new String(iter.key().bytes))
       }
     }
 
     val iter = SstConcatIterator.createAndSeekToFirst(ssTables)
     assert(iter.isValid)
-    assertResult("00010")(new String(iter.key()))
+    assertResult("00010")(new String(iter.key().bytes))
   }
 
   private def generateConcatSst(startKey: Int, endKey: Int, dir: File, id: Int): SsTable = {

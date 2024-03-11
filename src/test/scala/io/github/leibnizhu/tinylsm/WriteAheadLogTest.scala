@@ -14,15 +14,15 @@ class WriteAheadLogTest extends AnyFunSuite {
     val walFile = new File(tempDir(), System.currentTimeMillis() + ".wal")
     val wal = WriteAheadLog(walFile)
     for (i <- 0 until 200) {
-      wal.put("key_%03d".format(i).getBytes, "value_%03d".format(i).getBytes)
+      wal.put(MemTableKey.applyForTest("key_%03d".format(i)), "value_%03d".format(i).getBytes)
     }
     wal.sync()
     Thread.sleep(100)
 
-    val map = new util.HashMap[ByteArrayKey, MemTableValue]()
+    val map = new util.HashMap[MemTableKey, MemTableValue]()
     val recovered = WriteAheadLog(walFile).recover(map)
     for (i <- 0 until 200) {
-      assertResult("value_%03d".format(i))(new String(map.get(ByteArrayKey("key_%03d".format(i).getBytes))))
+      assertResult("value_%03d".format(i))(new String(map.get(MemTableKey.applyForTest("key_%03d".format(i)))))
     }
   }
 

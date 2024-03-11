@@ -68,7 +68,7 @@ object SstConcatIterator {
 
   def createAndSeekToKey(ssTables: List[SsTable], key: MemTableKey): SstConcatIterator = {
     checkSstValid(ssTables)
-    val idx = partitionPoint(ssTables, sst => util.Arrays.compare(sst.firstKey, key) <= 0)
+    val idx = partitionPoint(ssTables, sst => sst.firstKey.compareTo(key) <= 0)
     if (idx >= ssTables.length) {
       // 没找到包含key的sst
       return new SstConcatIterator(None, ssTables.length, ssTables)
@@ -80,11 +80,11 @@ object SstConcatIterator {
 
   private def checkSstValid(ssTables: List[SsTable]): Unit = {
     for (sst <- ssTables) {
-      assert(util.Arrays.compare(sst.firstKey, sst.lastKey) <= 0)
+      assert(sst.firstKey.compareTo(sst.lastKey) <= 0)
     }
     if (ssTables.nonEmpty) {
       for (i <- 0 until ssTables.length - 1) {
-        assert(util.Arrays.compare(ssTables(i).lastKey, ssTables(i + 1).firstKey) < 0)
+        assert(ssTables(i).lastKey.compareTo( ssTables(i + 1).firstKey) < 0)
       }
     }
   }
@@ -97,7 +97,7 @@ object SstConcatIterator {
     // 不包含左边界，则先跳到左边界的key，如果跳完之后实际的key等于左边界，由于不包含边界所以跳到下个值
     case Excluded(l: MemTableKey) =>
       val iter = SstConcatIterator.createAndSeekToKey(ssTables, l)
-      if (iter.isValid && iter.key().sameElements(l)) {
+      if (iter.isValid && iter.key().equals(l)) {
         iter.next()
       }
       iter

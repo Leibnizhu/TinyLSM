@@ -48,7 +48,7 @@ trait StorageIterator[K, V] {
     while (isValid) {
       (key(), value()) match
         case (curKey: MemTableKey, curValue: MemTableValue) =>
-          sj.add(new String(curKey))
+          sj.add(curKey.toString)
           sj.add(new String(curValue))
         case _ =>
       next()

@@ -20,9 +20,9 @@ object TestUtils {
     for (expectEntry <- expect) {
       assert(actual.isValid)
       if (verbose) {
-        println(s"Expect: ${new String(expectEntry.getKey.bytes)} => ${new String(expectEntry.getValue)}, Actual: ${new String(actual.key())} => ${new String(actual.value())}")
+        println(s"Expect: ${new String(expectEntry.getKey.bytes)} => ${new String(expectEntry.getValue)}, Actual: ${actual.key()} => ${new String(actual.value())}")
       }
-      assertResult(new String(expectEntry.getKey.bytes))(new String(actual.key()))
+      assertResult(new String(expectEntry.getKey.bytes))(new String(actual.key().bytes))
       assertResult(new String(expectEntry.getValue))(new String(actual.value()))
       actual.next()
     }
@@ -38,7 +38,7 @@ object TestUtils {
   }
 
   def entry(k: String, v: String): MemTableEntry = {
-    Entry(ByteArrayKey(k.getBytes), v.getBytes)
+    Entry(MemTableKey(k.getBytes, 0L), v.getBytes)
   }
 
   private val tempDirs = new ListBuffer[File]
@@ -63,7 +63,7 @@ object TestUtils {
   def generateSst(id: Int, path: File, data: Seq[MemTableEntry], blockCache: Option[BlockCache]): SsTable = {
     val builder = SsTableBuilder(128)
     for (entry <- data) {
-      builder.add(entry.getKey.bytes, entry.getValue)
+      builder.add(entry.getKey, entry.getValue)
     }
     builder.build(id, blockCache, path)
   }

@@ -1,7 +1,7 @@
 package io.github.leibnizhu.tinylsm.block
 
 import io.github.leibnizhu.tinylsm.utils.{ByteArrayReader, ByteArrayWriter}
-import io.github.leibnizhu.tinylsm.{MemTableKey, SIZE_OF_INT, SIZE_OF_U16}
+import io.github.leibnizhu.tinylsm.{MemTableKey, SIZE_OF_INT, SIZE_OF_LONG, SIZE_OF_U16}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.hashing.MurmurHash3
@@ -20,15 +20,15 @@ class BlockMeta(
     case that: BlockMeta =>
       that.canEqual(this) &&
         offset == that.offset &&
-        (firstKey sameElements that.firstKey) &&
-        (lastKey sameElements that.lastKey)
+        (firstKey.equals(that.firstKey)) &&
+        (lastKey.equals(that.lastKey))
     case _ => false
 
   override def hashCode(): Int =
     val state = Seq(offset, firstKey, lastKey)
     state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
 
-  override def toString = s"BlockMeta($offset: ${new String(firstKey)} => ${new String(lastKey)})"
+  override def toString = s"BlockMeta($offset: $firstKey => $lastKey)"
 }
 
 object BlockMeta {
@@ -48,11 +48,16 @@ object BlockMeta {
       estimateSize += SIZE_OF_U16
       // firstKey 实际内容
       estimateSize += meta.firstKey.length
+      // firstKey 时间戳
+      estimateSize += SIZE_OF_LONG
       // lastKey 的长度
       estimateSize += SIZE_OF_U16
       // lastKey 实际内容
       estimateSize += meta.lastKey.length
+      // lastKey 时间戳
+      estimateSize += SIZE_OF_LONG
     }
+    // TODO 最大的timestamp
     // 最后的hash
     estimateSize += SIZE_OF_INT
     // 预先给 ArrayBuffer 扩容
@@ -64,9 +69,9 @@ object BlockMeta {
     for (meta <- blockMetas) {
       buffer.putUint32(meta.offset)
       buffer.putUint16(meta.firstKey.length)
-      buffer.putBytes(meta.firstKey)
+      buffer.putKey(meta.firstKey)
       buffer.putUint16(meta.lastKey.length)
-      buffer.putBytes(meta.lastKey)
+      buffer.putKey(meta.lastKey)
     }
     val metasCheckSum = MurmurHash3.seqHash(buffer.slice(metaOffset + SIZE_OF_INT, buffer.length))
     buffer.putUint32(metasCheckSum)
@@ -90,9 +95,9 @@ object BlockMeta {
       // 按写入顺序读取
       val offset = buffer.readUint32()
       val firstKeyLen = buffer.readUint16()
-      val firstKey = buffer.readBytes(firstKeyLen)
+      val firstKey = MemTableKey(buffer.readBytes(firstKeyLen), buffer.readUint64())
       val lasKeyLen = buffer.readUint16()
-      val lastKey = buffer.readBytes(lasKeyLen)
+      val lastKey = MemTableKey(buffer.readBytes(lasKeyLen), buffer.readUint64())
       blockMetas.addOne(BlockMeta(offset, firstKey, lastKey))
     }
     // 校验hash

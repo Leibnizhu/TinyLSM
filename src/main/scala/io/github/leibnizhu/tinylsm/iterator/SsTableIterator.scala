@@ -72,7 +72,7 @@ object SsTableIterator {
     // 不包含左边界，则先跳到左边界的key，如果跳完之后实际的key等于左边界，由于不包含边界所以跳到下个值
     case Excluded(l: MemTableKey) =>
       val iter = SsTableIterator.createAndSeekToKey(sst, l)
-      if (iter.isValid && iter.key().sameElements(l)) {
+      if (iter.isValid && iter.key().equals(l)) {
         iter.next()
       }
       iter

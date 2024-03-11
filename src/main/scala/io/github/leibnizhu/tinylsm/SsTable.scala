@@ -66,7 +66,7 @@ class SsTable(val file: FileObject,
 
   def findBlockIndex(targetKey: MemTableKey): Int = {
     // 二分查找，找到最后（数组的右边）一个 meta.firstKey <= targetKey 的 meta 的索引
-    partitionPoint(blockMeta, meta => util.Arrays.compare(meta.firstKey, targetKey) <= 0)
+    partitionPoint(blockMeta, meta => meta.firstKey.compareTo(targetKey) <= 0)
   }
 
   def numOfBlocks(): Int = blockMeta.length
@@ -82,11 +82,11 @@ class SsTable(val file: FileObject,
    * @return 这个key是否可能在当前sst里面
    */
   def mayContainsKey(key: MemTableKey): Boolean = {
-    val keyInRange = util.Arrays.compare(firstKey, key) <= 0 && util.Arrays.compare(key, lastKey) <= 0
+    val keyInRange = firstKey.compareTo(key) <= 0 && key.compareTo(lastKey) <= 0
     if (keyInRange) {
       if (bloom.isDefined) {
         // 如果有布隆过滤器，则以布隆过滤器为准（说存在只是可能存在，说不存在是肯定不存在）
-        bloom.get.mayContains(byteArrayHash(key))
+        bloom.get.mayContains(key.keyHash())
       } else {
         // 没有布隆过滤器，则以key范围为准
         true
@@ -100,7 +100,7 @@ class SsTable(val file: FileObject,
     val itr = SsTableIterator.createAndSeekToFirst(this)
     print(s"SsTable(ID=$id) content: ")
     while (itr.isValid) {
-      print(s"${new String(itr.key())} => ${new String(itr.value())}, ")
+      print(s"${new String(itr.key().bytes)}@${itr.key().ts} => ${new String(itr.value())}, ")
       itr.next()
     }
     println()
@@ -127,8 +127,8 @@ object SsTable {
       blockMeta = blockMeta,
       blockMetaOffset = metaOffset,
       blockCache = blockCache,
-      firstKey = blockMeta.head.firstKey.clone,
-      lastKey = blockMeta.last.lastKey.clone,
+      firstKey = blockMeta.head.firstKey.copy(),
+      lastKey = blockMeta.last.lastKey.copy(),
       bloom = Some(bloomFilter),
       maxTimestamp = 0
     )
@@ -175,7 +175,7 @@ class SsTableBuilder(val blockSize: Int) {
     if (firstKey.isEmpty) {
       firstKey = Some(key)
     }
-    keyHashes.addOne(byteArrayHash(key))
+    keyHashes.addOne(key.keyHash())
     // add可能因为BlockBuilder满了导致失败
     if (builder.add(key, value)) {
       lastKey = Some(key)
@@ -189,7 +189,7 @@ class SsTableBuilder(val blockSize: Int) {
     lastKey = Some(key)
   }
 
-  def add(key: String, value: String): Unit = add(key.getBytes, value.getBytes)
+  def add(key: String, value: String): Unit = add(MemTableKey(key.getBytes), value.getBytes)
 
   /**
    * 一个Block写完、满了后，的处理
@@ -200,7 +200,7 @@ class SsTableBuilder(val blockSize: Int) {
     builder = BlockBuilder(blockSize)
     // 也可以用B+树，而非排序的block
     val encodedBlock = prevBuilder.build().encode()
-    meta.addOne(new BlockMeta(data.length, firstKey.get.clone(), lastKey.get.clone()))
+    meta.addOne(new BlockMeta(data.length, firstKey.get.copy(), lastKey.get.copy()))
     val checkSum = byteArrayHash(encodedBlock)
     data.putBytes(encodedBlock)
     data.putUint32(checkSum)
@@ -238,8 +238,8 @@ class SsTableBuilder(val blockSize: Int) {
       blockMeta = meta.toArray,
       blockMetaOffset = metaOffset,
       blockCache = blockCache,
-      firstKey = meta.head.firstKey.clone(),
-      lastKey = meta.last.lastKey.clone(),
+      firstKey = meta.head.firstKey.copy(),
+      lastKey = meta.last.lastKey.copy(),
       bloom = Some(bloom),
       maxTimestamp = 0
     )

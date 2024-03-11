@@ -1,7 +1,7 @@
 package io.github.leibnizhu.tinylsm.block
 
 import io.github.leibnizhu.tinylsm.utils.ByteArrayWriter
-import io.github.leibnizhu.tinylsm.{MemTableKey, SIZE_OF_U16}
+import io.github.leibnizhu.tinylsm.{MemTableKey, MemTableValue, SIZE_OF_U16, SIZE_OF_LONG}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -20,13 +20,13 @@ class BlockBuilder(val blockSize: Int) {
    * @param value value
    * @return 是否添加成功
    */
-  def add(key: MemTableKey, value: MemTableKey): Boolean = {
+  def add(key: MemTableKey, value: MemTableValue): Boolean = {
     // 基础验证，key非空、预估体积也不能超过 blockSize
     assert(key != null && key.nonEmpty, "key must not be empty")
     // 一条数据会增加 记录key长度的2byte、key本身，记录value长度的2byte、value本身、记录offset的2byte，所以乘以3
     // 这里加入了非空的前置条件，因为如果一个kv超过BlockSize，没有非空的前置条件的话，这个kv是永远无法写入
     // 也就是说Block里第一个kv是允许超过BlockSize的
-    if (!isEmpty && estimatedSize() + key.length + value.length + SIZE_OF_U16 * 3 > blockSize) {
+    if (!isEmpty && estimatedSize() + key.length + value.length + SIZE_OF_U16 * 3  + SIZE_OF_LONG> blockSize) {
       return false
     }
     // 显然，新数据的offset就是当前data长度
@@ -41,7 +41,9 @@ class BlockBuilder(val blockSize: Int) {
     //  rest_key_len (u16)
     data.putUint16(key.length - overlap)
     // key内容
-    data.putBytes(key.slice(overlap, key.length))
+    data.putBytes(key.bytes.slice(overlap, key.length))
+    // 时间戳
+    data.putUint64(key.ts)
     // value的长度
     data.putUint16(value.length)
     // value内容
@@ -62,7 +64,8 @@ class BlockBuilder(val blockSize: Int) {
       return 0
     }
     var index = 0
-    while (index < firstKey.get.length && index < key.length && firstKey.get(index) == key(index)) {
+    val firstKeyBytes = firstKey.get.bytes
+    while (index < firstKeyBytes.length && index < key.length && firstKeyBytes(index) == key.bytes(index)) {
       index += 1
     }
     index

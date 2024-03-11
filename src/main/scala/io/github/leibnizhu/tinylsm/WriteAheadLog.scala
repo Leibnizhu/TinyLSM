@@ -19,7 +19,7 @@ case class WriteAheadLog(walFile: File) {
     (rwLock.readLock(), rwLock.writeLock())
   }
 
-  def recover(toMap: java.util.Map[ByteArrayKey, MemTableValue]): WriteAheadLog = {
+  def recover(toMap: java.util.Map[MemTableKey, MemTableValue]): WriteAheadLog = {
     try {
       readLock.lock()
       val buffer = new ByteArrayReader(FileInputStream(walFile).readAllBytes())
@@ -34,7 +34,8 @@ case class WriteAheadLog(walFile: File) {
         if (checksum != readHash) {
           throw new IllegalStateException("WAL checksum mismatched")
         }
-        toMap.put(ByteArrayKey(key), value)
+        //TODO 时间戳
+        toMap.put(MemTableKey(key), value)
       }
       this
     } finally {
@@ -42,9 +43,11 @@ case class WriteAheadLog(walFile: File) {
     }
   }
 
-  def put(key: Array[Byte], value: Array[Byte]): Unit = {
+  def put(mKey: MemTableKey, value: Array[Byte]): Unit = {
     try {
       writeLock.lock()
+      // TODO 时间戳
+      val key = mKey.bytes
       val buffer = new ByteArrayWriter(key.length + value.length + SIZE_OF_U16 * 4)
       buffer.putUint16(key.length).putBytes(key).putUint16(value.length).putBytes(value)
       val hash = MurmurHash3.bytesHash(buffer.toArray)

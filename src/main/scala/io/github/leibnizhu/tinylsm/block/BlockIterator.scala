@@ -34,7 +34,7 @@ class BlockIterator(block: Block) extends MemTableStorageIterator {
       val mid = low + (high - low) / 2
       seekToIndex(mid)
       assert(isValid)
-      val compare = java.util.Arrays.compare(curKey.get, key)
+      val compare = curKey.get.compareTo(key)
       if (compare < 0) {
         low = mid + 1
       } else if (compare > 0) {
@@ -93,10 +93,13 @@ class BlockIterator(block: Block) extends MemTableStorageIterator {
     val blockData = new ByteArrayReader(block.data).seekTo(entryOffset)
     val overlapLength = blockData.readUint16()
     val restKeyLength = blockData.readUint16()
-    curKey = Some(firstKey.slice(0, overlapLength) ++ blockData.readBytes(restKeyLength))
-    val valueOffset = entryOffset + 4 + restKeyLength
+    val keyBytes = firstKey.bytes.slice(0, overlapLength) ++ blockData.readBytes(restKeyLength)
+    val ts = blockData.readUint64()
+    curKey = Some(MemTableKey(keyBytes, ts))
     val valueLength = blockData.readUint16()
-    curValuePos = (valueOffset + 2, valueOffset + 2 + valueLength)
+    // entry开头+overlap 2B+剩余key 2B+剩余key内容+时间戳 8B+value长度2B
+    val valueOffset = entryOffset + SIZE_OF_U16 * 2 + restKeyLength + SIZE_OF_LONG + SIZE_OF_U16
+    curValuePos = (valueOffset, valueOffset + valueLength)
     this.index = index
   }
 }

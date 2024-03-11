@@ -1,6 +1,6 @@
 package io.github.leibnizhu.tinylsm.compact
 
-import io.github.leibnizhu.tinylsm.{LsmStorageInner, LsmStorageState, SsTable, keyComparator}
+import io.github.leibnizhu.tinylsm.{LsmStorageInner, LsmStorageState, SsTable}
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
@@ -135,8 +135,8 @@ object LeveledCompactionTask {
     snapshot.levels(inLevel - 1)._2
       .map(snapshot.ssTables(_))
       // 过滤key范围有重叠的
-      .filter(sst => java.util.Arrays.compare(sst.firstKey, endKey) <= 0
-        && java.util.Arrays.compare(sst.lastKey, beginKey) >= 0)
+      .filter(sst => sst.firstKey.compareTo(endKey) <= 0
+        && sst.lastKey.compareTo( beginKey) >= 0)
       .map(_.sstId())
   }
 

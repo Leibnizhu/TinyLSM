@@ -26,7 +26,7 @@ class SsTableTest extends AnyFunSuite {
 
   test("week1_day4_task1_sst_build_single_key") {
     val builder = SsTableBuilder(16)
-    builder.add("233".getBytes, "233333".getBytes)
+    builder.add("233", "233333")
     val sstFile = prepareSstFile()
     builder.build(0, None, sstFile)
     assert(sstFile.exists())
@@ -34,12 +34,12 @@ class SsTableTest extends AnyFunSuite {
 
   test("week1_day4_task1_sst_build_two_blocks") {
     val builder = SsTableBuilder(16)
-    builder.add("11".getBytes, "11".getBytes)
-    builder.add("22".getBytes, "22".getBytes)
-    builder.add("33".getBytes, "11".getBytes)
-    builder.add("44".getBytes, "22".getBytes)
-    builder.add("55".getBytes, "11".getBytes)
-    builder.add("66".getBytes, "22".getBytes)
+    builder.add("11", "11")
+    builder.add("22", "22")
+    builder.add("33", "11")
+    builder.add("44", "22")
+    builder.add("55", "11")
+    builder.add("66", "22")
     assert(builder.meta.length >= 2)
     val sstFile = prepareSstFile()
     builder.build(0, None, sstFile)
@@ -51,7 +51,7 @@ class SsTableTest extends AnyFunSuite {
     for (i <- 0 until keyNum) {
       val key = keyOf(i)
       val value = valueOf(i)
-      builder.add(key.getBytes, value.getBytes)
+      builder.add(key, value)
     }
     val sstFile = prepareSstFile()
     println("SST file: " + sstFile.getAbsolutePath)
@@ -68,14 +68,14 @@ class SsTableTest extends AnyFunSuite {
     val sst = generateSst()
     val newSst = SsTable.open(0, None, sst.file)
     assertResult(sst.blockMeta)(newSst.blockMeta)
-    assertResult(keyOf(0).getBytes)(newSst.firstKey)
-    assertResult(keyOf(keyNum - 1).getBytes)(newSst.lastKey)
+    assertResult(keyOf(0).getBytes)(newSst.firstKey.bytes)
+    assertResult(keyOf(keyNum - 1).getBytes)(newSst.lastKey.bytes)
 
     val secondBlock = newSst.readBlock(1)
     val blockItr = BlockIterator(secondBlock)
     // 每个block 存了5条，所以7应该在第二个block，seekToKey能直接定位到7的key
-    blockItr.seekToKey(keyOf(7).getBytes)
-    assertResult(keyOf(7))(new String(blockItr.key()))
+    blockItr.seekToKey(MemTableKey.applyForTest(keyOf(7)))
+    assertResult(keyOf(7))(new String(blockItr.key().bytes))
   }
 
   test("week1_day4_task2_sst_iterator") {
@@ -85,7 +85,7 @@ class SsTableTest extends AnyFunSuite {
       for (i <- 0 until keyNum) {
         val key = iterator.key()
         val value = iterator.value()
-        assertResult(keyOf(i))(new String(key))
+        assertResult(keyOf(i))(new String(key.bytes))
         assertResult(valueOf(i))(new String(value))
         iterator.next()
       }
@@ -95,16 +95,16 @@ class SsTableTest extends AnyFunSuite {
 
   test("week1_day4_task1_sst_seek_key") {
     val sst = generateSst()
-    val iterator = SsTableIterator.createAndSeekToKey(sst, keyOf(0).getBytes)
+    val iterator = SsTableIterator.createAndSeekToKey(sst, MemTableKey.applyForTest(keyOf(0)))
     for (offset <- 1 to 5) {
       for (i <- 0 until keyNum) {
         val key = iterator.key()
         val value = iterator.value()
-        assertResult(keyOf(i))(new String(key))
+        assertResult(keyOf(i))(new String(key.bytes))
         assertResult(valueOf(i))(new String(value))
-        iterator.seekToKey(("key_" + "%03d".format(i * 5 + offset)).getBytes)
+        iterator.seekToKey(MemTableKey.applyForTest("key_" + "%03d".format(i * 5 + offset)))
       }
-      iterator.seekToKey("k".getBytes)
+      iterator.seekToKey(MemTableKey.applyForTest("k"))
     }
   }
 
@@ -122,9 +122,9 @@ class SsTableTest extends AnyFunSuite {
     // 据观察，没开启的时候是20个block
     // key都是  key_xxx，压缩后，每个key多了2byte记录前缀长度，少了4-6个前缀byte，估算 ((4+6)/2 -2)/7
     if (TS_ENABLED) {
-      assert(sst.blockMeta.length < 29)
+      assert(sst.blockMeta.length <= 34)
     } else {
-      assert(sst.blockMeta.length < 20)
+      assert(sst.blockMeta.length <= 25)
     }
   }
 }
