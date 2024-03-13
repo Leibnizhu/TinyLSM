@@ -7,7 +7,6 @@ import io.github.leibnizhu.tinylsm.utils.{Bloom, ByteArrayReader, ByteArrayWrite
 import org.slf4j.LoggerFactory
 
 import java.io.*
-import java.util
 import scala.collection.mutable.ArrayBuffer
 import scala.util.hashing.MurmurHash3
 
@@ -31,7 +30,7 @@ class SsTable(val file: FileObject,
               val lastKey: MemTableKey,
               val bloom: Option[Bloom],
               // SST存储的最大时间戳
-              val maxTimestamp: Long = -1L) {
+              val maxTimestamp: Long = 0) {
 
   def readBlock(blockIndex: Int): Block = {
     val blockOffset = blockMeta(blockIndex).offset
@@ -118,7 +117,7 @@ object SsTable {
     // 读meta，bloom开始再向前4byte就是meta的offset了
     val metaOffset = bytesToInt(file.read(bloomOffset - 4, 4))
     val rawMeta = file.read(metaOffset, bloomOffset - 4 - metaOffset)
-    val blockMeta = BlockMeta.decode(rawMeta)
+    val (blockMeta, maxTs) = BlockMeta.decode(rawMeta)
 
     // 构建sst
     new SsTable(
@@ -130,7 +129,7 @@ object SsTable {
       firstKey = blockMeta.head.firstKey.copy(),
       lastKey = blockMeta.last.lastKey.copy(),
       bloom = Some(bloomFilter),
-      maxTimestamp = 0
+      maxTimestamp = maxTs
     )
   }
 
@@ -164,6 +163,7 @@ class SsTableBuilder(val blockSize: Int) {
   private val data: ByteArrayWriter = new ByteArrayWriter()
   var meta: ArrayBuffer[BlockMeta] = new ArrayBuffer()
   private val keyHashes: ArrayBuffer[Int] = new ArrayBuffer()
+  private var maxTs: Long = 0
 
   /**
    * 往SST增加一个kv对
@@ -174,6 +174,9 @@ class SsTableBuilder(val blockSize: Int) {
   def add(key: MemTableKey, value: MemTableValue): Unit = {
     if (firstKey.isEmpty) {
       firstKey = Some(key)
+    }
+    if (key.ts > maxTs) {
+      maxTs = key.ts
     }
     keyHashes.addOne(key.keyHash())
     // add可能因为BlockBuilder满了导致失败
@@ -220,7 +223,7 @@ class SsTableBuilder(val blockSize: Int) {
     // meta写入buffer
     val buffer = data
     val metaOffset = buffer.length
-    BlockMeta.encode(meta, buffer)
+    BlockMeta.encode(meta, buffer, maxTs)
     buffer.putUint32(metaOffset)
 
     //  bloom 写入 buffer

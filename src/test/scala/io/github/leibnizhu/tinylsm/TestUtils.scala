@@ -20,9 +20,23 @@ object TestUtils {
     for (expectEntry <- expect) {
       assert(actual.isValid)
       if (verbose) {
-        println(s"Expect: ${new String(expectEntry.getKey.bytes)} => ${new String(expectEntry.getValue)}, Actual: ${actual.key()} => ${new String(actual.value())}")
+        println(s"Expect: ${new String(expectEntry.getKey.bytes)} => ${new String(expectEntry.getValue)}, Actual: ${new String(actual.key().bytes)} => ${new String(actual.value())}")
       }
       assertResult(new String(expectEntry.getKey.bytes))(new String(actual.key().bytes))
+      assertResult(new String(expectEntry.getValue))(new String(actual.value()))
+      actual.next()
+    }
+    assert(!actual.isValid)
+  }
+
+  def checkIteratorWithTs(expect: List[MemTableEntry], actual: MemTableStorageIterator, verbose: Boolean = true): Unit = {
+    for (expectEntry <- expect) {
+      assert(actual.isValid)
+      if (verbose) {
+        println(s"Expect: ${new String(expectEntry.getKey.bytes)}@${expectEntry.getKey.ts} => ${new String(expectEntry.getValue)}, Actual: ${actual.key()} => ${new String(actual.value())}")
+      }
+      assertResult(new String(expectEntry.getKey.bytes))(new String(actual.key().bytes))
+      assertResult(expectEntry.getKey.ts)(actual.key().ts)
       assertResult(new String(expectEntry.getValue))(new String(actual.value()))
       actual.next()
     }

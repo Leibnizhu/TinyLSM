@@ -42,7 +42,7 @@ case class MemTable(
    * @param value 如果要执行delete操作，可以传入空Array
    */
   def put(key: MemTableKey, value: MemTableValue): Unit = {
-    val estimateSize = key.length + (if (value == null) 0 else value.length)
+    val estimateSize = key.rawLength + (if (value == null) 0 else value.length)
     map.put(key, value)
     approximateSize.addAndGet(estimateSize)
     wal.foreach(_wal => _wal.put(key, value))

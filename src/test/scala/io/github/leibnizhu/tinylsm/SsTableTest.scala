@@ -1,9 +1,10 @@
 package io.github.leibnizhu.tinylsm
 
-import io.github.leibnizhu.tinylsm.TestUtils.{TS_ENABLED, tempDir}
+import io.github.leibnizhu.tinylsm.TestUtils.{TS_ENABLED, checkIterator, tempDir,    checkIteratorWithTs}
 import io.github.leibnizhu.tinylsm.block.{BlockCache, BlockIterator}
 import io.github.leibnizhu.tinylsm.iterator.*
 import io.github.leibnizhu.tinylsm.utils.FileObject
+import org.scalatest.Entry
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File
@@ -126,5 +127,27 @@ class SsTableTest extends AnyFunSuite {
     } else {
       assert(sst.blockMeta.length <= 25)
     }
+  }
+
+  test("week2_day1_sst_build_multi_version_simple") {
+    val builder = new SsTableBuilder(16)
+    builder.add(MemTableKey("233".getBytes, 233), "233333".getBytes)
+    builder.add(MemTableKey("233".getBytes, 0), "2333333".getBytes)
+    val sstFile = new File(tempDir(), System.currentTimeMillis() + ".sst")
+    builder.build(0, None, sstFile)
+  }
+
+  test("week2_day1_test_sst_build_multi_version_hard") {
+    val sstFile = new File(tempDir(), System.currentTimeMillis() + ".sst")
+    val builder = new SsTableBuilder(128)
+    val data = (0 until 100).map(id => {
+      val key = MemTableKey("key%05d".format(id / 5).getBytes, 5 - id % 5)
+      val value = "value%05d".format(id).getBytes
+      Entry(key, value)
+    }).toList
+    data.foreach(e => builder.add(e.key, e.value))
+    val builtSst = builder.build(1, None, sstFile)
+    val readSst = SsTable.open(1, None, FileObject.open(sstFile))
+    checkIteratorWithTs(data, SsTableIterator.createAndSeekToFirst(readSst))
   }
 }

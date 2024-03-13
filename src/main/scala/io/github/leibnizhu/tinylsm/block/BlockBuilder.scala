@@ -1,7 +1,7 @@
 package io.github.leibnizhu.tinylsm.block
 
 import io.github.leibnizhu.tinylsm.utils.ByteArrayWriter
-import io.github.leibnizhu.tinylsm.{MemTableKey, MemTableValue, SIZE_OF_U16, SIZE_OF_LONG}
+import io.github.leibnizhu.tinylsm.{MemTableKey, MemTableValue, SIZE_OF_LONG, SIZE_OF_U16}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -26,7 +26,7 @@ class BlockBuilder(val blockSize: Int) {
     // 一条数据会增加 记录key长度的2byte、key本身，记录value长度的2byte、value本身、记录offset的2byte，所以乘以3
     // 这里加入了非空的前置条件，因为如果一个kv超过BlockSize，没有非空的前置条件的话，这个kv是永远无法写入
     // 也就是说Block里第一个kv是允许超过BlockSize的
-    if (!isEmpty && estimatedSize() + key.length + value.length + SIZE_OF_U16 * 3  + SIZE_OF_LONG> blockSize) {
+    if (!isEmpty && estimatedSize() + key.rawLength + value.length + SIZE_OF_U16 * 3 > blockSize) {
       return false
     }
     // 显然，新数据的offset就是当前data长度
@@ -36,11 +36,11 @@ class BlockBuilder(val blockSize: Int) {
     // key_overlap_len (u16) | rest_key_len (u16) | key (rest_key_len)
     // 当前key与firstKey的共同前缀byte数量
     val overlap = commonPrefix(key)
-    // key_overlap_len
+    // key 和 firstKey 重叠部分的长度
     data.putUint16(overlap)
-    //  rest_key_len (u16)
+    // key 剩余部分长度，对应后面的key剩余内容
     data.putUint16(key.length - overlap)
-    // key内容
+    // key 剩余内容（除掉和 firstKey 重叠部分）
     data.putBytes(key.bytes.slice(overlap, key.length))
     // 时间戳
     data.putUint64(key.ts)
@@ -64,8 +64,8 @@ class BlockBuilder(val blockSize: Int) {
       return 0
     }
     var index = 0
-    val firstKeyBytes = firstKey.get.bytes
-    while (index < firstKeyBytes.length && index < key.length && firstKeyBytes(index) == key.bytes(index)) {
+    while (index < firstKey.get.length && index < key.length &&
+      firstKey.get.bytes(index) == key.bytes(index)) {
       index += 1
     }
     index

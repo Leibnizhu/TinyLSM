@@ -35,9 +35,11 @@ object BlockMeta {
   /**
    * 将BlockMeta编码写入Buffer
    *
-   * @param buffer 要写入的buffer
+   * @param blockMetas 要编码的BlockMeta数组
+   * @param buffer     要写入的buffer
+   * @param maxTs      当前block中最大时间戳
    */
-  def encode(blockMetas: ArrayBuffer[BlockMeta], buffer: ByteArrayWriter): Unit = {
+  def encode(blockMetas: ArrayBuffer[BlockMeta], buffer: ByteArrayWriter, maxTs: Long): Unit = {
     // meta序列化长度计算
     // 先存储meta的个数，Int
     var estimateSize: Int = SIZE_OF_INT
@@ -46,18 +48,15 @@ object BlockMeta {
       estimateSize += SIZE_OF_INT
       // firstKey 的长度
       estimateSize += SIZE_OF_U16
-      // firstKey 实际内容
-      estimateSize += meta.firstKey.length
-      // firstKey 时间戳
-      estimateSize += SIZE_OF_LONG
+      // firstKey 实际内容 + 时间戳
+      estimateSize += meta.firstKey.rawLength
       // lastKey 的长度
       estimateSize += SIZE_OF_U16
-      // lastKey 实际内容
-      estimateSize += meta.lastKey.length
-      // lastKey 时间戳
-      estimateSize += SIZE_OF_LONG
+      // lastKey 实际内容 + 时间戳
+      estimateSize += meta.lastKey.rawLength
     }
-    // TODO 最大的timestamp
+    // 最大的timestamp
+    estimateSize += SIZE_OF_LONG
     // 最后的hash
     estimateSize += SIZE_OF_INT
     // 预先给 ArrayBuffer 扩容
@@ -73,6 +72,7 @@ object BlockMeta {
       buffer.putUint16(meta.lastKey.length)
       buffer.putKey(meta.lastKey)
     }
+    buffer.putUint64(maxTs)
     val metasCheckSum = MurmurHash3.seqHash(buffer.slice(metaOffset + SIZE_OF_INT, buffer.length))
     buffer.putUint32(metasCheckSum)
 
@@ -85,7 +85,7 @@ object BlockMeta {
    * @param bytes 要读取的byte数组
    * @return 解码出来的BlockMeta
    */
-  def decode(bytes: Array[Byte]): Array[BlockMeta] = {
+  def decode(bytes: Array[Byte]): (Array[BlockMeta], Long) = {
     val blockMetas = new ArrayBuffer[BlockMeta]()
     val buffer = ByteArrayReader(bytes)
     val metaLength = buffer.readUint32()
@@ -100,10 +100,11 @@ object BlockMeta {
       val lastKey = MemTableKey(buffer.readBytes(lasKeyLen), buffer.readUint64())
       blockMetas.addOne(BlockMeta(offset, firstKey, lastKey))
     }
+    val maxTs = buffer.readUint64()
     // 校验hash
     if (buffer.readUint32() != checkSum) {
       throw new IllegalStateException("Block meta checksum mismatched!!!")
     }
-    blockMetas.toArray
+    (blockMetas.toArray, maxTs)
   }
 }

@@ -1,16 +1,19 @@
 package io.github.leibnizhu.tinylsm
 
+import io.github.leibnizhu.tinylsm.MemTableKey.TS_DEFAULT
 import io.github.leibnizhu.tinylsm.utils.{Bound, Excluded, Included, Unbounded}
 
 import java.util
 import scala.util.hashing.MurmurHash3
 
-case class MemTableKey(bytes: Array[Byte], ts: Long = 0L) extends Comparable[MemTableKey] {
+case class MemTableKey(bytes: Array[Byte], ts: Long = TS_DEFAULT) extends Comparable[MemTableKey] {
   def isEmpty: Boolean = bytes.isEmpty
 
   def nonEmpty: Boolean = bytes.nonEmpty
 
   def length: Int = bytes.length
+
+  def rawLength: Int = bytes.length + SIZE_OF_LONG
 
   override def compareTo(other: MemTableKey): Int = {
     val bc = util.Arrays.compare(this.bytes, other.bytes)
@@ -64,5 +67,11 @@ case class MemTableKey(bytes: Array[Byte], ts: Long = 0L) extends Comparable[Mem
 }
 
 object MemTableKey {
-  def applyForTest(key: String): MemTableKey = MemTableKey(key.getBytes)
+  val TS_DEFAULT: Long = 0L
+  val TS_MAX: Long = Long.MaxValue
+  val TS_MIN: Long = Long.MinValue
+  val TS_RANGE_BEGIN: Long = Long.MaxValue
+  val TS_RANGE_END: Long = Long.MinValue
+
+  def applyForTest(key: String): MemTableKey = MemTableKey(key.getBytes, TS_DEFAULT)
 }
