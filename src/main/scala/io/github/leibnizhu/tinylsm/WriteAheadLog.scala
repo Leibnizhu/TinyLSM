@@ -3,12 +3,12 @@ package io.github.leibnizhu.tinylsm
 import io.github.leibnizhu.tinylsm.utils.{ByteArrayReader, ByteArrayWriter}
 
 import java.io.{BufferedOutputStream, File, FileInputStream, FileOutputStream}
-import java.util.concurrent.locks.{ReadWriteLock, ReentrantReadWriteLock}
+import java.util.concurrent.locks.ReentrantReadWriteLock
 import scala.util.hashing.MurmurHash3
 
 /**
  * WAL 格式
- * | key_len | key | value_len | value |
+ * | key_len(2B) | key | timestamp(8B) | value_len(2B) | value | checksum(4B)
  *
  * @param walFile WAL文件对象
  */
@@ -27,15 +27,15 @@ case class WriteAheadLog(walFile: File) {
         val startOffset = buffer.curPos
         val keyLen = buffer.readUint16()
         val key = buffer.readBytes(keyLen)
+        val ts = buffer.readUint64()
         val valueLen = buffer.readUint16()
         val value = buffer.readBytes(valueLen)
-        val checksum = MurmurHash3.bytesHash(buffer.bytes.slice(startOffset, startOffset + keyLen + valueLen + SIZE_OF_U16 * 2))
+        val checksum = MurmurHash3.bytesHash(buffer.bytes.slice(startOffset, buffer.curPos))
         val readHash = buffer.readUint32()
         if (checksum != readHash) {
           throw new IllegalStateException("WAL checksum mismatched")
         }
-        //TODO 时间戳
-        toMap.put(MemTableKey(key), value)
+        toMap.put(MemTableKey(key, ts), value)
       }
       this
     } finally {
@@ -46,10 +46,8 @@ case class WriteAheadLog(walFile: File) {
   def put(mKey: MemTableKey, value: Array[Byte]): Unit = {
     try {
       writeLock.lock()
-      // TODO 时间戳
-      val key = mKey.bytes
-      val buffer = new ByteArrayWriter(key.length + value.length + SIZE_OF_U16 * 4)
-      buffer.putUint16(key.length).putBytes(key).putUint16(value.length).putBytes(value)
+      val buffer = new ByteArrayWriter(mKey.rawLength + value.length + SIZE_OF_U16 * 2 + SIZE_OF_INT)
+      buffer.putUint16(mKey.length).putKey(mKey).putUint16(value.length).putBytes(value)
       val hash = MurmurHash3.bytesHash(buffer.toArray)
       buffer.putUint32(hash)
       writer.write(buffer.toArray)
