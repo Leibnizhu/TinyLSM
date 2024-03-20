@@ -1,14 +1,12 @@
 package io.github.leibnizhu.tinylsm.compact
 
 import io.github.leibnizhu.tinylsm.TestUtils.*
-import io.github.leibnizhu.tinylsm.compact.CompactionOptions
-import io.github.leibnizhu.tinylsm.iterator.*
+import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{FullCompaction, NoCompaction}
 import io.github.leibnizhu.tinylsm.utils.Unbounded
-import io.github.leibnizhu.tinylsm.{LsmStorageInner, LsmStorageOptions}
+import io.github.leibnizhu.tinylsm.{LsmStorageInner, TinyLsm}
 import org.scalatest.funsuite.AnyFunSuite
 
-import java.io.File
-import scala.collection.mutable.ListBuffer
+import java.util.concurrent.TimeUnit
 
 class FullCompactionTaskTest extends AnyFunSuite {
 
@@ -152,5 +150,40 @@ class FullCompactionTaskTest extends AnyFunSuite {
     assert(storage.get("4").isEmpty)
     assert(storage.get("--").isEmpty)
     assert(storage.get("555").isEmpty)
+  }
+
+  test("week3_day2_compaction_integration") {
+    val dir = tempDir()
+    val options = compactionOption(NoCompaction, true)
+    val storage = TinyLsm(dir, options)
+    for (i <- 0 to 20000) {
+      storage.put("0", "%02000d".format(i))
+    }
+    TimeUnit.SECONDS.sleep(1)
+    while (!storage.inner.state.read(_.immutableMemTables.isEmpty)) {
+      storage.inner.forceFlushNextImmutableMemTable()
+    }
+    assert(storage.inner.state.read(_.l0SsTables.length) > 1)
+    storage.forceFullCompaction()
+    storage.inner.dumpState()
+    dumpFilesInDir(dir)
+    assert(storage.inner.state.read(_.l0SsTables.isEmpty))
+    assertResult(1)(storage.inner.state.read(_.levels.length))
+    assertResult(1)(storage.inner.state.read(_.levels.head._2.length))
+
+    for(i <- 0 to 100){
+      storage.put("1", "%02000d".format(i))
+    }
+    storage.inner.forceFreezeMemTable()
+    TimeUnit.SECONDS.sleep(1)
+    while (!storage.inner.state.read(_.immutableMemTables.isEmpty)) {
+      storage.inner.forceFlushNextImmutableMemTable()
+    }
+    storage.forceFullCompaction()
+    storage.inner.dumpState()
+    dumpFilesInDir(dir)
+    assert(storage.inner.state.read(_.l0SsTables.isEmpty))
+    assertResult(1)(storage.inner.state.read(_.levels.length))
+    assertResult(2)(storage.inner.state.read(_.levels.head._2.length))
   }
 }

@@ -81,7 +81,7 @@ class SsTable(val file: FileObject,
    * @return 这个key是否可能在当前sst里面
    */
   def mayContainsKey(key: MemTableKey): Boolean = {
-    val keyInRange = firstKey.compareTo(key) <= 0 && key.compareTo(lastKey) <= 0
+    val keyInRange = firstKey.compareOnlyKeyTo(key) <= 0 && key.compareOnlyKeyTo(lastKey) <= 0
     if (keyInRange) {
       if (bloom.isDefined) {
         // 如果有布隆过滤器，则以布隆过滤器为准（说存在只是可能存在，说不存在是肯定不存在）

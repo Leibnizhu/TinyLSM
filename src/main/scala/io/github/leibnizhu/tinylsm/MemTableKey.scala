@@ -31,6 +31,9 @@ case class MemTableKey(bytes: Array[Byte], ts: Long = TS_DEFAULT) extends Compar
     }
   }
 
+  def compareOnlyKeyTo(other: MemTableKey): Int =
+    util.Arrays.compare(this.bytes, other.bytes)
+
   def keyHash(): Int = MurmurHash3.seqHash(this.bytes)
 
   override def hashCode(): Int = MurmurHash3.seqHash(this.ts +: this.bytes)
@@ -38,6 +41,8 @@ case class MemTableKey(bytes: Array[Byte], ts: Long = TS_DEFAULT) extends Compar
   override def equals(other: Any): Boolean = other match
     case MemTableKey(bs, ts) => bs.sameElements(this.bytes) && ts == this.ts
     case _ => false
+
+  def equalsOnlyKey(other: MemTableKey): Boolean = this.bytes.sameElements(other.bytes)
 
   override def toString: String = s"${new String(bytes)}@$ts"
 
@@ -74,4 +79,8 @@ object MemTableKey {
   val TS_RANGE_END: Long = Long.MinValue
 
   def applyForTest(key: String): MemTableKey = MemTableKey(key.getBytes, TS_DEFAULT)
+
+  def withBeginTs(key: MemTableKey): MemTableKey = MemTableKey(key.bytes, TS_RANGE_BEGIN)
+
+  def withEndTs(key: MemTableKey): MemTableKey = MemTableKey(key.bytes, TS_RANGE_END)
 }

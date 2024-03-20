@@ -1,7 +1,7 @@
 package io.github.leibnizhu.tinylsm
 
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions
-import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{FullCompaction, LeveledCompactionOptions, SimpleCompactionOptions, TieredCompactionOptions}
+import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{FullCompaction, LeveledCompactionOptions, NoCompaction, SimpleCompactionOptions, TieredCompactionOptions}
 
 import java.util
 import java.util.concurrent.locks.{Lock, ReentrantLock, ReentrantReadWriteLock}
@@ -79,9 +79,8 @@ object LsmStorageState {
     val levels = options.compactionOptions match
       case SimpleCompactionOptions(_, _, maxLevels) => makeLevelsByMax(maxLevels)
       case LeveledCompactionOptions(_, _, maxLevels, _) => makeLevelsByMax(maxLevels)
-      case FullCompaction => makeLevelsByMax(1)
+      case FullCompaction | NoCompaction => makeLevelsByMax(1)
       case t: TieredCompactionOptions => List()
-      case _ => List()
     new LsmStorageState(MemTable(0), List[MemTable](), List(), levels)
   }
 

@@ -1,7 +1,7 @@
 package io.github.leibnizhu.tinylsm
 
 import io.github.leibnizhu.tinylsm.block.BlockCache
-import io.github.leibnizhu.tinylsm.compact.{CompactionController, CompactionOptions, FullCompactionTask}
+import io.github.leibnizhu.tinylsm.compact.{CompactionController, FullCompactionTask}
 import io.github.leibnizhu.tinylsm.iterator.*
 import io.github.leibnizhu.tinylsm.utils.*
 import org.slf4j.LoggerFactory
@@ -113,9 +113,11 @@ private[tinylsm] class LsmStorageInner(
    * @return 可能为None
    */
   def get(key: MemTableKey): Option[MemTableValue] = {
-    assert(key != null && !key.isEmpty, "key cannot be empty")
+    getWithTs(key)
+    /*assert(key != null && !key.isEmpty, "key cannot be empty")
 
     val snapshot = state.read(_.copy())
+
     // 先判断当前未 freeze 的MemTable是否有需要读取的值
     val inMemTable = snapshot.memTable.get(key)
     if (inMemTable.isDefined) {
@@ -158,7 +160,45 @@ private[tinylsm] class LsmStorageInner(
       // l0 sst 有效、有当前查询的key、且值不为空，即找到了value
       return Some(sstIter.value())
     }
-    None
+    None*/
+  }
+
+  def getWithTs(key: MemTableKey): Option[MemTableValue] = {
+    assert(key != null && !key.isEmpty, "key cannot be empty")
+    val snapshot = state.read(_.copy())
+
+    // Memtable 部分的迭代器
+    val curMemtableIter = snapshot.memTable.scan(
+      Included(MemTableKey.withBeginTs(key)), Included(MemTableKey.withEndTs(key)))
+    val frozenMemtableIters = snapshot.immutableMemTables.map(im =>
+      im.scan(Included(MemTableKey.withBeginTs(key)), Included(MemTableKey.withEndTs(key))))
+    val memtableIter = MergeIterator(curMemtableIter :: frozenMemtableIters)
+
+    // L0 部分的迭代器
+    val l0Iter = MergeIterator(snapshot.l0SsTables
+      .map(snapshot.ssTables(_))
+      .filter(sst => sst.mayContainsKey(key))
+      .map(SsTableIterator.createAndSeekToKey(_, MemTableKey.withBeginTs(key))))
+
+    // 其他 level 部分的迭代器
+    val levelIters = snapshot.levels.map((_, levelSstIds) => {
+      // 当前level可能包含指定key的SST
+      val levelSsts = levelSstIds.map(snapshot.ssTables(_)).filter(_.mayContainsKey(key))
+      SstConcatIterator.createAndSeekToKey(levelSsts, MemTableKey.withBeginTs(key))
+    })
+
+    // 合成最终的迭代器
+    val finalIter = LsmIterator(
+      TwoMergeIterator(TwoMergeIterator(memtableIter, l0Iter), MergeIterator(levelIters)),
+      Unbounded()
+    )
+
+    if (finalIter.isValid && finalIter.key().equalsOnlyKey(key) && 
+      !finalIter.value().sameElements(DELETE_TOMBSTONE)) {
+      Some(finalIter.value())
+    } else {
+      None
+    }
   }
 
 
@@ -314,9 +354,9 @@ private[tinylsm] class LsmStorageInner(
 
 
   def forceFullCompaction(): Unit = {
-    if (options.compactionOptions == CompactionOptions.NoCompaction) {
+    /*if (options.compactionOptions == CompactionOptions.NoCompaction) {
       throw new IllegalStateException("full compaction can only be called with compaction is enabled")
-    }
+    }*/
 
     // 执行 full compaction
     val snapshot = this.state.read(_.copy())
