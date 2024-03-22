@@ -5,7 +5,7 @@ import io.github.leibnizhu.tinylsm.compact.CompactionOptions
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{LeveledCompactionOptions, SimpleCompactionOptions, TieredCompactionOptions}
 import io.github.leibnizhu.tinylsm.iterator.{MergeIterator, SsTableIterator}
 import io.github.leibnizhu.tinylsm.utils.Unbounded
-import org.scalatest.Assertions.{assertResult, assertThrows}
+import org.scalatest.Assertions.{assertResult, assertThrows, assert}
 import org.scalatest.Entry
 
 import java.io.File
@@ -237,8 +237,16 @@ object TestUtils {
 
   def dumpFilesInDir(path: File): Unit = {
     println("--- DIR DUMP ---")
+    println(path.getAbsolutePath + ":")
     for (file <- path.listFiles()) {
-      println(s"${file.getAbsolutePath}, size=${"%.3f".format(file.length() / 1024.0)}KB")
+      println(s"${file.getName}, size=${"%.3f".format(file.length() / 1024.0)}KB")
+    }
+  }
+
+  def dumpIterator(iter: MemTableStorageIterator): Unit = {
+    while (iter.isValid) {
+      println(s"${iter.key()} => ${new String(iter.value())}")
+      iter.next()
     }
   }
 }

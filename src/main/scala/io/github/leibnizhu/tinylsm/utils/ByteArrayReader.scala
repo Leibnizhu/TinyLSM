@@ -23,7 +23,7 @@ class ByteArrayReader(val bytes: Array[Byte]) {
     bytesToInt(readByte(), readByte(), readByte(), readByte())
   }
   
-  def readUint64():Long = {
+  def readUint64(): Long = {
     bytesToLong(readByte(), readByte(), readByte(), readByte(),readByte(), readByte(), readByte(), readByte())
   }
 

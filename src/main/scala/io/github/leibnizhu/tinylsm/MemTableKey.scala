@@ -18,8 +18,8 @@ case class MemTableKey(bytes: Array[Byte], ts: Long = TS_DEFAULT) extends Compar
   override def compareTo(other: MemTableKey): Int = {
     val bc = util.Arrays.compare(this.bytes, other.bytes)
     if (bc == 0) {
-      if (other.ts < this.ts) {
-        // other更老，则this更小排更前面
+      if (this.ts > other.ts) {
+        // this时间戳更大，即版本更新，排更前面
         -1
       } else if (other.ts == this.ts) {
         0
@@ -74,13 +74,15 @@ case class MemTableKey(bytes: Array[Byte], ts: Long = TS_DEFAULT) extends Compar
 object MemTableKey {
   val TS_DEFAULT: Long = 0L
   val TS_MAX: Long = Long.MaxValue
-  val TS_MIN: Long = Long.MinValue
-  val TS_RANGE_BEGIN: Long = Long.MaxValue
-  val TS_RANGE_END: Long = Long.MinValue
+  val TS_MIN: Long = 0L
+  val TS_RANGE_BEGIN: Long = TS_MAX
+  val TS_RANGE_END: Long = TS_MIN
 
   def applyForTest(key: String): MemTableKey = MemTableKey(key.getBytes, TS_DEFAULT)
 
   def withBeginTs(key: MemTableKey): MemTableKey = MemTableKey(key.bytes, TS_RANGE_BEGIN)
 
   def withEndTs(key: MemTableKey): MemTableKey = MemTableKey(key.bytes, TS_RANGE_END)
+
+  def replaceTs(key: MemTableKey, ts: Long): MemTableKey = MemTableKey(key.bytes, ts)
 }

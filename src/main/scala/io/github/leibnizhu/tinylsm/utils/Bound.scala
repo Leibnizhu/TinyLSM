@@ -12,6 +12,16 @@ object Bound {
     case "unbounded" => Unbounded()
     case "excluded" => Excluded(boundKey)
     case "included" => Included(boundKey)
+
+  def withBeginTs(bound: Bound): Bound = replaceTs(bound, MemTableKey.TS_RANGE_BEGIN)
+  
+  def withEndTs(bound: Bound): Bound = replaceTs(bound, MemTableKey.TS_RANGE_END)
+  
+  def replaceTs(bound: Bound, ts: Long): Bound = bound match
+    case Included(k: MemTableKey) => Included(MemTableKey.replaceTs(k, ts))
+    case Excluded(k: MemTableKey) => Excluded(MemTableKey.replaceTs(k, ts))
+    case Bounded(k: MemTableKey, i: Boolean) => Bounded(MemTableKey.replaceTs(k, ts), i)
+    case b: Bound => b
 }
 
 /**

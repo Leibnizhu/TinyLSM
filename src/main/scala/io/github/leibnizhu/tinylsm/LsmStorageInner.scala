@@ -193,7 +193,7 @@ private[tinylsm] class LsmStorageInner(
       Unbounded()
     )
 
-    if (finalIter.isValid && finalIter.key().equalsOnlyKey(key) && 
+    if (finalIter.isValid && finalIter.key().equalsOnlyKey(key) &&
       !finalIter.value().sameElements(DELETE_TOMBSTONE)) {
       Some(finalIter.value())
     } else {
@@ -212,7 +212,7 @@ private[tinylsm] class LsmStorageInner(
    */
   def put(key: MemTableKey, value: MemTableValue): Unit = writeBatch(Array(WriteBatchRecord.Put(key, value)))
 
-  def put(key: String, value: String): Unit = put(MemTableKey(key.getBytes), value.getBytes)
+  def put(key: String, value: String): Unit = put(MemTableKey(key.getBytes, 0), value.getBytes)
 
   /**
    * 按key删除
@@ -330,17 +330,19 @@ private[tinylsm] class LsmStorageInner(
   }
 
   def scan(lower: Bound, upper: Bound): FusedIterator[MemTableKey, MemTableValue] = {
+    /*val snapshot = state.read(_.copy())
+    // MemTable 部分的迭代器
     val memTableIters = ArrayBuffer[MemTableIterator]()
-    val snapshot = state.read(_.copy())
     memTableIters.addOne(snapshot.memTable.scan(lower, upper))
     snapshot.immutableMemTables.map(mt => mt.scan(lower, upper)).foreach(memTableIters.addOne)
     val memTablesIter = MergeIterator(memTableIters.toList)
+    // L0 SST 部分的迭代器
     val ssTableIters = snapshot.l0SsTables.map(snapshot.ssTables(_))
       // 过滤key范围可能包含当前scan范围的sst，减少IO
       .filter(sst => rangeOverlap(lower, upper, sst.firstKey, sst.lastKey))
       .map(sst => SsTableIterator.createByLowerBound(sst, lower))
     val l0ssTablesIter = MergeIterator(ssTableIters)
-    // 处理 levels
+    // levels SST 部分的迭代器
     val levelIters = snapshot.levels.map((_, levelSstIds) => {
       val levelSsts = levelSstIds
         .map(snapshot.ssTables(_))
@@ -349,9 +351,41 @@ private[tinylsm] class LsmStorageInner(
     })
     val levelTablesIter = MergeIterator(levelIters)
     val mergedIter = TwoMergeIterator(TwoMergeIterator(memTablesIter, l0ssTablesIter), levelTablesIter)
-    FusedIterator(LsmIterator(mergedIter, upper))
+    FusedIterator(LsmIterator(mergedIter, upper))*/
+    // TODO 时间戳
+    scanWithTs(lower, upper, -1)
   }
 
+  def scanWithTs(lower: Bound, upper: Bound, readTs: Long): FusedIterator[MemTableKey, MemTableValue] = {
+    val snapshot = state.read(_.copy())
+    // MemTable 部分的迭代器
+    val memTableIters = ArrayBuffer[MemTableIterator]()
+    memTableIters.addOne(snapshot.memTable.scan(Bound.withBeginTs(lower), Bound.withEndTs(upper)))
+    snapshot.immutableMemTables.map(mt => mt.scan(Bound.withBeginTs(lower), Bound.withEndTs(upper)))
+      .foreach(memTableIters.addOne)
+    val memTablesIter = MergeIterator(memTableIters.toList)
+
+    // L0 SST 部分的迭代器
+    val ssTableIters = snapshot.l0SsTables.map(snapshot.ssTables(_))
+      // 过滤key范围可能包含当前scan范围的sst，减少IO
+      .filter(sst => rangeOverlap(lower, upper, sst.firstKey, sst.lastKey))
+      .map(sst => SsTableIterator.createByLowerBound(sst, lower))
+    val l0ssTablesIter = MergeIterator(ssTableIters)
+
+    // levels SST 部分的迭代器
+    val levelIters = snapshot.levels.map((_, levelSstIds) => {
+      val levelSsts = levelSstIds
+        .map(snapshot.ssTables(_))
+        .filter(sst => rangeOverlap(lower, upper, sst.firstKey, sst.lastKey))
+      SstConcatIterator.createByLowerBound(levelSsts, lower)
+    })
+    val levelTablesIter = MergeIterator(levelIters)
+
+    log.info("{}, {}, {}", memTablesIter.numActiveIterators(), l0ssTablesIter.numActiveIterators(), levelTablesIter.numActiveIterators())
+    // 合成最终的迭代器
+    val mergedIter = TwoMergeIterator(TwoMergeIterator(memTablesIter, l0ssTablesIter), levelTablesIter)
+    FusedIterator(LsmIterator(mergedIter, upper))
+  }
 
   def forceFullCompaction(): Unit = {
     /*if (options.compactionOptions == CompactionOptions.NoCompaction) {
@@ -431,13 +465,13 @@ private[tinylsm] class LsmStorageInner(
                            sstBegin: MemTableKey, sstEnd: MemTableKey): Boolean = {
     // 判断scan的右边界如果小于SST的最左边第一个key，那么这个sst肯定不包含这个scan范围
     userEnd match
-      case Excluded(r: MemTableKey) if r.compareTo(sstBegin) <= 0 => return false
-      case Included(r: MemTableKey) if r.compareTo(sstBegin) < 0 => return false
+      case Excluded(r: MemTableKey) if r.compareOnlyKeyTo(sstBegin) <= 0 => return false
+      case Included(r: MemTableKey) if r.compareOnlyKeyTo(sstBegin) < 0 => return false
       case _ =>
     // 判断scan的左边界如果大于SST的最右边最后一个key，那么这个sst肯定不包含这个scan范围
     userBegin match
-      case Excluded(r: MemTableKey) if r.compareTo(sstEnd) >= 0 => return false
-      case Included(r: MemTableKey) if r.compareTo(sstEnd) > 0 => return false
+      case Excluded(r: MemTableKey) if r.compareOnlyKeyTo(sstEnd) >= 0 => return false
+      case Included(r: MemTableKey) if r.compareOnlyKeyTo(sstEnd) > 0 => return false
       case _ =>
     true
   }

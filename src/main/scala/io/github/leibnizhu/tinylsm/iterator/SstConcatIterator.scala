@@ -84,7 +84,7 @@ object SstConcatIterator {
     }
     if (ssTables.nonEmpty) {
       for (i <- 0 until ssTables.length - 1) {
-        assert(ssTables(i).lastKey.compareTo( ssTables(i + 1).firstKey) < 0)
+        assert(ssTables(i).lastKey.compareTo(ssTables(i + 1).firstKey) < 0)
       }
     }
   }
@@ -93,11 +93,11 @@ object SstConcatIterator {
     // 没有左边界，则直接到最开始遍历
     case Unbounded() => SstConcatIterator.createAndSeekToFirst(ssTables)
     // 包含左边界，则可以跳到左边界的key开始遍历
-    case Included(l: MemTableKey) => SstConcatIterator.createAndSeekToKey(ssTables, l)
+    case Included(l: MemTableKey) => SstConcatIterator.createAndSeekToKey(ssTables, MemTableKey.withBeginTs(l))
     // 不包含左边界，则先跳到左边界的key，如果跳完之后实际的key等于左边界，由于不包含边界所以跳到下个值
     case Excluded(l: MemTableKey) =>
-      val iter = SstConcatIterator.createAndSeekToKey(ssTables, l)
-      if (iter.isValid && iter.key().equals(l)) {
+      val iter = SstConcatIterator.createAndSeekToKey(ssTables, MemTableKey.withBeginTs(l))
+      if (iter.isValid && iter.key().equalsOnlyKey(l)) {
         iter.next()
       }
       iter

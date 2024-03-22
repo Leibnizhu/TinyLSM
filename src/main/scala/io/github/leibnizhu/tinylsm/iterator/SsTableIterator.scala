@@ -68,11 +68,11 @@ object SsTableIterator {
     // 没有左边界，则直接到最开始遍历
     case Unbounded() => SsTableIterator.createAndSeekToFirst(sst)
     // 包含左边界，则可以跳到左边界的key开始遍历
-    case Included(l: MemTableKey) => SsTableIterator.createAndSeekToKey(sst, l)
+    case Included(l: MemTableKey) => SsTableIterator.createAndSeekToKey(sst, MemTableKey.withBeginTs(l))
     // 不包含左边界，则先跳到左边界的key，如果跳完之后实际的key等于左边界，由于不包含边界所以跳到下个值
     case Excluded(l: MemTableKey) =>
-      val iter = SsTableIterator.createAndSeekToKey(sst, l)
-      if (iter.isValid && iter.key().equals(l)) {
+      val iter = SsTableIterator.createAndSeekToKey(sst, MemTableKey.withBeginTs(l))
+      if (iter.isValid && iter.key().equalsOnlyKey(l)) {
         iter.next()
       }
       iter

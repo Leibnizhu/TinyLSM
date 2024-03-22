@@ -65,7 +65,7 @@ class SsTable(val file: FileObject,
 
   def findBlockIndex(targetKey: MemTableKey): Int = {
     // 二分查找，找到最后（数组的右边）一个 meta.firstKey <= targetKey 的 meta 的索引
-    partitionPoint(blockMeta, meta => meta.firstKey.compareTo(targetKey) <= 0)
+    partitionPoint(blockMeta, (meta: BlockMeta) => meta.firstKey.compareTo(targetKey) <= 0)
   }
 
   def numOfBlocks(): Int = blockMeta.length

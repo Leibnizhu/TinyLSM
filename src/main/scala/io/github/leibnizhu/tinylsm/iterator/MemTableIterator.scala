@@ -7,7 +7,7 @@ import io.github.leibnizhu.tinylsm.{MemTableEntry, MemTableKey, MemTableStorageI
  *
  * @param iterator MemTable内部数据MemTableEntry的迭代器
  */
-class MemTableIterator(val iterator: Iterator[MemTableEntry])
+class MemTableIterator(val iterator: Iterator[MemTableEntry], val id:Int = 0)
   extends MemTableStorageIterator {
   // 记录当前迭代到的Entry
   private var currentEntry: MemTableEntry = if (iterator.hasNext) iterator.next() else null
@@ -46,4 +46,6 @@ class MemTableIterator(val iterator: Iterator[MemTableEntry])
       currentEntry = null
     }
   }
+
+  override def toString: String = s"MemTableIterator($id)"
 }

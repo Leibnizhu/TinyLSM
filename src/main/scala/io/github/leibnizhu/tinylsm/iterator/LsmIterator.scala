@@ -14,8 +14,9 @@ import java.util
 class LsmIterator(val innerIter: LsmIteratorInner, endBound: Bound) extends MemTableStorageIterator {
   // LsmIterator本身是否可用，
   private var isSelfValid = innerIter.isValid
+  private var prevKey: Array[Byte] = Array()
   // 跳过前面已删除的元素
-  moveToNonDeleted()
+  moveToKey()
 
   override def key(): MemTableKey = innerIter.key()
 
@@ -25,7 +26,7 @@ class LsmIterator(val innerIter: LsmIteratorInner, endBound: Bound) extends MemT
 
   override def next(): Unit = {
     innerNext()
-    moveToNonDeleted()
+    moveToKey()
   }
 
   /**
@@ -47,11 +48,26 @@ class LsmIterator(val innerIter: LsmIteratorInner, endBound: Bound) extends MemT
   }
 
   /**
-   * 跳过迭代器里的空值
+   * 跳过迭代器里的空值，以及同key的其他时间戳/版本
    */
-  private def moveToNonDeleted(): Unit = {
-    while (isSelfValid && innerIter.value().sameElements(DELETE_TOMBSTONE)) {
-      innerNext()
+  private def moveToKey(): Unit = {
+    while(true) {
+      while (isSelfValid && innerIter.key().bytes.sameElements(prevKey)) {
+        innerNext()
+      }
+      // 如果迭代器不可用则直接跳过
+      if (!innerIter.isValid) {
+        isSelfValid = false
+        return
+      }
+      prevKey = innerIter.key().bytes.clone()
+      
+      // TODO 找到当前要读的时间戳版本
+      
+      if(!innerIter.value().sameElements(DELETE_TOMBSTONE)){
+        // 遇到不是删除的就退出，否则继续下个key
+        return
+      }
     }
   }
 

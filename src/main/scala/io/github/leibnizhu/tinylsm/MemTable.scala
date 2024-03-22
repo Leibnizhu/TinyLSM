@@ -57,13 +57,13 @@ case class MemTable(
    */
   def scan(lower: Bound, upper: Bound): MemTableIterator = (lower, upper) match
     case (Unbounded(), Unbounded()) =>
-      new MemTableIterator(map.entrySet().iterator().asScala)
+      new MemTableIterator(map.entrySet().iterator().asScala, id)
     case (Unbounded(), Bounded(r: MemTableKey, inclusive: Boolean)) =>
-      new MemTableIterator(map.headMap(r, inclusive).entrySet().iterator().asScala)
+      new MemTableIterator(map.headMap(r, inclusive).entrySet().iterator().asScala, id)
     case (Bounded(l: MemTableKey, inclusive: Boolean), Unbounded()) =>
-      new MemTableIterator(map.tailMap(l, inclusive).entrySet().iterator().asScala)
+      new MemTableIterator(map.tailMap(l, inclusive).entrySet().iterator().asScala, id)
     case (Bounded(l: MemTableKey, il: Boolean), Bounded(r: MemTableKey, ir: Boolean)) =>
-      new MemTableIterator(map.subMap(l, il, r, ir).entrySet().iterator().asScala)
+      new MemTableIterator(map.subMap(l, il, r, ir).entrySet().iterator().asScala, id)
     case (_, _) => null
 
   def flush(builder: SsTableBuilder): Unit = {

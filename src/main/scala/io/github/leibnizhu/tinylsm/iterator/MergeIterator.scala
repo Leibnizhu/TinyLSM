@@ -85,6 +85,7 @@ class MergeIterator[I <: MemTableStorageIterator]
 
   override def numActiveIterators(): Int =
     iterHeap.iterator().asScala.map(_.itr.numActiveIterators()).sum
+    + curItr.map(_.itr.numActiveIterators()).getOrElse(0)
 }
 
 object MergeIterator {
@@ -102,7 +103,7 @@ object MergeIterator {
           heap.offer(HeapWrapper(index, itr))
         }
       }
-      new MergeIterator(heap, Some(heap.peek()))
+      new MergeIterator(heap, Some(heap.poll()))
     }
   }
 }
