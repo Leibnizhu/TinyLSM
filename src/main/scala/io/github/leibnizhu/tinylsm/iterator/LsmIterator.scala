@@ -2,8 +2,7 @@ package io.github.leibnizhu.tinylsm.iterator
 
 import io.github.leibnizhu.tinylsm.*
 import io.github.leibnizhu.tinylsm.utils.{Bound, Excluded, Included}
-
-import scala.util.control.Breaks.breakable
+import org.slf4j.LoggerFactory
 
 /**
  * 用于LSM的遍历，主要封装了已删除元素的处理逻辑
@@ -12,6 +11,7 @@ import scala.util.control.Breaks.breakable
  * @param endBound  遍历的key上界
  */
 class LsmIterator(val innerIter: LsmIteratorInner, endBound: Bound, readTs: Long) extends StorageIterator[RawKey] {
+  private val log = LoggerFactory.getLogger(this.getClass)
   // LsmIterator本身是否可用，
   private var isSelfValid = innerIter.isValid
   private var prevKey: Array[Byte] = Array()
@@ -52,10 +52,10 @@ class LsmIterator(val innerIter: LsmIteratorInner, endBound: Bound, readTs: Long
    */
   private def moveToKey(): Unit = {
     // 外层循环是找到下个能用的key
+    val initKey = prevKey.clone()
     while (true) {
       // 跳过已经迭代过的key
       while (innerIter.isValid && innerIter.key().bytes.sameElements(prevKey)) {
-        println(s"moveToKey with prevKey=${new String(prevKey)}, curKey: ${innerIter.key()}")
         innerNext()
       }
       // 如果迭代器不可用则直接跳过
@@ -67,7 +67,6 @@ class LsmIterator(val innerIter: LsmIteratorInner, endBound: Bound, readTs: Long
       // 跳过比当前要读的时间戳/版本更新的版本
       while (innerIter.isValid && innerIter.key().rawKey().equals(prevKey)
         && innerIter.key().ts > readTs) {
-        println(s"moveToKey with prevKey=${new String(prevKey)}, curKey: ${innerIter.key()}, readTs=${readTs} ")
         innerNext()
       }
       // 如果迭代器不可用则直接跳过
@@ -79,6 +78,9 @@ class LsmIterator(val innerIter: LsmIteratorInner, endBound: Bound, readTs: Long
         // 当前key和prevKey相同，说明当前key是有满足 readTs 的版本要的value
         if (!innerIter.value().sameElements(DELETE_TOMBSTONE)) {
           // 遇到不是删除的就是要查的数据了，否则继续下个key
+          if (log.isDebugEnabled) {
+            log.debug("moveToKey() from initKey={}, to curKey={}", new String(initKey), innerIter.key())
+          }
           return
         }
       }

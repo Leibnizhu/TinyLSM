@@ -8,6 +8,8 @@ import scala.util.hashing.MurmurHash3
 
 class Bloom(val filter: util.BitSet, val hashFuncNum: Int) {
 
+  def mayContains(key: Array[Byte]): Boolean = mayContains(MurmurHash3.seqHash(key))
+
   def mayContains(h: Int): Boolean =
     // hash函数个数太多，已经很难判定
     if (hashFuncNum > 30) true else {
@@ -46,6 +48,9 @@ class Bloom(val filter: util.BitSet, val hashFuncNum: Int) {
 object Bloom {
 
   private val ln2 = Math.log(2)
+
+  def apply(hashes: Seq[Int]): Bloom =
+    apply(hashes, Bloom.bloomBitsPerKey(hashes.length, 0.01))
 
   def apply(hashes: Seq[Int], bitsPerKey: Int): Bloom = {
     val k = (bitsPerKey * 0.69).toInt.max(1).min(30)

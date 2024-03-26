@@ -1,14 +1,9 @@
 package io.github.leibnizhu.tinylsm.iterator
 
 import io.github.leibnizhu.tinylsm.*
-import io.github.leibnizhu.tinylsm.iterator.{MemTableIterator, MergeIterator, SsTableIterator, StorageIterator}
 import io.github.leibnizhu.tinylsm.utils.{Bound, Excluded, Included, Unbounded}
 
-import java.util
-import java.util.{PriorityQueue, StringJoiner}
-import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters.*
-import scala.util.hashing.MurmurHash3
 
 
 /**
@@ -23,7 +18,7 @@ class SstConcatIterator(
                          var current: Option[SsTableIterator],
                          var nextSstIndex: Int,
                          ssTables: List[SsTable]
-                       ) extends MemTableStorageIterator {
+                       ) extends StorageIterator[MemTableKey] {
 
   override def key(): MemTableKey = current.map(_.key()).orNull
 

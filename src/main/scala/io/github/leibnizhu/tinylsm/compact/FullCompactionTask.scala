@@ -4,7 +4,6 @@ import io.github.leibnizhu.tinylsm.iterator.{MergeIterator, SsTableIterator, Two
 import io.github.leibnizhu.tinylsm.{LsmStorageInner, LsmStorageState, MemTableKey, SsTable}
 
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
 
 case class FullCompactionTask(l0SsTableIds: List[Int], l1SsTableIds: List[Int]) extends CompactionTask {
   override def doCompact(storage: LsmStorageInner): List[SsTable] = {

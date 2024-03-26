@@ -85,7 +85,7 @@ class CliContext(playgroundMode: Boolean,
   }
 
   def flush(): Unit = {
-    if(!debugMode) {
+    if (!debugMode) {
       println("flush command can only be used in debug mode!")
       return
     }

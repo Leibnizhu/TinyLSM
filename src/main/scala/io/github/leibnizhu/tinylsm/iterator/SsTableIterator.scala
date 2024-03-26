@@ -8,7 +8,7 @@ class SsTableIterator(
                        val table: SsTable,
                        var blockItr: BlockIterator,
                        var blockIndex: Int
-                     ) extends MemTableStorageIterator {
+                     ) extends StorageIterator[MemTableKey] {
 
   override def key(): MemTableKey = blockItr.key()
 

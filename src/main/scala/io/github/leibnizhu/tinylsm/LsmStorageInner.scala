@@ -446,7 +446,7 @@ private[tinylsm] class LsmStorageInner(
    * @param compactToBottomLevel 是否压缩合并底部的level，如果是的话，会删除 delete墓碑
    * @return 新的sst
    */
-  def compactGenerateSstFromIter(iter: MemTableStorageIterator, compactToBottomLevel: Boolean): List[SsTable] = {
+  def compactGenerateSstFromIter(iter: StorageIterator[MemTableKey], compactToBottomLevel: Boolean): List[SsTable] = {
     var builder: Option[SsTableBuilder] = None
     val newSstList = new ArrayBuffer[SsTable]()
     // 记录最近处理的key，同个key写入同个sst，即便超过了sst大小限制，这样方便处理判断key区间

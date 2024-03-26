@@ -7,6 +7,7 @@ import java.util.StringJoiner
 /**
  * LSM存储相关的迭代器trait
  * 调用顺序：isValid -> key/value -> next
+ *
  * @tparam K key类型
  */
 trait StorageIterator[K <: Comparable[K] with Key] {

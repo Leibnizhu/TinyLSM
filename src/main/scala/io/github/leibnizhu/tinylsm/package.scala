@@ -19,12 +19,16 @@ package object tinylsm {
 
   type MemTableValue = Array[Byte]
   type MemTableEntry = java.util.Map.Entry[MemTableKey, MemTableValue]
-  type MemTableStorageIterator = StorageIterator[MemTableKey]
   type Level = (Int, List[Int])
 
   implicit val keyComparator: Comparator[MemTableKey] = new java.util.Comparator[MemTableKey]() {
     override def compare(o1: MemTableKey, o2: MemTableKey): Int =
       java.util.Arrays.compare(o1.bytes, o2.bytes)
+  }
+
+  implicit val byteArrayComparator: Comparator[Array[Byte]] = new java.util.Comparator[Array[Byte]]() {
+    override def compare(o1: Array[Byte], o2: Array[Byte]): Int =
+      java.util.Arrays.compare(o1, o2)
   }
 
   def byteArrayHash(bytes: Array[Byte]): Int = {

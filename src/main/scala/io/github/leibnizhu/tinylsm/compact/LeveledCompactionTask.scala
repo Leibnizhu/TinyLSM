@@ -136,7 +136,7 @@ object LeveledCompactionTask {
       .map(snapshot.ssTables(_))
       // 过滤key范围有重叠的
       .filter(sst => sst.firstKey.compareTo(endKey) <= 0
-        && sst.lastKey.compareTo( beginKey) >= 0)
+        && sst.lastKey.compareTo(beginKey) >= 0)
       .map(_.sstId())
   }
 

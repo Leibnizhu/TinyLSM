@@ -1,6 +1,6 @@
 package io.github.leibnizhu.tinylsm.utils
 
-import io.github.leibnizhu.tinylsm.utils.ByteTransOps.{bytesToInt, low2BytesToInt, bytesToLong}
+import io.github.leibnizhu.tinylsm.utils.ByteTransOps.{bytesToInt, bytesToLong, low2BytesToInt}
 
 class ByteArrayReader(val bytes: Array[Byte]) {
   var curPos = 0
@@ -22,9 +22,9 @@ class ByteArrayReader(val bytes: Array[Byte]) {
   def readUint32(): Int = {
     bytesToInt(readByte(), readByte(), readByte(), readByte())
   }
-  
+
   def readUint64(): Long = {
-    bytesToLong(readByte(), readByte(), readByte(), readByte(),readByte(), readByte(), readByte(), readByte())
+    bytesToLong(readByte(), readByte(), readByte(), readByte(), readByte(), readByte(), readByte(), readByte())
   }
 
   def readByte(): Byte = {

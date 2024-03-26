@@ -40,7 +40,7 @@ class ByteArrayWriter {
     buffer.appendAll(bytes)
     this
   }
-  
+
   def putKey(key: MemTableKey): ByteArrayWriter = {
     this.putBytes(key.bytes).putUint64(key.ts)
   }

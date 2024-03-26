@@ -1,7 +1,7 @@
 package io.github.leibnizhu.tinylsm.mvcc
 
-import io.github.leibnizhu.tinylsm.iterator.{FusedIterator, TwoMergeIterator, StorageIterator}
-import io.github.leibnizhu.tinylsm.{MemTableKey, MemTableStorageIterator, MemTableValue, RawKey}
+import io.github.leibnizhu.tinylsm.iterator.{FusedIterator, StorageIterator, TwoMergeIterator}
+import io.github.leibnizhu.tinylsm.{MemTableValue, RawKey}
 
 class TxnIterator(
                    _txn: Transaction,

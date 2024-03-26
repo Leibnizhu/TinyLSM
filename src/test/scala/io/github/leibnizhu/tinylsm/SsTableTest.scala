@@ -1,6 +1,6 @@
 package io.github.leibnizhu.tinylsm
 
-import io.github.leibnizhu.tinylsm.TestUtils.{TS_ENABLED, checkIterator, tempDir,    checkIteratorWithTs}
+import io.github.leibnizhu.tinylsm.TestUtils.{TS_ENABLED, checkIteratorWithTs, tempDir}
 import io.github.leibnizhu.tinylsm.block.{BlockCache, BlockIterator}
 import io.github.leibnizhu.tinylsm.iterator.*
 import io.github.leibnizhu.tinylsm.utils.FileObject

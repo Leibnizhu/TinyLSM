@@ -1,6 +1,6 @@
 package io.github.leibnizhu.tinylsm.iterator
 
-import io.github.leibnizhu.tinylsm.{Key, MemTableValue, RawKey}
+import io.github.leibnizhu.tinylsm.{Key, MemTableValue}
 
 /**
  * 主要用于包装异常处理

@@ -1,7 +1,6 @@
 package io.github.leibnizhu.tinylsm.iterator
 
 import io.github.leibnizhu.tinylsm.TestUtils.{checkIterator, entry}
-import io.github.leibnizhu.tinylsm.iterator.{MemTableIterator, TwoMergeIterator}
 import org.scalatest.funsuite.AnyFunSuite
 
 class TwoMergeIteratorTest extends AnyFunSuite {

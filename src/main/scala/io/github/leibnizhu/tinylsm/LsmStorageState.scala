@@ -1,7 +1,7 @@
 package io.github.leibnizhu.tinylsm
 
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions
-import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{FullCompaction, LeveledCompactionOptions, NoCompaction, SimpleCompactionOptions, TieredCompactionOptions}
+import io.github.leibnizhu.tinylsm.compact.CompactionOptions.*
 
 import java.util
 import java.util.concurrent.locks.{Lock, ReentrantLock, ReentrantReadWriteLock}

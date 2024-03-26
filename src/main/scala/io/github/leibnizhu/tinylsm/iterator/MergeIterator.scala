@@ -17,10 +17,10 @@ import scala.util.hashing.MurmurHash3
  * @param iterHeap 所有迭代器构成的小顶堆
  * @param curItr   当前用到的迭代器
  */
-class MergeIterator[I <: MemTableStorageIterator](
-                                                   val iterHeap: PriorityQueue[HeapWrapper],
-                                                   var curItr: Option[HeapWrapper] = None
-                                                 ) extends MemTableStorageIterator {
+class MergeIterator[I <: StorageIterator[MemTableKey]](
+                                                        val iterHeap: PriorityQueue[HeapWrapper],
+                                                        var curItr: Option[HeapWrapper] = None
+                                                      ) extends StorageIterator[MemTableKey] {
 
   /**
    * 当前key
@@ -93,7 +93,7 @@ class MergeIterator[I <: MemTableStorageIterator](
 }
 
 object MergeIterator {
-  def apply[I <: MemTableStorageIterator](iterators: List[I]): MergeIterator[I] = {
+  def apply[I <: StorageIterator[MemTableKey]](iterators: List[I]): MergeIterator[I] = {
     val heap = new PriorityQueue[HeapWrapper](Math.max(1, iterators.length))
     if (iterators.isEmpty) {
       new MergeIterator(heap, None)
@@ -119,7 +119,7 @@ object MergeIterator {
  * @param index 当前MemTable迭代器的序号，越小越新，0对应未freeze的MemTable，1之后是已freeze的MemTable
  * @param itr   MemTable迭代器
  */
-case class HeapWrapper(index: Int, itr: MemTableStorageIterator) extends Comparable[HeapWrapper] {
+case class HeapWrapper(index: Int, itr: StorageIterator[MemTableKey]) extends Comparable[HeapWrapper] {
 
   def key(): MemTableKey = itr.key()
 

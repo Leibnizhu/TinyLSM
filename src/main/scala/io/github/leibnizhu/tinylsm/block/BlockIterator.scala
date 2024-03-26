@@ -1,11 +1,10 @@
 package io.github.leibnizhu.tinylsm.block
 
 import io.github.leibnizhu.tinylsm.*
+import io.github.leibnizhu.tinylsm.iterator.StorageIterator
 import io.github.leibnizhu.tinylsm.utils.ByteArrayReader
 
-import java.util.Arrays
-
-class BlockIterator(block: Block) extends MemTableStorageIterator {
+class BlockIterator(block: Block) extends StorageIterator[MemTableKey] {
   private var index: Int = 0
   /**
    * 当前迭代到的key，初始化和迭代完之后都是 None

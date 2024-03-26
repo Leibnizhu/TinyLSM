@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory
 
 import java.io.*
 import scala.collection.mutable.ArrayBuffer
+import scala.math.Ordering.Implicits.infixOrderingOps
 import scala.util.hashing.MurmurHash3
 
 /**
@@ -81,11 +82,11 @@ class SsTable(val file: FileObject,
    * @return 这个key是否可能在当前sst里面
    */
   def mayContainsKey(key: Array[Byte]): Boolean = {
-    val keyInRange = firstKey.compareOnlyKeyTo(key) <= 0 && lastKey.compareOnlyKeyTo(key) >= 0
+    val keyInRange = firstKey.bytes <= key && key <= lastKey.bytes
     if (keyInRange) {
       if (bloom.isDefined) {
         // 如果有布隆过滤器，则以布隆过滤器为准（说存在只是可能存在，说不存在是肯定不存在）
-        bloom.get.mayContains(MurmurHash3.seqHash(key))
+        bloom.get.mayContains(key)
       } else {
         // 没有布隆过滤器，则以key范围为准
         true

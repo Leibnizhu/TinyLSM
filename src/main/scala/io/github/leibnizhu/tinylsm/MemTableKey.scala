@@ -1,21 +1,13 @@
 package io.github.leibnizhu.tinylsm
 
-import io.github.leibnizhu.tinylsm.MemTableKey.TS_DEFAULT
 import io.github.leibnizhu.tinylsm.utils.{Bound, Excluded, Included, Unbounded}
 
 import java.util
 import scala.util.hashing.MurmurHash3
 
 case class MemTableKey(bytes: Array[Byte], ts: Long = TS_DEFAULT) extends Comparable[MemTableKey] with Key {
-  def isEmpty: Boolean = bytes.isEmpty
-
-  def nonEmpty: Boolean = bytes.nonEmpty
-
-  def length: Int = bytes.length
 
   def rawLength: Int = bytes.length + SIZE_OF_LONG
-
-  override def rawKey(): RawKey = RawKey(this.bytes)
 
   override def compareTo(other: MemTableKey): Int = {
     val bc = util.Arrays.compare(this.bytes, other.bytes)
@@ -35,18 +27,12 @@ case class MemTableKey(bytes: Array[Byte], ts: Long = TS_DEFAULT) extends Compar
 
   def compareOnlyKeyTo(other: MemTableKey): Int =
     util.Arrays.compare(this.bytes, other.bytes)
-  def compareOnlyKeyTo(other: Array[Byte]): Int =
-    util.Arrays.compare(this.bytes, other)
-
-  def keyHash(): Int = MurmurHash3.seqHash(this.bytes)
 
   override def hashCode(): Int = MurmurHash3.seqHash(this.ts +: this.bytes)
 
   override def equals(other: Any): Boolean = other match
     case MemTableKey(bs, ts) => bs.sameElements(this.bytes) && ts == this.ts
     case _ => false
-
-  def equalsOnlyKey(other: MemTableKey): Boolean = this.bytes.sameElements(other.bytes)
 
   override def toString: String = s"${new String(bytes)}@$ts"
 
@@ -84,13 +70,13 @@ object MemTableKey {
 
   def applyForTest(key: String): MemTableKey = MemTableKey(key.getBytes, TS_DEFAULT)
 
-  def withBeginTs(key: MemTableKey): MemTableKey = MemTableKey(key.bytes, TS_RANGE_BEGIN)
+  def withBeginTs(key: Key): MemTableKey = MemTableKey(key.bytes, TS_RANGE_BEGIN)
 
   def withBeginTs(bytes: Array[Byte]): MemTableKey = MemTableKey(bytes, TS_RANGE_BEGIN)
 
-  def withEndTs(key: MemTableKey): MemTableKey = MemTableKey(key.bytes, TS_RANGE_END)
+  def withEndTs(key: Key): MemTableKey = MemTableKey(key.bytes, TS_RANGE_END)
 
   def withEndTs(bytes: Array[Byte]): MemTableKey = MemTableKey(bytes, TS_RANGE_END)
 
-  def replaceTs(key: MemTableKey, ts: Long): MemTableKey = MemTableKey(key.bytes, ts)
+  def replaceTs(key: Key, ts: Long): MemTableKey = MemTableKey(key.bytes, ts)
 }

@@ -50,7 +50,7 @@ object TestUtils {
     assert(!actual.isValid)
   }
 
-  def expectIteratorError(actual: MemTableStorageIterator): Unit = {
+  def expectIteratorError(actual: StorageIterator[MemTableKey]): Unit = {
     assertThrows[Exception] {
       while (actual.isValid) {
         actual.next()
@@ -250,7 +250,7 @@ object TestUtils {
     }
   }
 
-  def dumpIterator(iter: MemTableStorageIterator): Unit = {
+  def dumpIterator(iter: StorageIterator[MemTableKey]): Unit = {
     while (iter.isValid) {
       log.info("{} => {}", iter.key(), new String(iter.value()))
       iter.next()

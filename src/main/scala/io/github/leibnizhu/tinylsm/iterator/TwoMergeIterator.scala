@@ -1,8 +1,8 @@
 package io.github.leibnizhu.tinylsm.iterator
 
-import io.github.leibnizhu.tinylsm.{Key, MemTableKey, MemTableStorageIterator, MemTableValue}
+import io.github.leibnizhu.tinylsm.{Key, MemTableValue}
 
-import java.util
+import scala.math.Ordering.Implicits.infixOrderingOps
 
 class TwoMergeIterator[K <: Comparable[K] with Key, A <: StorageIterator[K], B <: StorageIterator[K]]
 (val a: A, val b: B) extends StorageIterator[K] {
@@ -32,7 +32,7 @@ class TwoMergeIterator[K <: Comparable[K] with Key, A <: StorageIterator[K], B <
       true
     } else {
       // a b 都可用，那么用key较小的。调用 useA() 之前调用 skipB() 则不会出现两个key相等的情况
-      a.key().compareTo(b.key()) < 0
+      a.key() < b.key()
     }
   }
 

@@ -171,7 +171,7 @@ class FullCompactionTaskTest extends AnyFunSuite {
     assertResult(1)(storage.inner.state.read(_.levels.length))
     assertResult(1)(storage.inner.state.read(_.levels.head._2.length))
 
-    for(i <- 0 to 100){
+    for (i <- 0 to 100) {
       storage.put("1", "%02000d".format(i))
     }
     storage.inner.forceFreezeMemTable()

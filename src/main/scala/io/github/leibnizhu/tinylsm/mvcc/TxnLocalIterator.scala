@@ -1,7 +1,7 @@
 package io.github.leibnizhu.tinylsm.mvcc
 
 import io.github.leibnizhu.tinylsm.iterator.StorageIterator
-import io.github.leibnizhu.tinylsm.{MemTableEntry, MemTableKey, MemTableStorageIterator, MemTableValue, RawKey}
+import io.github.leibnizhu.tinylsm.{MemTableEntry, MemTableValue, RawKey}
 
 import java.util.concurrent.ConcurrentSkipListMap
 
