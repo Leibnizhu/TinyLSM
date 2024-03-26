@@ -1,17 +1,15 @@
 package io.github.leibnizhu.tinylsm.iterator
 
-import io.github.leibnizhu.tinylsm.{MemTableKey, MemTableValue}
+import io.github.leibnizhu.tinylsm.{Key, MemTableKey, MemTableValue}
 
 import java.util.StringJoiner
 
 /**
  * LSM存储相关的迭代器trait
  * 调用顺序：isValid -> key/value -> next
- *
  * @tparam K key类型
- * @tparam V value类型
  */
-trait StorageIterator[K, V] {
+trait StorageIterator[K <: Comparable[K] with Key] {
 
   /**
    * 当前key
@@ -23,7 +21,7 @@ trait StorageIterator[K, V] {
    *
    * @return
    */
-  def value(): V
+  def value(): MemTableValue
 
   /**
    * 这里可用指可调用key() value() next()

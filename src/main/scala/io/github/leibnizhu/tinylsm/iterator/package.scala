@@ -7,7 +7,8 @@ package object iterator {
    * 使用TwoMergeIterator ，优先迭代内存的MemTableIterator，再迭代SST的SsTableIterator
    */
   type LsmIteratorInner = TwoMergeIterator[
-    TwoMergeIterator[MergeIterator[MemTableIterator], MergeIterator[SsTableIterator]],
+    MemTableKey,
+    TwoMergeIterator[MemTableKey, MergeIterator[MemTableIterator], MergeIterator[SsTableIterator]],
     MergeIterator[SstConcatIterator]
   ]
 

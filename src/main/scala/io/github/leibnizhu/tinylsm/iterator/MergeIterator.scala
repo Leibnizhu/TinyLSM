@@ -2,7 +2,7 @@ package io.github.leibnizhu.tinylsm.iterator
 
 import io.github.leibnizhu.tinylsm.*
 
-import java.util.{Arrays, PriorityQueue}
+import java.util.PriorityQueue
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters.*
 import scala.util.hashing.MurmurHash3
@@ -17,9 +17,10 @@ import scala.util.hashing.MurmurHash3
  * @param iterHeap 所有迭代器构成的小顶堆
  * @param curItr   当前用到的迭代器
  */
-class MergeIterator[I <: MemTableStorageIterator]
-(val iterHeap: PriorityQueue[HeapWrapper[I]], var curItr: Option[HeapWrapper[I]] = None)
-  extends MemTableStorageIterator {
+class MergeIterator[I <: MemTableStorageIterator](
+                                                   val iterHeap: PriorityQueue[HeapWrapper],
+                                                   var curItr: Option[HeapWrapper] = None
+                                                 ) extends MemTableStorageIterator {
 
   /**
    * 当前key
@@ -53,44 +54,47 @@ class MergeIterator[I <: MemTableStorageIterator]
     val curIter = curItr.get
 
     // 如果堆中有相同的key的其他迭代器，只保留堆顶的(也就是保留最新的)，其他移除
+    val toRetain = ArrayBuffer[HeapWrapper]()
+    // 遍历堆中所有迭代器，把不相同key的迭代器记录到 toRetain
     val itersItr = iterHeap.iterator()
-    val toOffer = ArrayBuffer[HeapWrapper[I]]()
     while (itersItr.hasNext) {
-      val itr: HeapWrapper[I] = itersItr.next()
-      if (curIter != itr && curKey.equals(itr.key())) {
+      val innerIter = itersItr.next()
+      if (curIter != innerIter && curKey.equals(innerIter.key())) {
+        // 如果不保留，则要remove；如果要保留，因为next了，也要remove后重新offer，才能更新权重
         itersItr.remove()
-        itr.next()
-        if (itr.isValid) {
+        // 迭代器已经remove，如果 next() 异常则直接退出，所以这里没 try-catch
+        innerIter.next()
+        if (innerIter.isValid) {
           // 不能直接offer给堆，否则会 ConcurrentModificationException
-          toOffer.addOne(itr)
+          toRetain.addOne(innerIter)
         }
         // 不可用的话，就不处理了，已经remove
       }
     }
-    toOffer.foreach(iterHeap.offer)
+    toRetain.foreach(iterHeap.offer)
 
     curIter.next()
     // 当前迭代器往下、更新位置，并更新当前迭代器
     if (!curIter.isValid) {
-      // 当前迭代器不可用了，移出堆
-      iterHeap.poll()
+      // 当前迭代器不可用了，从堆中拿最新的
+      curItr = Option(iterHeap.poll())
     } else {
-      // 当前迭代器可以，继续迭代，并更新在堆的位置
+      // 当前迭代器可用，继续迭代，并更新在堆的位置
       iterHeap.remove(curIter)
       iterHeap.offer(curIter)
+      // 更新当前的迭代器为堆顶迭代器
+      curItr = Option(iterHeap.poll())
     }
-    // 更新当前的迭代器为堆顶迭代器
-    curItr = Option(iterHeap.peek())
   }
 
   override def numActiveIterators(): Int =
     iterHeap.iterator().asScala.map(_.itr.numActiveIterators()).sum
-    + curItr.map(_.itr.numActiveIterators()).getOrElse(0)
+      + curItr.map(_.itr.numActiveIterators()).getOrElse(0)
 }
 
 object MergeIterator {
   def apply[I <: MemTableStorageIterator](iterators: List[I]): MergeIterator[I] = {
-    val heap = new PriorityQueue[HeapWrapper[I]](Math.max(1, iterators.length))
+    val heap = new PriorityQueue[HeapWrapper](Math.max(1, iterators.length))
     if (iterators.isEmpty) {
       new MergeIterator(heap, None)
     } else if (iterators.forall(!_.isValid)) {
@@ -115,8 +119,7 @@ object MergeIterator {
  * @param index 当前MemTable迭代器的序号，越小越新，0对应未freeze的MemTable，1之后是已freeze的MemTable
  * @param itr   MemTable迭代器
  */
-case class HeapWrapper[I <: MemTableStorageIterator](index: Int, itr: MemTableStorageIterator)
-  extends Comparable[HeapWrapper[I]] {
+case class HeapWrapper(index: Int, itr: MemTableStorageIterator) extends Comparable[HeapWrapper] {
 
   def key(): MemTableKey = itr.key()
 
@@ -124,7 +127,7 @@ case class HeapWrapper[I <: MemTableStorageIterator](index: Int, itr: MemTableSt
 
   def next(): Unit = itr.next()
 
-  override def compareTo(other: HeapWrapper[I]): Int = {
+  override def compareTo(other: HeapWrapper): Int = {
     // 先按key进行比较，同key的时候更新（index更小的）的优先
     val keyCompare = this.itr.key().compareTo(other.itr.key())
     if (keyCompare == 0) {
@@ -138,10 +141,11 @@ case class HeapWrapper[I <: MemTableStorageIterator](index: Int, itr: MemTableSt
   override def hashCode(): Int = MurmurHash3.seqHash(index +: itr.key().bytes)
 
   override def equals(other: Any): Boolean = other match
-    case otherHw: HeapWrapper[?] => otherHw.index == this.index &&
+    case otherHw: HeapWrapper => otherHw.index == this.index &&
       otherHw.itr.key().equals(this.itr.key())
     case _ => false
 
-  override def toString: String = if (itr.isValid)
-    s"Index=$index, current: ${itr.key()} => ${new String(itr.value())}})" else s"Index=$index, current invalid"
+  override def toString: String =
+    if (itr.isValid) s"Index=$index, current: ${itr.key()} => ${new String(itr.value())}})"
+    else s"Index=$index, current invalid"
 }

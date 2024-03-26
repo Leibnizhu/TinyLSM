@@ -1,5 +1,6 @@
 package io.github.leibnizhu.tinylsm
 
+import io.github.leibnizhu.tinylsm.MemTableKey.TS_RANGE_END
 import io.github.leibnizhu.tinylsm.block.BlockCache
 import io.github.leibnizhu.tinylsm.compact.{CompactionController, FullCompactionTask}
 import io.github.leibnizhu.tinylsm.iterator.*
@@ -12,7 +13,6 @@ import java.util
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.util.boundary
 
 object LsmStorageInner {
   private val log = LoggerFactory.getLogger(this.getClass)
@@ -24,6 +24,7 @@ object LsmStorageInner {
     val compactionController = CompactionController(options.compactionOptions)
     val manifestFile = new File(path, "MANIFEST")
     val manifest = new Manifest(manifestFile, options.targetManifestSize)
+    var lastCommitTs = 0;
     if (manifestFile.exists()) {
       // manifest 已存在则需要恢复 LSM 状态
       val records = manifest.recover()
@@ -88,7 +89,8 @@ object LsmStorageInner {
       manifest.addRecord(ManifestNewMemtable(state.memTable.id))
     }
     log.info("Start LsmStorageInner with lsm dir: {}", path.getAbsolutePath)
-    new LsmStorageInner(path, state, blockCache, options, nextSstId, compactionController, Some(manifest))
+    val mvcc = LsmMvccInner(lastCommitTs)
+    new LsmStorageInner(path, state, blockCache, options, nextSstId, compactionController, Some(manifest), Some(mvcc))
   }
 
   def fileOfWal(path: File, walId: Int): File = new File(path, "%05d.wal".format(walId))
@@ -115,8 +117,8 @@ private[tinylsm] class LsmStorageInner(
    * @param key key
    * @return 可能为None
    */
-  def get(key: MemTableKey): Option[MemTableValue] = {
-    getWithTs(key)
+  def get(key: Array[Byte]): Option[MemTableValue] = {
+    getWithTs(key, mvcc.map(_.latestCommitTs()).getOrElse(TS_RANGE_END))
     /*assert(key != null && !key.isEmpty, "key cannot be empty")
 
     val snapshot = state.read(_.copy())
@@ -166,7 +168,7 @@ private[tinylsm] class LsmStorageInner(
     None*/
   }
 
-  def getWithTs(key: MemTableKey): Option[MemTableValue] = {
+  def getWithTs(key: Array[Byte], ts: Long): Option[MemTableValue] = {
     assert(key != null && !key.isEmpty, "key cannot be empty")
     val snapshot = state.read(_.copy())
 
@@ -193,10 +195,10 @@ private[tinylsm] class LsmStorageInner(
     // 合成最终的迭代器
     val finalIter = LsmIterator(
       TwoMergeIterator(TwoMergeIterator(memtableIter, l0Iter), MergeIterator(levelIters)),
-      Unbounded()
+      Unbounded(), ts
     )
 
-    if (finalIter.isValid && finalIter.key().equalsOnlyKey(key) &&
+    if (finalIter.isValid && finalIter.key().rawKey().equals(key) &&
       !finalIter.value().sameElements(DELETE_TOMBSTONE)) {
       Some(finalIter.value())
     } else {
@@ -205,7 +207,7 @@ private[tinylsm] class LsmStorageInner(
   }
 
 
-  def get(key: String): Option[String] = get(MemTableKey(key.getBytes)).map(new String(_))
+  def get(key: String): Option[String] = get(key.getBytes).map(new String(_))
 
   /**
    * 插入或更新
@@ -213,41 +215,62 @@ private[tinylsm] class LsmStorageInner(
    * @param key   key
    * @param value 如果要执行delete操作，可以传入null
    */
-  def put(key: MemTableKey, value: MemTableValue): Unit = writeBatch(Array(WriteBatchRecord.Put(key, value)))
+  def put(key: Array[Byte], value: MemTableValue): Unit = writeBatch(Array(WriteBatchRecord.Put(key, value)))
 
-  def put(key: String, value: String): Unit = put(MemTableKey(key.getBytes, 0), value.getBytes)
+  def put(key: String, value: String): Unit = put(key.getBytes, value.getBytes)
 
   /**
    * 按key删除
    *
    * @param key key
    */
-  def delete(key: MemTableKey): Unit = writeBatch(Array(WriteBatchRecord.Del(key)))
+  def delete(key: Array[Byte]): Unit = writeBatch(Array(WriteBatchRecord.Del(key)))
 
-  def delete(key: String): Unit = delete(MemTableKey(key.getBytes))
+  def delete(key: String): Unit = delete(key.getBytes)
 
-  def writeBatch(batch: Seq[WriteBatchRecord]): Unit = for (record <- batch) {
-    record match
-      case WriteBatchRecord.Del(key: MemTableKey) =>
-        assert(key != null && !key.isEmpty, "key cannot be empty")
-        // 这里 MemTable 自己的线程安全由 ConcurrentHashMap 保证，所以只要读锁
-        val estimatedSize = state.read(st => {
-          st.memTable.put(key, DELETE_TOMBSTONE)
-          st.memTable.approximateSize.get()
-        })
-        tryFreezeMemTable(estimatedSize)
-      case WriteBatchRecord.Put(key: MemTableKey, value: MemTableValue) =>
-        assert(key != null && !key.isEmpty, "key cannot be empty")
-        assert(value != null, "value cannot be empty")
-        // 这里 MemTable 自己的线程安全由 ConcurrentHashMap 保证，所以只要读锁
-        val estimatedSize = state.read(st => {
-          st.memTable.put(key, value)
-          st.memTable.approximateSize.get()
-        })
-        tryFreezeMemTable(estimatedSize)
-  }
 
-  private def doPut(key: MemTableKey, value: MemTableValue): Unit = {
+  private def writeBatch(batch: Seq[WriteBatchRecord]): Long = {
+    def doWriteBatch(record: WriteBatchRecord, ts: Long): Unit = {
+      record match
+        case WriteBatchRecord.Del(key: Array[Byte]) =>
+          assert(key != null && !key.isEmpty, "key cannot be empty")
+          // 这里 MemTable 自己的线程安全由 ConcurrentHashMap 保证，所以只要读锁
+          val estimatedSize = state.read(st => {
+            st.memTable.put(MemTableKey(key, ts), DELETE_TOMBSTONE)
+            st.memTable.approximateSize.get()
+          })
+          tryFreezeMemTable(estimatedSize)
+        case WriteBatchRecord.Put(key: Array[Byte], value: MemTableValue) =>
+          assert(key != null && !key.isEmpty, "key cannot be empty")
+          assert(value != null, "value cannot be empty")
+          // 这里 MemTable 自己的线程安全由 ConcurrentHashMap 保证，所以只要读锁
+          val estimatedSize = state.read(st => {
+            st.memTable.put(MemTableKey(key, ts), value)
+            st.memTable.approximateSize.get()
+          })
+          tryFreezeMemTable(estimatedSize)
+    }
+
+    mvcc match
+      case None => {
+        batch.foreach(doWriteBatch(_, 0))
+        0L
+      }
+      case Some(mvcc) => try {
+        // 确保只有一个线程可以操作
+        mvcc.writeLock.lock()
+        // 获取新时间戳/版本
+        val ts = mvcc.latestCommitTs() + 1
+
+        for (record <- batch) {
+          doWriteBatch(record, ts)
+        }
+        // 更新时间戳/版本
+        mvcc.updateCommitTs(ts)
+        ts
+      } finally {
+        mvcc.writeLock.unlock()
+      }
   }
 
   private def tryFreezeMemTable(estimatedSize: Int): Unit = {
@@ -332,7 +355,7 @@ private[tinylsm] class LsmStorageInner(
     }
   }
 
-  def scan(lower: Bound, upper: Bound): FusedIterator[MemTableKey, MemTableValue] = {
+  def scan(lower: Bound, upper: Bound): FusedIterator[RawKey] = {
     /*val snapshot = state.read(_.copy())
     // MemTable 部分的迭代器
     val memTableIters = ArrayBuffer[MemTableIterator]()
@@ -356,10 +379,10 @@ private[tinylsm] class LsmStorageInner(
     val mergedIter = TwoMergeIterator(TwoMergeIterator(memTablesIter, l0ssTablesIter), levelTablesIter)
     FusedIterator(LsmIterator(mergedIter, upper))*/
     // TODO 时间戳
-    scanWithTs(lower, upper, -1)
+    scanWithTs(lower, upper, mvcc.map(_.latestCommitTs()).getOrElse(TS_RANGE_END))
   }
 
-  def scanWithTs(lower: Bound, upper: Bound, readTs: Long): FusedIterator[MemTableKey, MemTableValue] = {
+  def scanWithTs(lower: Bound, upper: Bound, readTs: Long): FusedIterator[RawKey] = {
     val snapshot = state.read(_.copy())
     // MemTable 部分的迭代器
     val memTableIters = ArrayBuffer[MemTableIterator]()
@@ -385,9 +408,15 @@ private[tinylsm] class LsmStorageInner(
     val levelTablesIter = MergeIterator(levelIters)
 
     log.info("{}, {}, {}", memTablesIter.numActiveIterators(), l0ssTablesIter.numActiveIterators(), levelTablesIter.numActiveIterators())
-    // 合成最终的迭代器
+    /* 合成最终的迭代器
+     *                                          |- MergeIterator(各个Memtable的 MemTableIterator)
+     *                    |- TwoMergeIterator --|
+     *                    |                     |- MergeIterator(L0各个SST的 SsTableIterator)
+     * TwoMergeIterator --|
+     *                    |- MergeIterator(L1及以上各个Level的 SstConcatIterator )
+     */
     val mergedIter = TwoMergeIterator(TwoMergeIterator(memTablesIter, l0ssTablesIter), levelTablesIter)
-    FusedIterator(LsmIterator(mergedIter, upper))
+    FusedIterator(LsmIterator(mergedIter, upper, readTs))
   }
 
   def forceFullCompaction(): Unit = {
@@ -420,22 +449,29 @@ private[tinylsm] class LsmStorageInner(
   def compactGenerateSstFromIter(iter: MemTableStorageIterator, compactToBottomLevel: Boolean): List[SsTable] = {
     var builder: Option[SsTableBuilder] = None
     val newSstList = new ArrayBuffer[SsTable]()
+    // 记录最近处理的key，同个key写入同个sst，即便超过了sst大小限制，这样方便处理判断key区间
+    var lastKey = Array[Byte]()
     while (iter.isValid) {
       if (builder.isEmpty) {
         builder = Some(SsTableBuilder(options.blockSize))
       }
-      val innerBuilder = builder.get
-      if (compactToBottomLevel) {
-        // 如果压缩合并底部的level，则不保留delete墓碑
-        if (!iter.value().sameElements(DELETE_TOMBSTONE)) {
-          innerBuilder.add(iter.key(), iter.value())
-        }
-      } else {
-        innerBuilder.add(iter.key(), iter.value())
+      val sameAsLastKey = iter.key().bytes.sameElements(lastKey)
+      if (!sameAsLastKey) {
+        lastKey = iter.key().bytes
       }
+      val innerBuilder = builder.get
+      // FIXME week3 day2 版本先忽略 compactToBottomLevel
+      /* if (compactToBottomLevel) {
+         // 如果压缩合并底部的level，则不保留delete墓碑
+         if (!iter.value().sameElements(DELETE_TOMBSTONE)) {
+           innerBuilder.add(iter.key(), iter.value())
+         }
+       } else {*/
+      innerBuilder.add(iter.key(), iter.value())
+      // }
       iter.next()
       // builder满了则生成sst，并新开一个builder
-      if (innerBuilder.estimateSize() >= options.targetSstSize) {
+      if (innerBuilder.estimateSize() >= options.targetSstSize && !sameAsLastKey) {
         val sstId = nextSstId.incrementAndGet()
         val sst = innerBuilder.build(sstId, Some(blockCache), fileOfSst(sstId))
         builder = None
@@ -483,7 +519,7 @@ private[tinylsm] class LsmStorageInner(
     val itr = scan(Unbounded(), Unbounded())
     print("Storage content: ")
     while (itr.isValid) {
-      print(s"${new String(itr.key().bytes)}@${itr.key().ts} => ${new String(itr.value())}, ")
+      print(s"${new String(itr.key().bytes)} => ${new String(itr.value())}, ")
       itr.next()
     }
     println()
@@ -534,7 +570,7 @@ private[tinylsm] class LsmStorageInner(
 }
 
 enum WriteBatchRecord {
-  case Del(key: MemTableKey) extends WriteBatchRecord
+  case Del(key: Array[Byte]) extends WriteBatchRecord
 
-  case Put(key: MemTableKey, value: MemTableValue) extends WriteBatchRecord
+  case Put(key: Array[Byte], value: MemTableValue) extends WriteBatchRecord
 }

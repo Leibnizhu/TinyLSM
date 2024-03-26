@@ -6,7 +6,7 @@ import io.github.leibnizhu.tinylsm.utils.{Bound, Excluded, Included, Unbounded}
 import java.util
 import scala.util.hashing.MurmurHash3
 
-case class MemTableKey(bytes: Array[Byte], ts: Long = TS_DEFAULT) extends Comparable[MemTableKey] {
+case class MemTableKey(bytes: Array[Byte], ts: Long = TS_DEFAULT) extends Comparable[MemTableKey] with Key {
   def isEmpty: Boolean = bytes.isEmpty
 
   def nonEmpty: Boolean = bytes.nonEmpty
@@ -14,6 +14,8 @@ case class MemTableKey(bytes: Array[Byte], ts: Long = TS_DEFAULT) extends Compar
   def length: Int = bytes.length
 
   def rawLength: Int = bytes.length + SIZE_OF_LONG
+
+  override def rawKey(): RawKey = RawKey(this.bytes)
 
   override def compareTo(other: MemTableKey): Int = {
     val bc = util.Arrays.compare(this.bytes, other.bytes)
@@ -33,6 +35,8 @@ case class MemTableKey(bytes: Array[Byte], ts: Long = TS_DEFAULT) extends Compar
 
   def compareOnlyKeyTo(other: MemTableKey): Int =
     util.Arrays.compare(this.bytes, other.bytes)
+  def compareOnlyKeyTo(other: Array[Byte]): Int =
+    util.Arrays.compare(this.bytes, other)
 
   def keyHash(): Int = MurmurHash3.seqHash(this.bytes)
 
@@ -82,7 +86,11 @@ object MemTableKey {
 
   def withBeginTs(key: MemTableKey): MemTableKey = MemTableKey(key.bytes, TS_RANGE_BEGIN)
 
+  def withBeginTs(bytes: Array[Byte]): MemTableKey = MemTableKey(bytes, TS_RANGE_BEGIN)
+
   def withEndTs(key: MemTableKey): MemTableKey = MemTableKey(key.bytes, TS_RANGE_END)
+
+  def withEndTs(bytes: Array[Byte]): MemTableKey = MemTableKey(bytes, TS_RANGE_END)
 
   def replaceTs(key: MemTableKey, ts: Long): MemTableKey = MemTableKey(key.bytes, ts)
 }

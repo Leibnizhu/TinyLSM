@@ -1,14 +1,15 @@
 package io.github.leibnizhu.tinylsm.iterator
 
-import io.github.leibnizhu.tinylsm.{MemTableKey, MemTableStorageIterator, MemTableValue}
+import io.github.leibnizhu.tinylsm.{Key, MemTableKey, MemTableStorageIterator, MemTableValue}
 
 import java.util
 
-class TwoMergeIterator[A <: MemTableStorageIterator, B <: MemTableStorageIterator]
-(val a: A, val b: B) extends MemTableStorageIterator {
+class TwoMergeIterator[K <: Comparable[K] with Key, A <: StorageIterator[K], B <: StorageIterator[K]]
+(val a: A, val b: B) extends StorageIterator[K] {
+  skipB()
   private var isUseA: Boolean = useA()
 
-  override def key(): MemTableKey = chooseIter().key()
+  override def key(): K = chooseIter().key()
 
   override def value(): MemTableValue = chooseIter().value()
 
@@ -16,13 +17,13 @@ class TwoMergeIterator[A <: MemTableStorageIterator, B <: MemTableStorageIterato
 
   override def next(): Unit = {
     chooseIter().next()
+    skipB()
     isUseA = useA()
   }
 
-  private def chooseIter(): MemTableStorageIterator = if (isUseA) a else b
+  private def chooseIter(): StorageIterator[K] = if (isUseA) a else b
 
   private def useA(): Boolean = {
-    skipB()
     if (!a.isValid) {
       // a不可用的话只能用b
       false
@@ -31,7 +32,7 @@ class TwoMergeIterator[A <: MemTableStorageIterator, B <: MemTableStorageIterato
       true
     } else {
       // a b 都可用，那么用key较小的。调用 useA() 之前调用 skipB() 则不会出现两个key相等的情况
-      a.key().compareTo( b.key()) < 0
+      a.key().compareTo(b.key()) < 0
     }
   }
 

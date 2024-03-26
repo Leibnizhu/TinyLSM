@@ -3,10 +3,11 @@ package io.github.leibnizhu.tinylsm
 import io.github.leibnizhu.tinylsm.block.BlockCache
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{LeveledCompactionOptions, SimpleCompactionOptions, TieredCompactionOptions}
-import io.github.leibnizhu.tinylsm.iterator.{MergeIterator, SsTableIterator}
+import io.github.leibnizhu.tinylsm.iterator.{MergeIterator, SsTableIterator, StorageIterator}
 import io.github.leibnizhu.tinylsm.utils.Unbounded
-import org.scalatest.Assertions.{assertResult, assertThrows, assert}
+import org.scalatest.Assertions.{assert, assertResult, assertThrows}
 import org.scalatest.Entry
+import org.slf4j.LoggerFactory
 
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -14,13 +15,17 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 object TestUtils {
-  val TS_ENABLED = false
+  private val log = LoggerFactory.getLogger(this.getClass)
 
-  def checkIterator(expect: List[MemTableEntry], actual: MemTableStorageIterator, verbose: Boolean = true): Unit = {
+  val TS_ENABLED = true
+
+  def checkIterator[K <: Comparable[K] with Key](expect: List[MemTableEntry], actual: StorageIterator[K], verbose: Boolean = true): Unit = {
     for (expectEntry <- expect) {
       assert(actual.isValid)
       if (verbose) {
-        println(s"Expect: ${new String(expectEntry.getKey.bytes)} => ${new String(expectEntry.getValue)}, Actual: ${new String(actual.key().bytes)} => ${new String(actual.value())}")
+        log.info("Expect: {} => {}, Actual: {} => {}",
+          new String(expectEntry.getKey.bytes), new String(expectEntry.getValue),
+          new String(actual.key().bytes), new String(actual.value()))
       }
       assertResult(new String(expectEntry.getKey.bytes))(new String(actual.key().bytes))
       assertResult(new String(expectEntry.getValue))(new String(actual.value()))
@@ -29,11 +34,13 @@ object TestUtils {
     assert(!actual.isValid)
   }
 
-  def checkIteratorWithTs(expect: List[MemTableEntry], actual: MemTableStorageIterator, verbose: Boolean = true): Unit = {
+  def checkIteratorWithTs(expect: List[MemTableEntry], actual: StorageIterator[MemTableKey], verbose: Boolean = true): Unit = {
     for (expectEntry <- expect) {
       assert(actual.isValid)
       if (verbose) {
-        println(s"Expect: ${new String(expectEntry.getKey.bytes)}@${expectEntry.getKey.ts} => ${new String(expectEntry.getValue)}, Actual: ${actual.key()} => ${new String(actual.value())}")
+        log.info("Expect: {}@{} => {}, Actual: {} => {}",
+          new String(expectEntry.getKey.bytes), expectEntry.getKey.ts, new String(expectEntry.getValue),
+          actual.key(), new String(actual.value()))
       }
       assertResult(new String(expectEntry.getKey.bytes))(new String(actual.key().bytes))
       assertResult(expectEntry.getKey.ts)(actual.key().ts)
@@ -133,14 +140,14 @@ object TestUtils {
         cnt += 1
       }
     }
-    println(s"====> total entry: $cnt")
+    log.info("====> total entry: ", cnt)
 
     // 等所有MemTable Flush 完
     TimeUnit.SECONDS.sleep(1)
     while (!storage.inner.state.read(_.immutableMemTables.isEmpty)) {
       storage.inner.forceFlushNextImmutableMemTable()
     }
-    println("====> After flush MemTables")
+    log.info("====> After flush MemTables")
     storage.inner.dumpState()
 
     var prevSnapshot = storage.inner.state.copy()
@@ -152,9 +159,9 @@ object TestUtils {
       prevSnapshot = snapshot
       toContinue
     }) {
-      println("waiting for compaction to converge")
+      log.info("waiting for compaction to converge")
     }
-    println("====> After compaction")
+    log.info("====> After compaction")
     storage.inner.dumpState()
 
     val expectedEntries = new ListBuffer[MemTableEntry]()
@@ -236,16 +243,16 @@ object TestUtils {
   }
 
   def dumpFilesInDir(path: File): Unit = {
-    println("--- DIR DUMP ---")
-    println(path.getAbsolutePath + ":")
+    log.info("--- DIR DUMP ---")
+    log.info("{}:", path.getAbsolutePath)
     for (file <- path.listFiles()) {
-      println(s"${file.getName}, size=${"%.3f".format(file.length() / 1024.0)}KB")
+      log.info("{}, size={}KB", file.getName, "%.3f".format(file.length() / 1024.0))
     }
   }
 
   def dumpIterator(iter: MemTableStorageIterator): Unit = {
     while (iter.isValid) {
-      println(s"${iter.key()} => ${new String(iter.value())}")
+      log.info("{} => {}", iter.key(), new String(iter.value()))
       iter.next()
     }
   }

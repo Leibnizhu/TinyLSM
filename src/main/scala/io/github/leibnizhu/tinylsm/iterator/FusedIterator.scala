@@ -1,15 +1,15 @@
 package io.github.leibnizhu.tinylsm.iterator
 
+import io.github.leibnizhu.tinylsm.{Key, MemTableValue, RawKey}
+
 /**
  * 主要用于包装异常处理
  * TODO 优化泛型声明
  *
  * @param iter 要包装的 StorageIterator 迭代器
- * @tparam K key类型
- * @tparam V value类型
  */
-class FusedIterator[K, V](val iter: StorageIterator[K, V])
-  extends StorageIterator[K, V] {
+class FusedIterator[K <: Comparable[K] with Key](val iter: StorageIterator[K])
+  extends StorageIterator[K] {
   // 是否已经抛出异常
   private var errorThrown: Boolean = false
 
@@ -20,7 +20,7 @@ class FusedIterator[K, V](val iter: StorageIterator[K, V])
     iter.key()
   }
 
-  override def value(): V = {
+  override def value(): MemTableValue = {
     if (!isValid) {
       throw new IllegalStateException("Iterator is invalid")
     }

@@ -10,7 +10,7 @@ class LsmMvccInner(
                     val writeLock: Lock = new ReentrantLock(),
                     val commitLock: Lock = new ReentrantLock(),
                     val ts: Mutex[(Long, Watermark)],
-                    val committedTxns: Mutex[util.TreeMap[Long, CommittedTxnData]]
+                    val committedTxns: Mutex[util.TreeMap[Long, CommittedTxnData]] = new Mutex(new util.TreeMap())
                   ) {
 
   def latestCommitTs(): Long = {
@@ -18,7 +18,7 @@ class LsmMvccInner(
   }
 
   def updateCommitTs(newTs: Long): Unit = {
-    ts.update(_.copy(_1=newTs))
+    ts.update(_.copy(_1 = newTs))
   }
 
   def watermark(): Long = {
@@ -26,4 +26,9 @@ class LsmMvccInner(
   }
 
   def newTxn(inner: LsmStorageInner, serializable: Boolean): Transaction = ???
+}
+
+object LsmMvccInner {
+  def apply(lastCommitTs: Long): LsmMvccInner =
+    new LsmMvccInner(ts = new Mutex((lastCommitTs, new Watermark())))
 }

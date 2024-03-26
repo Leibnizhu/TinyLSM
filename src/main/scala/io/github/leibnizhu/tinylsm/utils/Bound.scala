@@ -35,14 +35,14 @@ case class Unbounded() extends Bound
  * @param bound     边界值
  * @param inclusive 是否包含边界值
  */
-class Bounded(val bound: MemTableKey, val inclusive: Boolean) extends Bound
+class Bounded(val bound: Key, val inclusive: Boolean) extends Bound
 
 object Bounded {
-  def apply(bound: MemTableKey, inclusive: Boolean): Bounded = {
+  def apply(bound: Key, inclusive: Boolean): Bounded = {
     new Bounded(bound, inclusive)
   }
 
-  def unapply(bounded: Bounded): Option[(MemTableKey, Boolean)] = {
+  def unapply(bounded: Bounded): Option[(Key, Boolean)] = {
     if (bounded == null) {
       None
     } else {
@@ -56,7 +56,7 @@ object Bounded {
  *
  * @param b 边界值
  */
-case class Included(b: MemTableKey) extends Bounded(b, true)
+case class Included(b: Key) extends Bounded(b, true)
 
 object Included {
   def apply(str: String): Included = Included(MemTableKey(str.getBytes))
@@ -67,7 +67,7 @@ object Included {
  *
  * @param b 边界值
  */
-case class Excluded(b: MemTableKey) extends Bounded(b, false)
+case class Excluded(b: Key) extends Bounded(b, false)
 
 object Excluded {
   def apply(str: String): Excluded = Excluded(MemTableKey(str.getBytes))

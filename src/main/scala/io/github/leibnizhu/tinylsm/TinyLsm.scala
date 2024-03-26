@@ -20,19 +20,19 @@ class TinyLsm(val inner: LsmStorageInner) {
   private val compactionThread = spawnCompactionThread()
   private val manifestCompactionThread = spawnManifestCompactionThread()
 
-  def get(key: MemTableKey): Option[MemTableValue] = inner.get(key)
+  def get(key: Array[Byte]): Option[MemTableValue] = inner.get(key)
 
   def get(key: String): Option[String] = inner.get(key)
 
-  def put(key: MemTableKey, value: MemTableValue): Unit = inner.put(key, value)
+  def put(key: Array[Byte], value: MemTableValue): Unit = inner.put(key, value)
 
   def put(key: String, value: String): Unit = inner.put(key, value)
 
-  def delete(key: MemTableKey): Unit = inner.delete(key)
+  def delete(key: Array[Byte]): Unit = inner.delete(key)
 
   def delete(key: String): Unit = inner.delete(key)
 
-  def scan(lower: Bound, upper: Bound): FusedIterator[MemTableKey, MemTableValue] = inner.scan(lower, upper)
+  def scan(lower: Bound, upper: Bound): FusedIterator[RawKey] = inner.scan(lower, upper)
 
   def newTxn(): Unit = inner.newTxn()
 

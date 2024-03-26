@@ -1,14 +1,14 @@
 package io.github.leibnizhu.tinylsm.iterator
 
-import io.github.leibnizhu.tinylsm.{MemTableEntry, MemTableKey, MemTableStorageIterator, MemTableValue}
+import io.github.leibnizhu.tinylsm.{MemTableEntry, MemTableKey, MemTableValue}
 
 /**
  * 用于遍历一个MemTable的迭代器
  *
  * @param iterator MemTable内部数据MemTableEntry的迭代器
  */
-class MemTableIterator(val iterator: Iterator[MemTableEntry], val id:Int = 0)
-  extends MemTableStorageIterator {
+class MemTableIterator(val iterator: Iterator[MemTableEntry], val memTableId: Int = 0)
+  extends StorageIterator[MemTableKey] {
   // 记录当前迭代到的Entry
   private var currentEntry: MemTableEntry = if (iterator.hasNext) iterator.next() else null
 
@@ -47,5 +47,5 @@ class MemTableIterator(val iterator: Iterator[MemTableEntry], val id:Int = 0)
     }
   }
 
-  override def toString: String = s"MemTableIterator($id)"
+  override def toString: String = s"MemTableIterator($memTableId)"
 }

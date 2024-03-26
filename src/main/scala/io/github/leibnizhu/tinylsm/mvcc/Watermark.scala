@@ -2,7 +2,7 @@ package io.github.leibnizhu.tinylsm.mvcc
 
 import java.util
 
-case class Watermark(readers: util.TreeMap[Long, Int]) {
+case class Watermark(readers: util.TreeMap[Long, Int] = new util.TreeMap()) {
 
   def addReader(ts: Long): Unit = {
 

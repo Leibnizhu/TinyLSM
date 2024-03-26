@@ -19,7 +19,7 @@ package object tinylsm {
 
   type MemTableValue = Array[Byte]
   type MemTableEntry = java.util.Map.Entry[MemTableKey, MemTableValue]
-  type MemTableStorageIterator = StorageIterator[MemTableKey, MemTableValue]
+  type MemTableStorageIterator = StorageIterator[MemTableKey]
   type Level = (Int, List[Int])
 
   implicit val keyComparator: Comparator[MemTableKey] = new java.util.Comparator[MemTableKey]() {
