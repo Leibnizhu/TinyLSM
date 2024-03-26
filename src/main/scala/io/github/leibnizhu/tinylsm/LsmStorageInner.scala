@@ -3,6 +3,7 @@ package io.github.leibnizhu.tinylsm
 import io.github.leibnizhu.tinylsm.block.BlockCache
 import io.github.leibnizhu.tinylsm.compact.{CompactionController, FullCompactionTask}
 import io.github.leibnizhu.tinylsm.iterator.*
+import io.github.leibnizhu.tinylsm.mvcc.LsmMvccInner
 import io.github.leibnizhu.tinylsm.utils.*
 import org.slf4j.LoggerFactory
 
@@ -103,7 +104,9 @@ private[tinylsm] class LsmStorageInner(
                                         val options: LsmStorageOptions,
                                         val nextSstId: AtomicInteger,
                                         val compactionController: CompactionController,
-                                        val manifest: Option[Manifest] = None) {
+                                        val manifest: Option[Manifest] = None,
+                                        val mvcc: Option[LsmMvccInner] = None,
+                                      ) {
   private val log = LoggerFactory.getLogger(this.getClass)
 
   /**
