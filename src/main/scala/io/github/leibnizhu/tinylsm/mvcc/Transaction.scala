@@ -16,27 +16,49 @@ case class Transaction(
                         keyHashes: Option[Mutex[(util.HashSet[Int], util.HashSet[Int])]],
                       ) {
 
+  def get(key: String): Option[String] = get(key.getBytes).map(new String(_))
+
   def get(key: Array[Byte]): Option[Array[Byte]] = {
-    None
+    if(committed.get()) {
+      throw new IllegalStateException("cannot operate on committed Transaction!")
+    }
+
+    inner.getWithTs(key, readTs)
   }
 
   def scan(lower: Bound, upper: Bound): TxnIterator = {
-    null
+    if(committed.get()) {
+      throw new IllegalStateException("cannot operate on committed Transaction!")
+    }
+    val fuseIter = inner.scanWithTs(lower, upper, readTs)
+    TxnIterator(this.copy(), fuseIter)
   }
+
+  def put(key: String, value: String): Unit = put(key.getBytes, value.getBytes)
 
   def put(key: Array[Byte], value: Array[Byte]): Unit = {
+    if(committed.get()) {
+      throw new IllegalStateException("cannot operate on committed Transaction!")
+    }
 
+    // TODO
   }
 
-  def delete(key: Array[Byte]): Unit = {
+  def delete(key: String): Unit = delete(key.getBytes)
 
+  def delete(key: Array[Byte]): Unit = {
+    if(committed.get()) {
+      throw new IllegalStateException("cannot operate on committed Transaction!")
+    }
+
+    // TODO
   }
 
   def commit(): Unit = {
-
+    // TODO
   }
 
   def drop(): Unit = {
-
+    // TODO
   }
 }

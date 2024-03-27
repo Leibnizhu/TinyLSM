@@ -4,7 +4,7 @@ import io.github.leibnizhu.tinylsm.LsmStorageState
 
 import java.util.concurrent.locks.ReentrantLock
 
-class Mutex[T](private var inner: T) {
+case class Mutex[T](private var inner: T) {
   private val lock = new ReentrantLock()
 
   def execute[R](f: T => R): R = {

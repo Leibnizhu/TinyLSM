@@ -1,6 +1,7 @@
 package io.github.leibnizhu.tinylsm
 
 import io.github.leibnizhu.tinylsm.iterator.FusedIterator
+import io.github.leibnizhu.tinylsm.mvcc.{Transaction, TxnIterator}
 import io.github.leibnizhu.tinylsm.utils.Bound
 import org.slf4j.LoggerFactory
 
@@ -32,9 +33,9 @@ class TinyLsm(val inner: LsmStorageInner) {
 
   def delete(key: String): Unit = inner.delete(key)
 
-  def scan(lower: Bound, upper: Bound): FusedIterator[RawKey] = inner.scan(lower, upper)
+  def scan(lower: Bound, upper: Bound): TxnIterator = inner.scan(lower, upper)
 
-  def newTxn(): Unit = inner.newTxn()
+  def newTxn(): Transaction = inner.newTxn()
 
   def forceFullCompaction(): Unit = inner.forceFullCompaction()
 

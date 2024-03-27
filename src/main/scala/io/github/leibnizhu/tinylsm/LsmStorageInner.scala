@@ -1,10 +1,10 @@
 package io.github.leibnizhu.tinylsm
 
-import io.github.leibnizhu.tinylsm.MemTableKey.TS_RANGE_END
+import io.github.leibnizhu.tinylsm.MemTableKey.{TS_MAX, TS_RANGE_END}
 import io.github.leibnizhu.tinylsm.block.BlockCache
 import io.github.leibnizhu.tinylsm.compact.{CompactionController, FullCompactionTask}
 import io.github.leibnizhu.tinylsm.iterator.*
-import io.github.leibnizhu.tinylsm.mvcc.LsmMvccInner
+import io.github.leibnizhu.tinylsm.mvcc.{LsmMvccInner, Transaction, TxnIterator}
 import io.github.leibnizhu.tinylsm.utils.*
 import org.slf4j.LoggerFactory
 
@@ -98,7 +98,7 @@ object LsmStorageInner {
   def fileOfSst(path: File, sstId: Int): File = new File(path, "%05d.sst".format(sstId))
 }
 
-private[tinylsm] class LsmStorageInner(
+private[tinylsm] case class LsmStorageInner(
                                         // TinyLSM 的根目录
                                         path: File,
                                         val state: LsmStorageState,
@@ -117,56 +117,9 @@ private[tinylsm] class LsmStorageInner(
    * @param key key
    * @return 可能为None
    */
-  def get(key: Array[Byte]): Option[MemTableValue] = {
-    getWithTs(key, mvcc.map(_.latestCommitTs()).getOrElse(TS_RANGE_END))
-    /*assert(key != null && !key.isEmpty, "key cannot be empty")
-
-    val snapshot = state.read(_.copy())
-
-    // 先判断当前未 freeze 的MemTable是否有需要读取的值
-    val inMemTable = snapshot.memTable.get(key)
-    if (inMemTable.isDefined) {
-      // 如果读取出来是墓碑（空Array）需要过滤返回None
-      return inMemTable.filter(!_.sameElements(DELETE_TOMBSTONE))
-    }
-
-    // 由新到旧遍历已 freeze 的MemTable，找到直接返回
-    val inFrozenMemTable = {
-      boundary:
-        for (mt <- snapshot.immutableMemTables) do {
-          val curValue = mt.get(key)
-          if (curValue.isDefined) {
-            // 如果读取出来是墓碑（空Array）需要过滤返回None
-            boundary.break(curValue.filter(!_.sameElements(DELETE_TOMBSTONE)))
-          }
-        }
-        None
-    }
-    if (inFrozenMemTable.isDefined) {
-      return inFrozenMemTable
-    }
-
-    // 从 SST读取
-    // l0 sst 的多个sst从key开始构成一个 MergeIterator 可一查
-    val l0SsTableIters = snapshot.l0SsTables
-      .map(snapshot.ssTables(_))
-      .filter(_.mayContainsKey(key))
-      .map(SsTableIterator.createAndSeekToKey(_, key))
-    // levels sst的读取
-    val levelIters = snapshot.levels.map((_, levelSstIds) => {
-      val levelSsts = levelSstIds
-        .map(snapshot.ssTables(_))
-        .filter(_.mayContainsKey(key))
-      SstConcatIterator.createAndSeekToKey(levelSsts, key)
-    })
-    // 合成sst迭代器
-    val sstIter = TwoMergeIterator(MergeIterator(l0SsTableIters), MergeIterator(levelIters))
-    if (sstIter.isValid && sstIter.key().equals(key) && !sstIter.value().sameElements(DELETE_TOMBSTONE)) {
-      // l0 sst 有效、有当前查询的key、且值不为空，即找到了value
-      return Some(sstIter.value())
-    }
-    None*/
-  }
+  def get(key: Array[Byte]): Option[MemTableValue] = this.mvcc match
+    case None => getWithTs(key, TS_MAX)
+    case Some(mvcc) => mvcc.newTxn(this.clone(), options.serializable).get(key)
 
   def getWithTs(key: Array[Byte], ts: Long): Option[MemTableValue] = {
     assert(key != null && !key.isEmpty, "key cannot be empty")
@@ -251,7 +204,7 @@ private[tinylsm] class LsmStorageInner(
           tryFreezeMemTable(estimatedSize)
     }
 
-    mvcc match
+    this.mvcc match
       case None => {
         batch.foreach(doWriteBatch(_, 0))
         0L
@@ -261,10 +214,7 @@ private[tinylsm] class LsmStorageInner(
         mvcc.writeLock.lock()
         // 获取新时间戳/版本
         val ts = mvcc.latestCommitTs() + 1
-
-        for (record <- batch) {
-          doWriteBatch(record, ts)
-        }
+        batch.foreach(doWriteBatch(_, ts))
         // 更新时间戳/版本
         mvcc.updateCommitTs(ts)
         ts
@@ -355,32 +305,10 @@ private[tinylsm] class LsmStorageInner(
     }
   }
 
-  def scan(lower: Bound, upper: Bound): FusedIterator[RawKey] = {
-    /*val snapshot = state.read(_.copy())
-    // MemTable 部分的迭代器
-    val memTableIters = ArrayBuffer[MemTableIterator]()
-    memTableIters.addOne(snapshot.memTable.scan(lower, upper))
-    snapshot.immutableMemTables.map(mt => mt.scan(lower, upper)).foreach(memTableIters.addOne)
-    val memTablesIter = MergeIterator(memTableIters.toList)
-    // L0 SST 部分的迭代器
-    val ssTableIters = snapshot.l0SsTables.map(snapshot.ssTables(_))
-      // 过滤key范围可能包含当前scan范围的sst，减少IO
-      .filter(sst => rangeOverlap(lower, upper, sst.firstKey, sst.lastKey))
-      .map(sst => SsTableIterator.createByLowerBound(sst, lower))
-    val l0ssTablesIter = MergeIterator(ssTableIters)
-    // levels SST 部分的迭代器
-    val levelIters = snapshot.levels.map((_, levelSstIds) => {
-      val levelSsts = levelSstIds
-        .map(snapshot.ssTables(_))
-        .filter(sst => rangeOverlap(lower, upper, sst.firstKey, sst.lastKey))
-      SstConcatIterator.createByLowerBound(levelSsts, lower)
-    })
-    val levelTablesIter = MergeIterator(levelIters)
-    val mergedIter = TwoMergeIterator(TwoMergeIterator(memTablesIter, l0ssTablesIter), levelTablesIter)
-    FusedIterator(LsmIterator(mergedIter, upper))*/
-    // TODO 时间戳
-    scanWithTs(lower, upper, mvcc.map(_.latestCommitTs()).getOrElse(TS_RANGE_END))
-  }
+  def scan(lower: Bound, upper: Bound): TxnIterator = this.mvcc match
+    // FIXME
+    case None => TxnIterator(null, scanWithTs(lower, upper, TS_RANGE_END))
+    case Some(mvcc) => mvcc.newTxn(this.clone(), options.serializable).scan(lower, upper)
 
   def scanWithTs(lower: Bound, upper: Bound, readTs: Long): FusedIterator[RawKey] = {
     val snapshot = state.read(_.copy())
@@ -487,9 +415,11 @@ private[tinylsm] class LsmStorageInner(
     newSstList.toList
   }
 
-  def newTxn(): Unit = {
-
+  def newTxn(): Transaction = {
+    mvcc.map(_.newTxn(this.clone(), options.serializable)).orNull
   }
+
+  override def clone(): LsmStorageInner = this.copy(state = state.copy())
 
   /**
    * sst的范围是否包含用户指定的scan范围

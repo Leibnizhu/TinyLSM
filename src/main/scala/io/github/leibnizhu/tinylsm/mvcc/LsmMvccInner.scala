@@ -4,6 +4,8 @@ import io.github.leibnizhu.tinylsm.LsmStorageInner
 import io.github.leibnizhu.tinylsm.utils.Mutex
 
 import java.util
+import java.util.concurrent.ConcurrentSkipListMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.{Lock, ReentrantLock}
 
 class LsmMvccInner(
@@ -25,10 +27,19 @@ class LsmMvccInner(
     ts.execute(_._2.watermark().getOrElse(0))
   }
 
-  def newTxn(inner: LsmStorageInner, serializable: Boolean): Transaction = ???
+  def newTxn(inner: LsmStorageInner, serializable: Boolean): Transaction = ts.execute((readTs, watermark) => {
+    watermark.addReader(readTs)
+    Transaction(
+      readTs = readTs,
+      inner = inner,
+      localStorage = new ConcurrentSkipListMap(),
+      committed = new AtomicBoolean(false),
+      keyHashes = if (serializable) Some(Mutex((new util.HashSet[Int](), new util.HashSet[Int]()))) else None
+    )
+  })
 }
 
 object LsmMvccInner {
   def apply(lastCommitTs: Long): LsmMvccInner =
-    new LsmMvccInner(ts = new Mutex((lastCommitTs, new Watermark())))
+    new LsmMvccInner(ts = Mutex((lastCommitTs, new Watermark())))
 }
