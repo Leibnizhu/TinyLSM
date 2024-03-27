@@ -19,7 +19,7 @@ case class Transaction(
   def get(key: String): Option[String] = get(key.getBytes).map(new String(_))
 
   def get(key: Array[Byte]): Option[Array[Byte]] = {
-    if(committed.get()) {
+    if (committed.get()) {
       throw new IllegalStateException("cannot operate on committed Transaction!")
     }
 
@@ -27,7 +27,7 @@ case class Transaction(
   }
 
   def scan(lower: Bound, upper: Bound): TxnIterator = {
-    if(committed.get()) {
+    if (committed.get()) {
       throw new IllegalStateException("cannot operate on committed Transaction!")
     }
     val fuseIter = inner.scanWithTs(lower, upper, readTs)
@@ -37,7 +37,7 @@ case class Transaction(
   def put(key: String, value: String): Unit = put(key.getBytes, value.getBytes)
 
   def put(key: Array[Byte], value: Array[Byte]): Unit = {
-    if(committed.get()) {
+    if (committed.get()) {
       throw new IllegalStateException("cannot operate on committed Transaction!")
     }
 
@@ -47,7 +47,7 @@ case class Transaction(
   def delete(key: String): Unit = delete(key.getBytes)
 
   def delete(key: Array[Byte]): Unit = {
-    if(committed.get()) {
+    if (committed.get()) {
       throw new IllegalStateException("cannot operate on committed Transaction!")
     }
 

@@ -7,6 +7,7 @@ import io.github.leibnizhu.tinylsm.utils.{Bloom, ByteArrayReader, ByteArrayWrite
 import org.slf4j.LoggerFactory
 
 import java.io.*
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.ArrayBuffer
 import scala.math.Ordering.Implicits.infixOrderingOps
 import scala.util.hashing.MurmurHash3
@@ -66,7 +67,7 @@ class SsTable(val file: FileObject,
 
   def findBlockIndex(targetKey: MemTableKey): Int = {
     // 二分查找，找到最后（数组的右边）一个 meta.firstKey <= targetKey 的 meta 的索引
-    partitionPoint(blockMeta, (meta: BlockMeta) => meta.firstKey.compareTo(targetKey) <= 0)
+    partitionPoint(ArraySeq.unsafeWrapArray(blockMeta), (meta: BlockMeta) => meta.firstKey.compareTo(targetKey) <= 0)
   }
 
   def numOfBlocks(): Int = blockMeta.length

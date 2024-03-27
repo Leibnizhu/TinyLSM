@@ -93,22 +93,22 @@ object LsmStorageInner {
     new LsmStorageInner(path, state, blockCache, options, nextSstId, compactionController, Some(manifest), Some(mvcc))
   }
 
-  def fileOfWal(path: File, walId: Int): File = new File(path, "%05d.wal".format(walId))
+  private def fileOfWal(path: File, walId: Int): File = new File(path, "%05d.wal".format(walId))
 
-  def fileOfSst(path: File, sstId: Int): File = new File(path, "%05d.sst".format(sstId))
+  private def fileOfSst(path: File, sstId: Int): File = new File(path, "%05d.sst".format(sstId))
 }
 
 private[tinylsm] case class LsmStorageInner(
-                                        // TinyLSM 的根目录
-                                        path: File,
-                                        val state: LsmStorageState,
-                                        val blockCache: BlockCache,
-                                        val options: LsmStorageOptions,
-                                        val nextSstId: AtomicInteger,
-                                        val compactionController: CompactionController,
-                                        val manifest: Option[Manifest] = None,
-                                        val mvcc: Option[LsmMvccInner] = None,
-                                      ) {
+                                             // TinyLSM 的根目录
+                                             path: File,
+                                             val state: LsmStorageState,
+                                             val blockCache: BlockCache,
+                                             val options: LsmStorageOptions,
+                                             val nextSstId: AtomicInteger,
+                                             val compactionController: CompactionController,
+                                             val manifest: Option[Manifest] = None,
+                                             val mvcc: Option[LsmMvccInner] = None,
+                                           ) {
   private val log = LoggerFactory.getLogger(this.getClass)
 
   /**
@@ -145,7 +145,13 @@ private[tinylsm] case class LsmStorageInner(
       SstConcatIterator.createAndSeekToKey(levelSsts, MemTableKey.withBeginTs(key))
     })
 
-    // 合成最终的迭代器
+    /* 合成最终的迭代器
+     *                                                          |-> MergeIterator(各个Memtable的 MemTableIterator)
+     *                                   |-> TwoMergeIterator ->|
+     *                                   |                      |-> MergeIterator(L0各个SST的 SsTableIterator)
+     * LsmIterator -> TwoMergeIterator ->|
+     *                                   |-> MergeIterator(L1及以上各个Level的 SstConcatIterator )
+     */
     val finalIter = LsmIterator(
       TwoMergeIterator(TwoMergeIterator(memtableIter, l0Iter), MergeIterator(levelIters)),
       Unbounded(), ts
@@ -168,7 +174,7 @@ private[tinylsm] case class LsmStorageInner(
    * @param key   key
    * @param value 如果要执行delete操作，可以传入null
    */
-  def put(key: Array[Byte], value: MemTableValue): Unit = writeBatch(Array(WriteBatchRecord.Put(key, value)))
+  def put(key: Array[Byte], value: MemTableValue): Unit = writeBatch(List(WriteBatchRecord.Put(key, value)))
 
   def put(key: String, value: String): Unit = put(key.getBytes, value.getBytes)
 
@@ -177,7 +183,7 @@ private[tinylsm] case class LsmStorageInner(
    *
    * @param key key
    */
-  def delete(key: Array[Byte]): Unit = writeBatch(Array(WriteBatchRecord.Del(key)))
+  def delete(key: Array[Byte]): Unit = writeBatch(List(WriteBatchRecord.Del(key)))
 
   def delete(key: String): Unit = delete(key.getBytes)
 
@@ -205,10 +211,9 @@ private[tinylsm] case class LsmStorageInner(
     }
 
     this.mvcc match
-      case None => {
+      case None =>
         batch.foreach(doWriteBatch(_, 0))
         0L
-      }
       case Some(mvcc) => try {
         // 确保只有一个线程可以操作
         mvcc.writeLock.lock()
@@ -337,13 +342,14 @@ private[tinylsm] case class LsmStorageInner(
 
     log.info("{}, {}, {}", memTablesIter.numActiveIterators(), l0ssTablesIter.numActiveIterators(), levelTablesIter.numActiveIterators())
     /* 合成最终的迭代器
-     *                                          |- MergeIterator(各个Memtable的 MemTableIterator)
-     *                    |- TwoMergeIterator --|
-     *                    |                     |- MergeIterator(L0各个SST的 SsTableIterator)
-     * TwoMergeIterator --|
-     *                    |- MergeIterator(L1及以上各个Level的 SstConcatIterator )
+     *                                           |-> MergeIterator(各个Memtable的 MemTableIterator)
+     *                    |-> TwoMergeIterator --|
+     *                    |                      |-> MergeIterator(L0各个SST的 SsTableIterator)
+     * TwoMergeIterator ->|
+     *                    |-> MergeIterator(L1及以上各个Level的 SstConcatIterator )
      */
     val mergedIter = TwoMergeIterator(TwoMergeIterator(memTablesIter, l0ssTablesIter), levelTablesIter)
+    // 再包两层，分别做熔断（异常处理）和 多版本控制+删除墓碑处理
     FusedIterator(LsmIterator(mergedIter, upper, readTs))
   }
 
@@ -434,13 +440,13 @@ private[tinylsm] case class LsmStorageInner(
                            sstBegin: MemTableKey, sstEnd: MemTableKey): Boolean = {
     // 判断scan的右边界如果小于SST的最左边第一个key，那么这个sst肯定不包含这个scan范围
     userEnd match
-      case Excluded(r: MemTableKey) if r.compareOnlyKeyTo(sstBegin) <= 0 => return false
-      case Included(r: MemTableKey) if r.compareOnlyKeyTo(sstBegin) < 0 => return false
+      case Excluded(r: Key) if r.rawKey().compareTo(sstBegin.rawKey()) <= 0 => return false
+      case Included(r: Key) if r.rawKey().compareTo(sstBegin.rawKey()) < 0 => return false
       case _ =>
     // 判断scan的左边界如果大于SST的最右边最后一个key，那么这个sst肯定不包含这个scan范围
     userBegin match
-      case Excluded(r: MemTableKey) if r.compareOnlyKeyTo(sstEnd) >= 0 => return false
-      case Included(r: MemTableKey) if r.compareOnlyKeyTo(sstEnd) > 0 => return false
+      case Excluded(r: Key) if r.rawKey().compareTo(sstEnd.rawKey()) >= 0 => return false
+      case Included(r: Key) if r.rawKey().compareTo(sstEnd.rawKey()) > 0 => return false
       case _ =>
     true
   }

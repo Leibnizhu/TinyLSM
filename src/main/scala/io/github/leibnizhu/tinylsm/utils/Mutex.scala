@@ -1,7 +1,5 @@
 package io.github.leibnizhu.tinylsm.utils
 
-import io.github.leibnizhu.tinylsm.LsmStorageState
-
 import java.util.concurrent.locks.ReentrantLock
 
 case class Mutex[T](private var inner: T) {

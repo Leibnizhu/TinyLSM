@@ -49,10 +49,10 @@ object Bloom {
 
   private val ln2 = Math.log(2)
 
-  def apply(hashes: Seq[Int]): Bloom =
+  def apply(hashes: Array[Int]): Bloom =
     apply(hashes, Bloom.bloomBitsPerKey(hashes.length, 0.01))
 
-  def apply(hashes: Seq[Int], bitsPerKey: Int): Bloom = {
+  def apply(hashes: Array[Int], bitsPerKey: Int): Bloom = {
     val k = (bitsPerKey * 0.69).toInt.max(1).min(30)
     var nBits = (hashes.length * bitsPerKey).max(64)
     val filter = new util.BitSet(nBits)

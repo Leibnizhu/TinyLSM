@@ -17,10 +17,10 @@ object Bound {
 
   def withEndTs(bound: Bound): Bound = replaceTs(bound, MemTableKey.TS_RANGE_END)
 
-  def replaceTs(bound: Bound, ts: Long): Bound = bound match
-    case Included(k: MemTableKey) => Included(MemTableKey.replaceTs(k, ts))
-    case Excluded(k: MemTableKey) => Excluded(MemTableKey.replaceTs(k, ts))
-    case Bounded(k: MemTableKey, i: Boolean) => Bounded(MemTableKey.replaceTs(k, ts), i)
+  private def replaceTs(bound: Bound, ts: Long): Bound = bound match
+    case Included(k: Key) => Included(MemTableKey.replaceTs(k, ts))
+    case Excluded(k: Key) => Excluded(MemTableKey.replaceTs(k, ts))
+    case Bounded(k: Key, i: Boolean) => Bounded(MemTableKey.replaceTs(k, ts), i)
     case b: Bound => b
 }
 
@@ -59,7 +59,9 @@ object Bounded {
 case class Included(b: Key) extends Bounded(b, true)
 
 object Included {
-  def apply(str: String): Included = Included(MemTableKey(str.getBytes))
+  def apply(str: String): Included = Included(RawKey(str.getBytes))
+
+  def apply(str: String, ts: Long): Included = Included(MemTableKey(str.getBytes, ts))
 }
 
 /**
@@ -70,5 +72,7 @@ object Included {
 case class Excluded(b: Key) extends Bounded(b, false)
 
 object Excluded {
-  def apply(str: String): Excluded = Excluded(MemTableKey(str.getBytes))
+  def apply(str: String): Excluded = Excluded(RawKey(str.getBytes))
+
+  def apply(str: String, ts: Long): Excluded = Excluded(MemTableKey(str.getBytes, ts))
 }

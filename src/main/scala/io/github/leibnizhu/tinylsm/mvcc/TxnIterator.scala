@@ -1,6 +1,6 @@
 package io.github.leibnizhu.tinylsm.mvcc
 
-import io.github.leibnizhu.tinylsm.iterator.{FusedIterator, StorageIterator, TwoMergeIterator}
+import io.github.leibnizhu.tinylsm.iterator.{FusedIterator, StorageIterator}
 import io.github.leibnizhu.tinylsm.{MemTableValue, RawKey}
 
 //type TxnInnerIterator = TwoMergeIterator[RawKey, TxnLocalIterator, FusedIterator[RawKey]]

@@ -22,7 +22,7 @@ class BloomTest extends AnyFunSuite {
     }
     val bitsPerKey = Bloom.bloomBitsPerKey(keyHashes.length, 0.01)
     println(s"bits per key: $bitsPerKey")
-    val bloom = Bloom(keyHashes.toList, bitsPerKey)
+    val bloom = Bloom(keyHashes.toArray, bitsPerKey)
     println(s"bloom size: ${bloom.filter.size()}, hashFuncNum: ${bloom.hashFuncNum}")
     assert(bloom.hashFuncNum < 30)
     for (idx <- 0 until keyNum) {

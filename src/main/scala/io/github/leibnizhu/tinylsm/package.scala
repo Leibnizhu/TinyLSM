@@ -1,7 +1,5 @@
 package io.github.leibnizhu
 
-import io.github.leibnizhu.tinylsm.iterator.StorageIterator
-
 import java.util.Comparator
 import scala.util.hashing.MurmurHash3
 

@@ -3,6 +3,8 @@ name := "ScalaTinyLsm"
 version := "0.3-SNAPSHOT"
 Test / parallelExecution := false
 
+scalacOptions := Seq("-unchecked", "-deprecation")
+
 libraryDependencies ++= Seq(
   "com.lihaoyi" %% "cask" % "0.9.2" % "compile",
   "com.lihaoyi" %% "requests" % "0.8.0" % "compile",

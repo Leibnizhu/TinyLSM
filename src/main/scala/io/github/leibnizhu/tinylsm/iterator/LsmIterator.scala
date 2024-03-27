@@ -5,7 +5,7 @@ import io.github.leibnizhu.tinylsm.utils.{Bound, Excluded, Included}
 import org.slf4j.LoggerFactory
 
 /**
- * 用于LSM的遍历，主要封装了已删除元素的处理逻辑
+ * 用于LSM的遍历，主要封装了多版本控制、及已删除元素的处理逻辑
  *
  * @param innerIter LsmIteratorInner内部迭代器
  * @param endBound  遍历的key上界
