@@ -1,6 +1,6 @@
 package io.github.leibnizhu.tinylsm.iterator
 
-import io.github.leibnizhu.tinylsm.{Key, MemTableKey, MemTableValue}
+import io.github.leibnizhu.tinylsm.{DELETE_TOMBSTONE, Key, MemTableKey, MemTableValue}
 
 import java.util.StringJoiner
 
@@ -23,6 +23,8 @@ trait StorageIterator[K <: Comparable[K] with Key] {
    * @return
    */
   def value(): MemTableValue
+
+  def deletedValue(): Boolean = value().sameElements(DELETE_TOMBSTONE)
 
   /**
    * 这里可用指可调用key() value() next()

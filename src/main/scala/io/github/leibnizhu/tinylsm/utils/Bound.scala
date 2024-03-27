@@ -1,6 +1,7 @@
 package io.github.leibnizhu.tinylsm.utils
 
 import io.github.leibnizhu.tinylsm.*
+import io.github.leibnizhu.tinylsm.MemTableKey.{TS_RANGE_BEGIN, TS_RANGE_END}
 
 /**
  * 定义key边界相关的类
@@ -13,9 +14,19 @@ object Bound {
     case "excluded" => Excluded(boundKey)
     case "included" => Included(boundKey)
 
-  def withBeginTs(bound: Bound): Bound = replaceTs(bound, MemTableKey.TS_RANGE_BEGIN)
+  //  def withBeginTs(bound: Bound): Bound = replaceTs(bound, MemTableKey.TS_RANGE_BEGIN)
+  def withBeginTs(bound: Bound): Bound = bound match
+    case Included(k: Key) => Included(MemTableKey.replaceTs(k, TS_RANGE_BEGIN))
+    case Excluded(k: Key) => Excluded(MemTableKey.replaceTs(k, TS_RANGE_END))
+    case Bounded(k: Key, i: Boolean) => Bounded(MemTableKey.replaceTs(k, TS_RANGE_BEGIN), i)
+    case b: Bound => b
 
-  def withEndTs(bound: Bound): Bound = replaceTs(bound, MemTableKey.TS_RANGE_END)
+  //  def withEndTs(bound: Bound): Bound = replaceTs(bound, MemTableKey.TS_RANGE_END)
+  def withEndTs(bound: Bound): Bound = bound match
+    case Included(k: Key) => Included(MemTableKey.replaceTs(k, TS_RANGE_END))
+    case Excluded(k: Key) => Excluded(MemTableKey.replaceTs(k, TS_RANGE_BEGIN))
+    case Bounded(k: Key, i: Boolean) => Bounded(MemTableKey.replaceTs(k, TS_RANGE_END), i)
+    case b: Bound => b
 
   private def replaceTs(bound: Bound, ts: Long): Bound = bound match
     case Included(k: Key) => Included(MemTableKey.replaceTs(k, ts))

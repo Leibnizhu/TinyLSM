@@ -250,7 +250,7 @@ object TestUtils {
     }
   }
 
-  def dumpIterator(iter: StorageIterator[MemTableKey]): Unit = {
+  def dumpIterator(iter: StorageIterator[?]): Unit = {
     while (iter.isValid) {
       log.info("{} => {}", iter.key(), new String(iter.value()))
       iter.next()

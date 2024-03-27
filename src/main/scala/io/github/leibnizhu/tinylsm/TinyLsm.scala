@@ -1,6 +1,5 @@
 package io.github.leibnizhu.tinylsm
 
-import io.github.leibnizhu.tinylsm.iterator.FusedIterator
 import io.github.leibnizhu.tinylsm.mvcc.{Transaction, TxnIterator}
 import io.github.leibnizhu.tinylsm.utils.Bound
 import org.slf4j.LoggerFactory

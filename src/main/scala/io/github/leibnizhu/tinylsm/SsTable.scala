@@ -246,7 +246,7 @@ class SsTableBuilder(val blockSize: Int) {
       firstKey = meta.head.firstKey.copy(),
       lastKey = meta.last.lastKey.copy(),
       bloom = Some(bloom),
-      maxTimestamp = 0
+      maxTimestamp = maxTs
     )
   }
 }

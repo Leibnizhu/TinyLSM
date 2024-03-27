@@ -65,6 +65,7 @@ object MemTableKey {
   val TS_DEFAULT: Long = 0L
   val TS_MAX: Long = Long.MaxValue
   val TS_MIN: Long = 0L
+  // 时间戳越大，即版本越新，key对比起来是越小
   val TS_RANGE_BEGIN: Long = TS_MAX
   val TS_RANGE_END: Long = TS_MIN
 

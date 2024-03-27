@@ -29,5 +29,5 @@ case class RawKey(bytes: Array[Byte]) extends Comparable[RawKey] with Key {
 
   override def rawKey(): RawKey = this
 
-  override def toString: String = s"Key('${new String(bytes)}')"
+  override def toString: String = new String(bytes)
 }

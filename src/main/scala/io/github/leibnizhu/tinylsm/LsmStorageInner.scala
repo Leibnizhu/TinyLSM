@@ -13,6 +13,8 @@ import java.util
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters.*
+import scala.math.Ordering.Implicits.infixOrderingOps
 
 object LsmStorageInner {
   private val log = LoggerFactory.getLogger(this.getClass)
@@ -24,7 +26,7 @@ object LsmStorageInner {
     val compactionController = CompactionController(options.compactionOptions)
     val manifestFile = new File(path, "MANIFEST")
     val manifest = new Manifest(manifestFile, options.targetManifestSize)
-    var lastCommitTs = 0;
+    var lastCommitTs = 0L;
     if (manifestFile.exists()) {
       // manifest 已存在则需要恢复 LSM 状态
       val records = manifest.recover()
@@ -55,6 +57,7 @@ object LsmStorageInner {
       for (sstId <- state.l0SsTables ++ state.levels.flatMap(_._2)) {
         val sstFileObj = FileObject.open(fileOfSst(path, sstId))
         val sst = SsTable.open(sstId, Some(blockCache), sstFileObj)
+        lastCommitTs = lastCommitTs.max(sst.maxTimestamp)
         state.ssTables = state.ssTables + (sstId -> sst)
         sstCnt += 1
       }
@@ -68,6 +71,8 @@ object LsmStorageInner {
           val memTable = MemTable.recoverFromWal(mtId, fileOfWal(path, mtId))
           if (memTable.nonEmpty) {
             state.immutableMemTables = memTable :: state.immutableMemTables
+            val memTableMaxTs = memTable.map.keySet().asScala.map(_.ts).max
+            lastCommitTs = lastCommitTs.max(memTableMaxTs)
             walCnt += 1
           }
         }
@@ -88,7 +93,7 @@ object LsmStorageInner {
       }
       manifest.addRecord(ManifestNewMemtable(state.memTable.id))
     }
-    log.info("Start LsmStorageInner with lsm dir: {}", path.getAbsolutePath)
+    log.info("Start LsmStorageInner with lsm dir: {}, last commit ts: {}", path.getAbsolutePath, lastCommitTs)
     val mvcc = LsmMvccInner(lastCommitTs)
     new LsmStorageInner(path, state, blockCache, options, nextSstId, compactionController, Some(manifest), Some(mvcc))
   }
@@ -126,11 +131,9 @@ private[tinylsm] case class LsmStorageInner(
     val snapshot = state.read(_.copy())
 
     // Memtable 部分的迭代器
-    val curMemtableIter = snapshot.memTable.scan(
-      Included(MemTableKey.withBeginTs(key)), Included(MemTableKey.withEndTs(key)))
-    val frozenMemtableIters = snapshot.immutableMemTables.map(im =>
-      im.scan(Included(MemTableKey.withBeginTs(key)), Included(MemTableKey.withEndTs(key))))
-    val memtableIter = MergeIterator(curMemtableIter :: frozenMemtableIters)
+    val memTableIters = (snapshot.memTable :: snapshot.immutableMemTables)
+      .map(mt => mt.scan(Included(MemTableKey.withBeginTs(key)), Included(MemTableKey.withEndTs(key))))
+    val memtableIter = MergeIterator(memTableIters)
 
     // L0 部分的迭代器
     val l0Iter = MergeIterator(snapshot.l0SsTables
@@ -157,8 +160,7 @@ private[tinylsm] case class LsmStorageInner(
       Unbounded(), ts
     )
 
-    if (finalIter.isValid && finalIter.key().rawKey().equals(key) &&
-      !finalIter.value().sameElements(DELETE_TOMBSTONE)) {
+    if (finalIter.isValid && finalIter.key().rawKey().equals(key) && !finalIter.deletedValue()) {
       Some(finalIter.value())
     } else {
       None
@@ -318,11 +320,9 @@ private[tinylsm] case class LsmStorageInner(
   def scanWithTs(lower: Bound, upper: Bound, readTs: Long): FusedIterator[RawKey] = {
     val snapshot = state.read(_.copy())
     // MemTable 部分的迭代器
-    val memTableIters = ArrayBuffer[MemTableIterator]()
-    memTableIters.addOne(snapshot.memTable.scan(Bound.withBeginTs(lower), Bound.withEndTs(upper)))
-    snapshot.immutableMemTables.map(mt => mt.scan(Bound.withBeginTs(lower), Bound.withEndTs(upper)))
-      .foreach(memTableIters.addOne)
-    val memTablesIter = MergeIterator(memTableIters.toList)
+    val memTableIters = (snapshot.memTable :: snapshot.immutableMemTables)
+      .map(mt => mt.scan(Bound.withBeginTs(lower), Bound.withEndTs(upper)))
+    val memTablesIter = MergeIterator(memTableIters)
 
     // L0 SST 部分的迭代器
     val ssTableIters = snapshot.l0SsTables.map(snapshot.ssTables(_))
@@ -340,7 +340,7 @@ private[tinylsm] case class LsmStorageInner(
     })
     val levelTablesIter = MergeIterator(levelIters)
 
-    log.info("{}, {}, {}", memTablesIter.numActiveIterators(), l0ssTablesIter.numActiveIterators(), levelTablesIter.numActiveIterators())
+    log.debug("{}, {}, {}", memTablesIter.numActiveIterators(), l0ssTablesIter.numActiveIterators(), levelTablesIter.numActiveIterators())
     /* 合成最终的迭代器
      *                                           |-> MergeIterator(各个Memtable的 MemTableIterator)
      *                    |-> TwoMergeIterator --|
@@ -440,13 +440,13 @@ private[tinylsm] case class LsmStorageInner(
                            sstBegin: MemTableKey, sstEnd: MemTableKey): Boolean = {
     // 判断scan的右边界如果小于SST的最左边第一个key，那么这个sst肯定不包含这个scan范围
     userEnd match
-      case Excluded(r: Key) if r.rawKey().compareTo(sstBegin.rawKey()) <= 0 => return false
-      case Included(r: Key) if r.rawKey().compareTo(sstBegin.rawKey()) < 0 => return false
+      case Excluded(right: Key) if right.rawKey() <= sstBegin.rawKey() => return false
+      case Included(right: Key) if right.rawKey() < sstBegin.rawKey() => return false
       case _ =>
     // 判断scan的左边界如果大于SST的最右边最后一个key，那么这个sst肯定不包含这个scan范围
     userBegin match
-      case Excluded(r: Key) if r.rawKey().compareTo(sstEnd.rawKey()) >= 0 => return false
-      case Included(r: Key) if r.rawKey().compareTo(sstEnd.rawKey()) > 0 => return false
+      case Excluded(left: Key) if left.rawKey() >= sstEnd.rawKey() => return false
+      case Included(left: Key) if left.rawKey() > sstEnd.rawKey() => return false
       case _ =>
     true
   }

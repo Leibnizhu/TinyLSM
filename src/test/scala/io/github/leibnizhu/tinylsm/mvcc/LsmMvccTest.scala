@@ -3,7 +3,7 @@ package io.github.leibnizhu.tinylsm.mvcc
 import io.github.leibnizhu.tinylsm.TestUtils.{checkIterator, compactionOption, entry, tempDir}
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions
 import io.github.leibnizhu.tinylsm.utils.{Excluded, Included, Unbounded}
-import io.github.leibnizhu.tinylsm.{MemTableKey, SsTableBuilder, TinyLsm}
+import io.github.leibnizhu.tinylsm.{MemTableKey, SsTableBuilder, TestUtils, TinyLsm}
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File
@@ -214,6 +214,8 @@ class LsmMvccTest extends AnyFunSuite {
       entry("a", "4"),
     ), snapshot6.scan(Included("a"), Included("a")))
 
+    TestUtils.dumpIterator(snapshot6.scan(Excluded("a"), Excluded("c")))
+    checkIterator(List(), snapshot6.scan(Excluded("a"), Excluded("b")))
     checkIterator(List(), snapshot6.scan(Excluded("a"), Excluded("c")))
   }
 

@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory
  * @param innerIter LsmIteratorInner内部迭代器
  * @param endBound  遍历的key上界
  */
-class LsmIterator(val innerIter: LsmIteratorInner, endBound: Bound, readTs: Long) extends StorageIterator[RawKey] {
+class LsmIterator(val innerIter: StorageIterator[MemTableKey], endBound: Bound, readTs: Long) extends StorageIterator[RawKey] {
   private val log = LoggerFactory.getLogger(this.getClass)
   // LsmIterator本身是否可用，
   private var isSelfValid = innerIter.isValid
@@ -42,8 +42,8 @@ class LsmIterator(val innerIter: LsmIteratorInner, endBound: Bound, readTs: Long
     // 由于LsmIteratorInner 包含了MemTable和SST的迭代器，而SST的迭代器不支持上界
     // 所以还要检查下上界，如果到达上界则当前LsmIterator不可用
     endBound match
-      case Included(r) => isSelfValid = key().compareTo(r.rawKey()) <= 0
-      case Excluded(r) => isSelfValid = key().compareTo(r.rawKey()) < 0
+      case Included(r: Key) => isSelfValid = key().compareTo(r.rawKey()) <= 0
+      case Excluded(r: Key) => isSelfValid = key().compareTo(r.rawKey()) < 0
       case _ =>
   }
 
@@ -76,7 +76,7 @@ class LsmIterator(val innerIter: LsmIteratorInner, endBound: Bound, readTs: Long
 
       if (innerIter.key().rawKey().equals(prevKey)) {
         // 当前key和prevKey相同，说明当前key是有满足 readTs 的版本要的value
-        if (!innerIter.value().sameElements(DELETE_TOMBSTONE)) {
+        if (!innerIter.deletedValue()) {
           // 遇到不是删除的就是要查的数据了，否则继续下个key
           if (log.isDebugEnabled) {
             log.debug("moveToKey() from initKey={}, to curKey={}", new String(initKey), innerIter.key())
