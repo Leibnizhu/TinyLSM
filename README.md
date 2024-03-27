@@ -88,19 +88,24 @@ command) and start TinyLsm.
 
 ## Usage
 
-### Build
+### Get Docker Image
 
+You can pull image from [docker hub](https://hub.docker.com/r/leibniz007/tiny-lsm/tags):  
+```bash
+docker pull leibniz007/tiny-lsm:latest
+```
+
+Or build docker image from source code.  
 Make sure `docker` is installed, and then execute:
 
 ```shell
-docker build . -f Dockerfile -t tiny-lsm:0.2 --network=host --target prod
+docker build . -f Dockerfile -t leibniz007/tiny-lsm:0.2 --network=host --target prod
 ```
 
 ### Run
 
 ```shell
-# or use leibniz/tiny-lsm:0.2 from docker hub
-docker run --rm -d --name tinylsm -v /path/to/tinylsm:/etc/tinylsm tiny-lsm:0.2
+docker run --rm -d --name tinylsm -v /path/to/tinylsm:/etc/tinylsm leibniz007/tiny-lsm:latest
 docker exec -it tinylsm bash
 
 # in container's bash
