@@ -1,5 +1,8 @@
 package io.github.leibnizhu.tinylsm.mvcc
 
+import io.github.leibnizhu.tinylsm.TestUtils.{compactionOption, tempDir}
+import io.github.leibnizhu.tinylsm.TinyLsm
+import io.github.leibnizhu.tinylsm.compact.CompactionOptions.NoCompaction
 import org.scalatest.funsuite.AnyFunSuite
 
 class WatermarkTest extends AnyFunSuite {
@@ -39,5 +42,22 @@ class WatermarkTest extends AnyFunSuite {
     watermark.removeReader(2000)
     assertResult(1)(watermark.numRetainedSnapshots())
     assertResult(Some(2001))(watermark.watermark())
+  }
+
+  test("test_task2_snapshot_watermark") {
+    val dir = tempDir()
+    val options = compactionOption(NoCompaction, true)
+    val storage = TinyLsm(dir, options)
+    val txn1 = storage.newTxn()
+    val txn2 = storage.newTxn()
+    storage.put("233", "23333")
+    val txn3 = storage.newTxn()
+    assertResult(txn1.readTs)(storage.inner.mvcc.get.watermark())
+    txn1.drop()
+    assertResult(txn2.readTs)(storage.inner.mvcc.get.watermark())
+    txn2.drop()
+    assertResult(txn3.readTs)(storage.inner.mvcc.get.watermark())
+    txn3.drop()
+    assertResult(storage.inner.mvcc.get.latestCommitTs())(storage.inner.mvcc.get.watermark())
   }
 }

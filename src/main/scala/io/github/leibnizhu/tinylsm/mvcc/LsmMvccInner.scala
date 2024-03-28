@@ -24,7 +24,8 @@ class LsmMvccInner(
   }
 
   def watermark(): Long = {
-    ts.execute(_._2.watermark().getOrElse(0))
+    // 如果没有活动中的Transaction，那么水位应该是最后提交的版本
+    ts.execute((ts, wm) => wm.watermark().getOrElse(ts))
   }
 
   def newTxn(inner: LsmStorageInner, serializable: Boolean): Transaction = ts.execute((readTs, watermark) => {
