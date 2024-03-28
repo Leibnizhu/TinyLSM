@@ -41,5 +41,5 @@ class LsmMvccInner(
 
 object LsmMvccInner {
   def apply(lastCommitTs: Long): LsmMvccInner =
-    new LsmMvccInner(ts = Mutex((lastCommitTs, new Watermark())))
+    new LsmMvccInner(ts = Mutex((lastCommitTs, new Watermark)))
 }

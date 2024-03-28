@@ -59,6 +59,6 @@ case class Transaction(
   }
 
   def drop(): Unit = {
-    // TODO
+    this.inner.mvcc.foreach(_.ts.execute((_, watermark) => watermark.removeReader(this.readTs)))
   }
 }
