@@ -1,9 +1,9 @@
 package io.github.leibnizhu.tinylsm.mvcc
 
-import io.github.leibnizhu.tinylsm.TestUtils.{checkIterator, compactionOption, entry, tempDir}
+import io.github.leibnizhu.tinylsm.TestUtils.*
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions
 import io.github.leibnizhu.tinylsm.utils.{Excluded, Included, Unbounded}
-import io.github.leibnizhu.tinylsm.{MemTableKey, SsTableBuilder, TestUtils, TinyLsm}
+import io.github.leibnizhu.tinylsm.{MemTableKey, SsTableBuilder, TestUtils, TinyLsm, WriteBatchRecord}
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File
@@ -122,8 +122,7 @@ class LsmMvccTest extends AnyFunSuite {
     storage.delete("b")
     storage.put("c", "1")
     val snapshot3 = storage.newTxn()
-    storage.inner.forceFreezeMemTable()
-    storage.inner.forceFlushNextImmutableMemTable()
+    storage.forceFlush()
 
     assertResult("1")(snapshot1.get("a").get)
     assertResult("1")(snapshot1.get("b").get)
@@ -157,8 +156,7 @@ class LsmMvccTest extends AnyFunSuite {
     storage.delete("b")
     storage.put("c", "5")
     val snapshot6 = storage.newTxn()
-    storage.inner.forceFreezeMemTable()
-    storage.inner.forceFlushNextImmutableMemTable()
+    storage.forceFlush()
 
     assertResult("1")(snapshot1.get("a").get)
     assertResult("1")(snapshot1.get("b").get)
@@ -229,5 +227,92 @@ class LsmMvccTest extends AnyFunSuite {
     builder.add(MemTableKey("66".getBytes, 6), "22".getBytes)
     val sst = builder.build(0, None, new File(tempDir(), "1.sst"))
     assertResult(6)(sst.maxTimestamp);
+  }
+
+  test("week3_day3_task3_mvcc_compaction") {
+    val options = compactionOption(CompactionOptions.NoCompaction, true)
+    val storage = TinyLsm(tempDir(), options)
+    val snapshot0 = storage.newTxn()
+    storage.writeBatch(List(
+      WriteBatchRecord.Put("a".getBytes, "1".getBytes),
+      WriteBatchRecord.Put("b".getBytes, "1".getBytes),
+    ))
+
+    val snapshot1 = storage.newTxn()
+    storage.writeBatch(List(
+      WriteBatchRecord.Put("a".getBytes, "2".getBytes),
+      WriteBatchRecord.Put("d".getBytes, "2".getBytes),
+    ))
+
+    val snapshot2 = storage.newTxn()
+    storage.writeBatch(List(
+      WriteBatchRecord.Put("a".getBytes, "3".getBytes),
+      WriteBatchRecord.Del("d".getBytes),
+    ))
+
+    val snapshot3 = storage.newTxn()
+    storage.writeBatch(List(
+      WriteBatchRecord.Put("c".getBytes, "4".getBytes),
+      WriteBatchRecord.Del("a".getBytes),
+    ))
+
+    storage.forceFlush()
+    storage.forceFullCompaction()
+    val iter1 = constructMergeIteratorOverStorage(storage.inner.state)
+    checkIterator(List(
+      entry("a", ""),
+      entry("a", "3"),
+      entry("a", "2"),
+      entry("a", "1"),
+      entry("b", "1"),
+      entry("c", "4"),
+      entry("d", ""),
+      entry("d", "2"),
+    ), iter1)
+
+    snapshot0.drop()
+    storage.forceFullCompaction()
+    val iter2 = constructMergeIteratorOverStorage(storage.inner.state)
+    checkIterator(List(
+      entry("a", ""),
+      entry("a", "3"),
+      entry("a", "2"),
+      entry("a", "1"),
+      entry("b", "1"),
+      entry("c", "4"),
+      entry("d", ""),
+      entry("d", "2"),
+    ), iter2)
+
+    snapshot1.drop()
+    storage.forceFullCompaction()
+    val iter3 = constructMergeIteratorOverStorage(storage.inner.state)
+    checkIterator(List(
+      entry("a", ""),
+      entry("a", "3"),
+      entry("a", "2"),
+      entry("b", "1"),
+      entry("c", "4"),
+      entry("d", ""),
+      entry("d", "2"),
+    ), iter3)
+
+    snapshot2.drop()
+    storage.forceFullCompaction()
+    val iter4 = constructMergeIteratorOverStorage(storage.inner.state)
+    checkIterator(List(
+      entry("a", ""),
+      entry("a", "3"),
+      entry("b", "1"),
+      entry("c", "4"),
+    ), iter4)
+
+    snapshot3.drop()
+    storage.forceFullCompaction()
+    val iter5 = constructMergeIteratorOverStorage(storage.inner.state)
+    checkIterator(List(
+      entry("b", "1"),
+      entry("c", "4"),
+    ), iter5)
   }
 }

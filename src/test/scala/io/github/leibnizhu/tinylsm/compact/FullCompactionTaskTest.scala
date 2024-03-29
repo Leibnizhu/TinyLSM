@@ -156,6 +156,7 @@ class FullCompactionTaskTest extends AnyFunSuite {
     val dir = tempDir()
     val options = compactionOption(NoCompaction, true)
     val storage = TinyLsm(dir, options)
+    storage.newTxn()
     for (i <- 0 to 20000) {
       storage.put("0", "%02000d".format(i))
     }

@@ -97,8 +97,7 @@ class ManifestTest extends AnyFunSuite {
       } else {
         storage.delete("2")
       }
-      storage.inner.forceFreezeMemTable()
-      storage.inner.forceFlushNextImmutableMemTable()
+      storage.forceFlush()
     }
     Thread.sleep(100)
     storage.inner.dumpState()

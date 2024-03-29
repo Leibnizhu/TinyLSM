@@ -4,7 +4,7 @@ import io.github.leibnizhu.tinylsm.MemTableKey.{TS_MAX, TS_RANGE_END}
 import io.github.leibnizhu.tinylsm.block.BlockCache
 import io.github.leibnizhu.tinylsm.compact.{CompactionController, FullCompactionTask}
 import io.github.leibnizhu.tinylsm.iterator.*
-import io.github.leibnizhu.tinylsm.mvcc.{LsmMvccInner, Transaction, TxnIterator}
+import io.github.leibnizhu.tinylsm.mvcc.{LsmMvccInner, Transaction}
 import io.github.leibnizhu.tinylsm.utils.*
 import org.slf4j.LoggerFactory
 
@@ -176,7 +176,11 @@ private[tinylsm] case class LsmStorageInner(
    * @param key   key
    * @param value 如果要执行delete操作，可以传入null
    */
-  def put(key: Array[Byte], value: MemTableValue): Unit = writeBatch(List(WriteBatchRecord.Put(key, value)))
+  def put(key: Array[Byte], value: MemTableValue): Unit = if (options.serializable) {
+    writeBatch(List(WriteBatchRecord.Put(key, value)))
+  } else {
+    writeBatch(List(WriteBatchRecord.Put(key, value)))
+  }
 
   def put(key: String, value: String): Unit = put(key.getBytes, value.getBytes)
 
@@ -189,8 +193,7 @@ private[tinylsm] case class LsmStorageInner(
 
   def delete(key: String): Unit = delete(key.getBytes)
 
-
-  private def writeBatch(batch: Seq[WriteBatchRecord]): Long = {
+  def writeBatch(batch: Seq[WriteBatchRecord]): Long = {
     def doWriteBatch(record: WriteBatchRecord, ts: Long): Unit = {
       record match
         case WriteBatchRecord.Del(key: Array[Byte]) =>
@@ -312,9 +315,8 @@ private[tinylsm] case class LsmStorageInner(
     }
   }
 
-  def scan(lower: Bound, upper: Bound): TxnIterator = this.mvcc match
-    // FIXME
-    case None => TxnIterator(null, scanWithTs(lower, upper, TS_RANGE_END))
+  def scan(lower: Bound, upper: Bound): StorageIterator[RawKey] = this.mvcc match
+    case None => scanWithTs(lower, upper, TS_RANGE_END)
     case Some(mvcc) => mvcc.newTxn(this.clone(), options.serializable).scan(lower, upper)
 
   def scanWithTs(lower: Bound, upper: Bound, readTs: Long): FusedIterator[RawKey] = {
@@ -381,36 +383,64 @@ private[tinylsm] case class LsmStorageInner(
    * @return 新的sst
    */
   def compactGenerateSstFromIter(iter: StorageIterator[MemTableKey], compactToBottomLevel: Boolean): List[SsTable] = {
+    import scala.util.control.Breaks.*
     var builder: Option[SsTableBuilder] = None
     val newSstList = new ArrayBuffer[SsTable]()
+    // 当前Transaction 的水位，时间戳/版本 超过水位（比水位更新/时间戳更大）的版本需要保留，否则可以删掉
+    val watermark = mvcc.map(_.watermark()).getOrElse(MemTableKey.TS_MIN)
     // 记录最近处理的key，同个key写入同个sst，即便超过了sst大小限制，这样方便处理判断key区间
     var lastKey = Array[Byte]()
-    while (iter.isValid) {
+    // 记录当前是否是Watermark下的第一个key
+    var firstKeyBelowWatermark = false
+    while (iter.isValid) breakable {
       if (builder.isEmpty) {
         builder = Some(SsTableBuilder(options.blockSize))
       }
-      val sameAsLastKey = iter.key().bytes.sameElements(lastKey)
+
+      val sameAsLastKey = iter.key().rawKey().equals(lastKey)
       if (!sameAsLastKey) {
-        lastKey = iter.key().bytes
+        firstKeyBelowWatermark = true
       }
-      val innerBuilder = builder.get
-      // FIXME week3 day2 版本先忽略 compactToBottomLevel
-      /* if (compactToBottomLevel) {
-         // 如果压缩合并底部的level，则不保留delete墓碑
-         if (!iter.value().sameElements(DELETE_TOMBSTONE)) {
-           innerBuilder.add(iter.key(), iter.value())
-         }
-       } else {*/
-      innerBuilder.add(iter.key(), iter.value())
-      // }
-      iter.next()
+
+      // 处理delete墓碑
+      if (compactToBottomLevel
+//        && !sameAsLastKey
+        && iter.key().ts <= watermark
+        && iter.value().sameElements(DELETE_TOMBSTONE)) {
+        // 如果压缩合并底部的level，那么水位线以下的delete墓碑不用保留了
+        // 如果不是底部 compactToBottomLevel == false，那么不能直接跳过，否则会导致墓碑丢失，要留到最底一层才能删除墓碑
+        // 而如果 sameAsLastKey == true, 那么是和上一次遍历是同一个key，而遍历是从更新版本/更大时间戳开始的，说明这个key有更新的版本
+        lastKey = iter.key().bytes.clone()
+        iter.next()
+        firstKeyBelowWatermark = false
+        // 这里的break是break掉前面的 breakable，breakable是while里面的，所以实际是继续while， 下同
+        break()
+      }
+
+      // 跳过同key早于水位线的版本
+      if (iter.key().ts <= watermark) {
+        if (sameAsLastKey && !firstKeyBelowWatermark) {
+          // 跟之前的key一样，但是出现了
+          iter.next()
+          break()
+        }
+        firstKeyBelowWatermark = false
+      }
+
+      var innerBuilder = builder.get
       // builder满了则生成sst，并新开一个builder
       if (innerBuilder.estimateSize() >= options.targetSstSize && !sameAsLastKey) {
         val sstId = nextSstId.incrementAndGet()
         val sst = innerBuilder.build(sstId, Some(blockCache), fileOfSst(sstId))
-        builder = None
         newSstList += sst
+        innerBuilder = SsTableBuilder(options.blockSize)
+        builder = Some(innerBuilder)
       }
+      innerBuilder.add(iter.key(), iter.value())
+      if (!sameAsLastKey) {
+        lastKey = iter.key().bytes.clone()
+      }
+      iter.next()
     }
     // 最后一个SsTableBuilder
     if (builder.isDefined) {
