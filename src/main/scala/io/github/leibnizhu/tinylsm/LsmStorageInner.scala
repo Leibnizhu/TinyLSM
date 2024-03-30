@@ -404,7 +404,7 @@ private[tinylsm] case class LsmStorageInner(
 
       // 处理delete墓碑
       if (compactToBottomLevel
-//        && !sameAsLastKey
+        //        && !sameAsLastKey
         && iter.key().ts <= watermark
         && iter.value().sameElements(DELETE_TOMBSTONE)) {
         // 如果压缩合并底部的level，那么水位线以下的delete墓碑不用保留了

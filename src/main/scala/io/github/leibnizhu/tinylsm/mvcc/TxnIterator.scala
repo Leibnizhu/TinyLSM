@@ -1,10 +1,10 @@
 package io.github.leibnizhu.tinylsm.mvcc
 
-import io.github.leibnizhu.tinylsm.iterator.{FusedIterator, StorageIterator}
+import io.github.leibnizhu.tinylsm.iterator.{FusedIterator, StorageIterator, TwoMergeIterator}
 import io.github.leibnizhu.tinylsm.{Key, MemTableValue, RawKey}
 
-//type TxnInnerIterator = TwoMergeIterator[RawKey, TxnLocalIterator, FusedIterator[RawKey]]
-type TxnInnerIterator = FusedIterator[RawKey]
+type TxnInnerIterator = TwoMergeIterator[RawKey, TxnLocalIterator, FusedIterator[RawKey]]
+//type TxnInnerIterator = FusedIterator[RawKey]
 
 class TxnIterator(
                    _txn: Transaction,
@@ -37,7 +37,7 @@ class TxnIterator(
     }
   }
 
-  private def addToReadSet(key: Key): Unit = {
-    // TODO
+  private def addToReadSet(key: Key): Unit = if (_txn.keyHashes.isDefined) {
+    _txn.keyHashes.get.execute((_, readHashes) => readHashes.add(key.keyHash()))
   }
 }

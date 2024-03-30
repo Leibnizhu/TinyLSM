@@ -8,6 +8,14 @@ import java.util.concurrent.ConcurrentSkipListMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.{Lock, ReentrantLock}
 
+/**
+ * 管控MVCC，会有多个 Transaction 同时访问
+ *
+ * @param writeLock     Transaction 提交、写入MemTable时的锁
+ * @param commitLock    Transaction 提交的锁
+ * @param ts            记录 Tuple2(当前最新Commit版本, Watermark)
+ * @param committedTxns 已提交的 Transaction 信息
+ */
 class LsmMvccInner(
                     val writeLock: Lock = new ReentrantLock(),
                     val commitLock: Lock = new ReentrantLock(),

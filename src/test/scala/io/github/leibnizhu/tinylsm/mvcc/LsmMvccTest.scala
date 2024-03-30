@@ -270,7 +270,7 @@ class LsmMvccTest extends AnyFunSuite {
       entry("d", "2"),
     ), iter1)
 
-    snapshot0.drop()
+    snapshot0.rollback()
     storage.forceFullCompaction()
     val iter2 = constructMergeIteratorOverStorage(storage.inner.state)
     checkIterator(List(
@@ -284,7 +284,7 @@ class LsmMvccTest extends AnyFunSuite {
       entry("d", "2"),
     ), iter2)
 
-    snapshot1.drop()
+    snapshot1.rollback()
     storage.forceFullCompaction()
     val iter3 = constructMergeIteratorOverStorage(storage.inner.state)
     checkIterator(List(
@@ -297,7 +297,7 @@ class LsmMvccTest extends AnyFunSuite {
       entry("d", "2"),
     ), iter3)
 
-    snapshot2.drop()
+    snapshot2.rollback()
     storage.forceFullCompaction()
     val iter4 = constructMergeIteratorOverStorage(storage.inner.state)
     checkIterator(List(
@@ -307,7 +307,7 @@ class LsmMvccTest extends AnyFunSuite {
       entry("c", "4"),
     ), iter4)
 
-    snapshot3.drop()
+    snapshot3.rollback()
     storage.forceFullCompaction()
     val iter5 = constructMergeIteratorOverStorage(storage.inner.state)
     checkIterator(List(

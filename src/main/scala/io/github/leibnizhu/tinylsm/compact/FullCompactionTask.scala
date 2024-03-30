@@ -1,7 +1,7 @@
 package io.github.leibnizhu.tinylsm.compact
 
 import io.github.leibnizhu.tinylsm.iterator.{MergeIterator, SsTableIterator, TwoMergeIterator}
-import io.github.leibnizhu.tinylsm.{LsmStorageInner, LsmStorageState, MemTableKey, SsTable}
+import io.github.leibnizhu.tinylsm.{LsmStorageInner, LsmStorageState, SsTable}
 
 import scala.collection.mutable
 

@@ -53,11 +53,11 @@ class WatermarkTest extends AnyFunSuite {
     storage.put("233", "23333")
     val txn3 = storage.newTxn()
     assertResult(txn1.readTs)(storage.inner.mvcc.get.watermark())
-    txn1.drop()
+    txn1.rollback()
     assertResult(txn2.readTs)(storage.inner.mvcc.get.watermark())
-    txn2.drop()
+    txn2.rollback()
     assertResult(txn3.readTs)(storage.inner.mvcc.get.watermark())
-    txn3.drop()
+    txn3.rollback()
     assertResult(storage.inner.mvcc.get.latestCommitTs())(storage.inner.mvcc.get.watermark())
   }
 }
