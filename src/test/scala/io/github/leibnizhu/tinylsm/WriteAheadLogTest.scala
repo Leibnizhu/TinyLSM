@@ -54,7 +54,7 @@ class WriteAheadLogTest extends AnyFunSuite {
 
   private def manifestIntegrationTest(options: CompactionOptions): Unit = {
     val rootDir = tempDir()
-    val storage = TinyLsm(rootDir, compactionOption(options, true))
+    val storage = TinyLsm(rootDir, compactionOption(options).copy(enableWal = true))
     for (i <- 0 to 20) {
       storage.put("0", s"v$i")
       if (i % 2 == 0) {
@@ -79,7 +79,7 @@ class WriteAheadLogTest extends AnyFunSuite {
     dumpFilesInDir(rootDir)
 
     // 用WAL恢复LSM
-    val recovered = TinyLsm(rootDir, compactionOption(options, true))
+    val recovered = TinyLsm(rootDir, compactionOption(options).copy(enableWal = true))
     assertResult("v20")(recovered.get("0").get)
     assertResult("v20")(recovered.get("1").get)
     assert(recovered.get("2").isEmpty)

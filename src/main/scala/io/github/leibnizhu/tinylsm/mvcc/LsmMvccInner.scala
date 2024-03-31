@@ -43,6 +43,7 @@ class LsmMvccInner(
       inner = inner,
       localStorage = new ConcurrentSkipListMap(),
       committed = new AtomicBoolean(false),
+      
       keyHashes = if (serializable) Some(Mutex((new util.HashSet[Int](), new util.HashSet[Int]()))) else None
     )
   })

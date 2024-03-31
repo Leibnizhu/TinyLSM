@@ -46,7 +46,7 @@ class WatermarkTest extends AnyFunSuite {
 
   test("test_task2_snapshot_watermark") {
     val dir = tempDir()
-    val options = compactionOption(NoCompaction, true)
+    val options = compactionOption(NoCompaction).copy(enableWal = true)
     val storage = TinyLsm(dir, options)
     val txn1 = storage.newTxn()
     val txn2 = storage.newTxn()

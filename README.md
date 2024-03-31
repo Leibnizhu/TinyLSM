@@ -32,7 +32,7 @@ Configuration lookup order:
 | TINY_LSM_TARGET_MANIFEST_SIZE | target.manifest.size   | Manifest size in bytes                                                       | 1 << 20 (1MB)             |
 | TINY_LSM_MEMTABLE_NUM         | memtable.num           | Maximum number of memtables in memory, flush to L0 when exceeding this limit | 50                        |
 | TINY_LSM_ENABLE_WAL           | enable.wal             |                                                                              | true                      |
-| TINY_LSM_SERIALIZABLE         | serializable           |                                                                              | false                     |
+| TINY_LSM_SERIALIZABLE         | serializable           | Transaction serializable                                                     | false                     |
 | TINY_LSM_DATA_DIR             | data.dir               |                                                                              | /etc/tinylsm/data         |
 | TINY_LSM_CONFIG_FILE          | config.file            |                                                                              | /etc/tinylsm/tinylsm.conf |
 | TINY_LSM_COMPACTION_STRATEGY  | compaction.strategy    | leveled/tiered/simple/full/none                                              | leveled                   |
@@ -90,7 +90,8 @@ command) and start TinyLsm.
 
 ### Get Docker Image
 
-You can pull image from [docker hub](https://hub.docker.com/r/leibniz007/tiny-lsm/tags):  
+You can pull image from [docker hub](https://hub.docker.com/r/leibniz007/tiny-lsm/tags):
+
 ```bash
 docker pull leibniz007/tiny-lsm:latest
 ```

@@ -10,7 +10,7 @@ class TransactionTest extends AnyFunSuite {
 
   test("week3_day5_txn_integration") {
     val dir = tempDir()
-    val options = compactionOption(NoCompaction, true)
+    val options = compactionOption(NoCompaction).copy(enableWal = true)
     val storage = TinyLsm(dir, options)
     val txn1 = storage.newTxn()
     val txn2 = storage.newTxn()
@@ -61,5 +61,93 @@ class TransactionTest extends AnyFunSuite {
     checkIterator(List(
       entry("test1", "233"),
     ), txn4.scan(Unbounded(), Unbounded()))
+  }
+
+  test("week3_day6_serializable_1") {
+    val dir = tempDir()
+    val options = compactionOption(NoCompaction).copy(enableWal = true).copy(serializable = true)
+    val storage = TinyLsm(dir, options)
+    storage.put("key1", "1")
+    storage.put("key2", "2")
+    val txn1 = storage.newTxn()
+    val txn2 = storage.newTxn()
+    txn1.put("key1", txn1.get("key2").get)
+    txn2.put("key2", txn2.get("key1").get)
+    txn1.commit()
+    assertThrows[Exception](txn2.commit())
+    txn2.rollback()
+    assertResult(Some("2"))(storage.get("key1"))
+    assertResult(Some("2"))(storage.get("key2"))
+  }
+
+  test("week3_day6_serializable_2") {
+    val dir = tempDir()
+    val options = compactionOption(NoCompaction).copy(enableWal = true).copy(serializable = true)
+    val storage = TinyLsm(dir, options)
+    val txn1 = storage.newTxn()
+    val txn2 = storage.newTxn()
+    txn1.put("key1", "1")
+    txn2.put("key1", "2")
+    txn1.commit()
+    txn2.commit()
+    assertResult(Some("2"))(storage.get("key1"))
+  }
+
+  test("week3_day6_serializable_3_ts_range") {
+    val dir = tempDir()
+    val options = compactionOption(NoCompaction).copy(enableWal = true).copy(serializable = true)
+    val storage = TinyLsm(dir, options)
+    storage.put("key1", "1")
+    storage.put("key2", "2")
+    val txn1 = storage.newTxn()
+    txn1.put("key1", txn1.get("key2").get)
+    txn1.commit()
+    val txn2 = storage.newTxn()
+    txn2.put("key2", txn2.get("key1").get)
+    txn2.commit()
+    txn2.rollback()
+    assertResult("2")(storage.get("key1").get)
+    assertResult("2")(storage.get("key2").get)
+  }
+
+  test("week3_day6_serializable_4_scan") {
+    val dir = tempDir()
+    val options = compactionOption(NoCompaction).copy(enableWal = true).copy(serializable = true)
+    val storage = TinyLsm(dir, options)
+    storage.put("key1", "1")
+    storage.put("key2", "2")
+    val txn1 = storage.newTxn()
+    val txn2 = storage.newTxn()
+    txn1.put("key1", txn1.get("key2").get)
+    txn1.commit()
+    val iter = txn2.scan(Unbounded(), Unbounded())
+    while (iter.isValid) {
+      iter.next()
+    }
+    txn2.put("key2", "1")
+    assertThrows[Exception](txn2.commit())
+    txn2.rollback()
+    assertResult(Some("2"))(storage.get("key1"))
+    assertResult(Some("2"))(storage.get("key2"))
+  }
+
+  test("week3_day6_serializable_5_read_only") {
+    val dir = tempDir()
+    val options = compactionOption(NoCompaction).copy(enableWal = true).copy(serializable = true)
+    val storage = TinyLsm(dir, options)
+    storage.put("key1", "1")
+    storage.put("key2", "2")
+    val txn1 = storage.newTxn()
+    txn1.put("key1", txn1.get("key2").get)
+    txn1.commit()
+    val txn2 = storage.newTxn()
+    txn2.get("key1")
+    val iter = txn2.scan(Unbounded(), Unbounded())
+    while (iter.isValid) {
+      iter.next()
+    }
+    txn2.commit()
+    assertResult(Some("2"))(storage.get("key1"))
+    assertResult(Some("2"))(storage.get("key2"))
   }
 }

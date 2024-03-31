@@ -17,7 +17,7 @@ case class LsmStorageOptions
   compactionOptions: CompactionOptions,
   // 是否启用WAL
   enableWal: Boolean,
-  // 是否可序列化
+  // Transaction 是否可序列化
   serializable: Boolean
 )
 

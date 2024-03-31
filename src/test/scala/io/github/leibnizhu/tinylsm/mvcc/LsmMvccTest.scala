@@ -11,7 +11,7 @@ import java.io.File
 class LsmMvccTest extends AnyFunSuite {
 
   test("week3_day3_task2_memtable_mvcc") {
-    val options = compactionOption(CompactionOptions.NoCompaction, true)
+    val options = compactionOption(CompactionOptions.NoCompaction).copy(enableWal = true)
     val storage = TinyLsm(tempDir(), options)
     storage.put("a", "1")
     storage.put("b", "1")
@@ -112,7 +112,7 @@ class LsmMvccTest extends AnyFunSuite {
   }
 
   test("week3_day3_task2_lsm_iterator_mvcc") {
-    val options = compactionOption(CompactionOptions.NoCompaction, true)
+    val options = compactionOption(CompactionOptions.NoCompaction).copy(enableWal = true)
     val storage = TinyLsm(tempDir(), options)
     storage.put("a", "1")
     storage.put("b", "1")
@@ -230,7 +230,7 @@ class LsmMvccTest extends AnyFunSuite {
   }
 
   test("week3_day3_task3_mvcc_compaction") {
-    val options = compactionOption(CompactionOptions.NoCompaction, true)
+    val options = compactionOption(CompactionOptions.NoCompaction).copy(enableWal = true)
     val storage = TinyLsm(tempDir(), options)
     val snapshot0 = storage.newTxn()
     storage.writeBatch(List(

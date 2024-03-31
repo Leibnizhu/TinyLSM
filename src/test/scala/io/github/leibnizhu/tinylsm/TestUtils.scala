@@ -107,13 +107,13 @@ object TestUtils {
     MergeIterator(iters.toList)
   }
 
-  def compactionOption(compactOpt: CompactionOptions, enableWal: Boolean = false): LsmStorageOptions = LsmStorageOptions(
+  def compactionOption(compactOpt: CompactionOptions): LsmStorageOptions = LsmStorageOptions(
     4096,
     1 << 20,
     1 << 20,
     2,
     compactOpt,
-    enableWal,
+    false,
     false)
 
   def compactionBench(storage: TinyLsm): Unit = {

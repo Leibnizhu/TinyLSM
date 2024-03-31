@@ -154,7 +154,7 @@ class FullCompactionTaskTest extends AnyFunSuite {
 
   test("week3_day2_compaction_integration") {
     val dir = tempDir()
-    val options = compactionOption(NoCompaction, true)
+    val options = compactionOption(NoCompaction).copy(enableWal = true)
     val storage = TinyLsm(dir, options)
     storage.newTxn()
     for (i <- 0 to 20000) {
