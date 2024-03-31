@@ -3,7 +3,7 @@ package io.github.leibnizhu.tinylsm.mvcc
 import io.github.leibnizhu.tinylsm.iterator.StorageIterator
 import io.github.leibnizhu.tinylsm.mvcc.TxnLocalIterator.extractCurItem
 import io.github.leibnizhu.tinylsm.utils.{Bound, Bounded, Unbounded}
-import io.github.leibnizhu.tinylsm.{MemTableKey, MemTableValue, RawKey}
+import io.github.leibnizhu.tinylsm.{Key, MemTableKey, MemTableValue, RawKey}
 
 import java.util
 import java.util.Map
@@ -39,11 +39,11 @@ object TxnLocalIterator {
     val innerIter = (lower, upper) match
       case (Unbounded(), Unbounded()) =>
         map.entrySet().iterator().asScala
-      case (Unbounded(), Bounded(r: MemTableKey, inclusive: Boolean)) =>
+      case (Unbounded(), Bounded(r: Key, inclusive: Boolean)) =>
         map.headMap(RawKey(r.bytes), inclusive).entrySet().iterator().asScala
-      case (Bounded(l: MemTableKey, inclusive: Boolean), Unbounded()) =>
+      case (Bounded(l: Key, inclusive: Boolean), Unbounded()) =>
         map.tailMap(RawKey(l.bytes), inclusive).entrySet().iterator().asScala
-      case (Bounded(l: MemTableKey, il: Boolean), Bounded(r: MemTableKey, ir: Boolean)) =>
+      case (Bounded(l: Key, il: Boolean), Bounded(r: Key, ir: Boolean)) =>
         map.subMap(RawKey(l.bytes), il, RawKey(r.bytes), ir).entrySet().iterator().asScala
       case (_, _) => null
     val firstItem = extractCurItem(innerIter)
