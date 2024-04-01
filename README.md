@@ -100,7 +100,7 @@ Or build docker image from source code.
 Make sure `docker` is installed, and then execute:
 
 ```shell
-docker build . -f Dockerfile -t leibniz007/tiny-lsm:0.2 --network=host --target prod
+docker build . -f Dockerfile -t leibniz007/tiny-lsm:latest --network=host --target prod
 ```
 
 ### Run
