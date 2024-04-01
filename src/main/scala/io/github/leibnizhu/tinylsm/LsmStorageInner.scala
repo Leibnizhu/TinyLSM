@@ -2,7 +2,7 @@ package io.github.leibnizhu.tinylsm
 
 import io.github.leibnizhu.tinylsm.MemTableKey.{TS_MAX, TS_RANGE_END}
 import io.github.leibnizhu.tinylsm.block.BlockCache
-import io.github.leibnizhu.tinylsm.compact.{CompactionController, FullCompactionTask}
+import io.github.leibnizhu.tinylsm.compact.{CompactionController, CompactionFilter, FullCompactionTask}
 import io.github.leibnizhu.tinylsm.iterator.*
 import io.github.leibnizhu.tinylsm.mvcc.{LsmMvccInner, Transaction}
 import io.github.leibnizhu.tinylsm.utils.*
@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory
 
 import java.io.File
 import java.util
+import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -113,6 +114,7 @@ private[tinylsm] case class LsmStorageInner(
                                              val compactionController: CompactionController,
                                              val manifest: Option[Manifest] = None,
                                              val mvcc: Option[LsmMvccInner] = None,
+                                             val compactionFilters: ConcurrentLinkedDeque[CompactionFilter] = new ConcurrentLinkedDeque()
                                            ) {
   private val log = LoggerFactory.getLogger(this.getClass)
 
@@ -231,6 +233,10 @@ private[tinylsm] case class LsmStorageInner(
       } finally {
         mvcc.writeLock.unlock()
       }
+  }
+
+  def addCompactionFilter(compactionFilter: CompactionFilter): Unit = {
+    compactionFilters.offer(compactionFilter)
   }
 
   private def tryFreezeMemTable(estimatedSize: Int): Unit = {
@@ -392,6 +398,7 @@ private[tinylsm] case class LsmStorageInner(
     var lastKey = Array[Byte]()
     // 记录当前是否是Watermark下的第一个key
     var firstKeyBelowWatermark = false
+    val compactionFilters = this.compactionFilters.asScala.toList
     while (iter.isValid) breakable {
       if (builder.isEmpty) {
         builder = Some(SsTableBuilder(options.blockSize))
@@ -425,6 +432,14 @@ private[tinylsm] case class LsmStorageInner(
           break()
         }
         firstKeyBelowWatermark = false
+        if (compactionFilters.nonEmpty) {
+          for (filter <- compactionFilters) filter match
+            case CompactionFilter.Prefix(prefix) =>
+              if (iter.key().bytes.startsWith(prefix)) {
+                iter.next()
+                break()
+              }
+        }
       }
 
       var innerBuilder = builder.get
@@ -539,4 +554,5 @@ enum WriteBatchRecord {
   case Del(key: Array[Byte]) extends WriteBatchRecord
 
   case Put(key: Array[Byte], value: MemTableValue) extends WriteBatchRecord
+
 }

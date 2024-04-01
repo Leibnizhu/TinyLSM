@@ -1,5 +1,6 @@
 package io.github.leibnizhu.tinylsm
 
+import io.github.leibnizhu.tinylsm.compact.CompactionFilter
 import io.github.leibnizhu.tinylsm.iterator.StorageIterator
 import io.github.leibnizhu.tinylsm.mvcc.Transaction
 import io.github.leibnizhu.tinylsm.utils.Bound
@@ -38,6 +39,8 @@ class TinyLsm(val inner: LsmStorageInner) {
   def newTxn(): Transaction = inner.newTxn()
 
   def writeBatch(batch: Seq[WriteBatchRecord]): Long = inner.writeBatch(batch)
+
+  def addCompactionFilter(compactionFilter: CompactionFilter): Unit = inner.addCompactionFilter(compactionFilter)
 
   def forceFlush(): Unit = {
     if (inner.state.read(!_.memTable.isEmpty)) {
