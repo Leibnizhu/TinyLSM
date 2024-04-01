@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentSkipListMap
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import scala.jdk.CollectionConverters.*
 
+// TODO wal
 case class Transaction(
                         tid: Int = Transaction.ids.getAndIncrement(),
                         var readTs: Long,
@@ -20,8 +21,13 @@ case class Transaction(
                         committed: AtomicBoolean,
                         /// 用于可串行化snapshot隔离，分别是 写 和 读 的key的hash集合
                         keyHashes: Option[Mutex[(util.HashSet[Int], util.HashSet[Int])]],
+                        // 是否只读一次，如果是，则在执行 get/scan 之后马上关闭
+                        readOnce: Boolean,
                       ) {
   private val log = LoggerFactory.getLogger(this.getClass)
+  if (!readOnce) {
+    log.info("Started new Transaction, ID= {}", tid)
+  }
 
   def get(key: String): Option[String] = get(key.getBytes).map(new String(_))
 
@@ -35,7 +41,7 @@ case class Transaction(
       keyHashes.get.execute((_, readHashes) => readHashes.add(key.keyHash()))
     }
 
-    if (localStorage.containsKey(key)) {
+    val value = if (localStorage.containsKey(key)) {
       // Transaction 内部缓存能命中
       val value = localStorage.get(key)
       if (value.sameElements(DELETE_TOMBSTONE)) {
@@ -47,6 +53,10 @@ case class Transaction(
       // 从开启 Transaction 之前原来的 LsmStorageInner 中读取
       inner.getWithTs(bytes, readTs)
     }
+    if (readOnce) {
+      rollback()
+    }
+    value
   }
 
   def scan(lower: Bound, upper: Bound): TxnIterator = {
@@ -55,7 +65,11 @@ case class Transaction(
     }
     val fuseIter = inner.scanWithTs(lower, upper, readTs)
     val localIter = TxnLocalIterator(localStorage, lower, upper)
-    TxnIterator(this.copy(), TwoMergeIterator(localIter, fuseIter))
+    val iterator = TxnIterator(this.copy(), TwoMergeIterator(localIter, fuseIter))
+    if (readOnce) {
+      rollback()
+    }
+    iterator
   }
 
   def put(key: String, value: String): Unit = put(key.getBytes, value.getBytes)
@@ -130,7 +144,7 @@ case class Transaction(
           // 删除 committedTxns 中多余的旧提交信息，及在水位线以下的事务
           val committedItr = committedTxns.entrySet().iterator()
           val watermark = inner.mvcc.get.watermark()
-          import scala.util.control.Breaks.*
+          import scala.util.control.Breaks.{break, breakable}
           while (committedItr.hasNext) breakable {
             val curCommitted = committedItr.next()
             if (curCommitted.getKey < watermark) {
@@ -147,8 +161,13 @@ case class Transaction(
     log.info("Transaction(ID={}) committed {} records, readTs: {}, new ts: {}", tid, localStorage.size(), readTs, ts)
   }
 
+  def isCommited: Boolean = committed.get()
+
   def rollback(): Unit = {
     this.inner.mvcc.foreach(_.ts.execute((_, watermark) => watermark.removeReader(this.readTs)))
+    if (!readOnce) {
+      log.info("Rollback Transaction, ID= {}", tid)
+    }
   }
 }
 

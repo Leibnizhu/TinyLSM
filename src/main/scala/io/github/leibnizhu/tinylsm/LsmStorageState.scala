@@ -62,15 +62,18 @@ case class LsmStorageState(
     }
   }
 
-  def dumpState(): Unit = {
+  def dumpState(): String = {
     val snapshot = this.read(_.copy())
-    println(s"Current MemTable: ${snapshot.memTable.id}")
-    println(s"Frozen MemTables: [${snapshot.immutableMemTables.map(_.id).mkString(", ")}]")
-    println(s"L0\t(${snapshot.l0SsTables.length}): [${snapshot.l0SsTables.mkString(", ")}]")
+    val innerSb = new StringBuilder()
+    innerSb.append(s"Current MemTable: ${snapshot.memTable.id}").append("\n")
+    innerSb.append(s"Frozen MemTables: [${snapshot.immutableMemTables.map(_.id).mkString(", ")}]").append("\n")
+    innerSb.append(s"L0\t(${snapshot.l0SsTables.length}): [${snapshot.l0SsTables.mkString(", ")}]").append("\n")
     for ((level, files) <- snapshot.levels) {
-      println(s"L$level\t(${files.length}): [${files.mkString(", ")}]")
+      innerSb.append(s"L$level\t(${files.length}): [${files.mkString(", ")}]").append("\n")
     }
-    println(s"SST: {${snapshot.ssTables.keys.mkString(", ")}}")
+    innerSb.append(s"SST: {${snapshot.ssTables.keys.mkString(", ")}}")
+    println(innerSb.toString())
+    innerSb.toString()
   }
 }
 

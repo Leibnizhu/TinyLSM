@@ -64,7 +64,7 @@ object LsmStorageInner {
       }
       log.info("{} SST opened", sstCnt)
 
-      val newMemtableId = nextSstId.get()
+      val newMemtableId = nextSstId.incrementAndGet()
       if (options.enableWal) {
         // 从 wal 恢复Memtable,到了这里，memTables 里面是从Manifest恢复的、没flush的Memtable
         var walCnt = 0
@@ -126,7 +126,7 @@ private[tinylsm] case class LsmStorageInner(
    */
   def get(key: Array[Byte]): Option[MemTableValue] = this.mvcc match
     case None => getWithTs(key, TS_MAX)
-    case Some(mvcc) => mvcc.newTxn(this.clone(), options.serializable).get(key)
+    case Some(mvcc) => mvcc.newTxn(this.clone(), options.serializable, true).get(key)
 
   def getWithTs(key: Array[Byte], ts: Long): Option[MemTableValue] = {
     assert(key != null && !key.isEmpty, "key cannot be empty")
@@ -323,7 +323,7 @@ private[tinylsm] case class LsmStorageInner(
 
   def scan(lower: Bound, upper: Bound): StorageIterator[RawKey] = this.mvcc match
     case None => scanWithTs(lower, upper, TS_RANGE_END)
-    case Some(mvcc) => mvcc.newTxn(this.clone(), options.serializable).scan(lower, upper)
+    case Some(mvcc) => mvcc.newTxn(this.clone(), options.serializable, true).scan(lower, upper)
 
   def scanWithTs(lower: Bound, upper: Bound, readTs: Long): FusedIterator[RawKey] = {
     val snapshot = state.read(_.copy())
@@ -389,7 +389,7 @@ private[tinylsm] case class LsmStorageInner(
    * @return 新的sst
    */
   def compactGenerateSstFromIter(iter: StorageIterator[MemTableKey], compactToBottomLevel: Boolean): List[SsTable] = {
-    import scala.util.control.Breaks.*
+    import scala.util.control.Breaks.{break, breakable}
     var builder: Option[SsTableBuilder] = None
     val newSstList = new ArrayBuffer[SsTable]()
     // 当前Transaction 的水位，时间戳/版本 超过水位（比水位更新/时间戳更大）的版本需要保留，否则可以删掉
@@ -433,6 +433,7 @@ private[tinylsm] case class LsmStorageInner(
         }
         firstKeyBelowWatermark = false
         if (compactionFilters.nonEmpty) {
+          // 对于满足用户指定的压缩过滤器的过时版本key（小于水位线），直接删除（即跳过，继续下个while）
           for (filter <- compactionFilters) filter match
             case CompactionFilter.Prefix(prefix) =>
               if (iter.key().bytes.startsWith(prefix)) {
@@ -506,7 +507,7 @@ private[tinylsm] case class LsmStorageInner(
     println()
   }
 
-  def dumpState(): Unit = state.dumpState()
+  def dumpState(): String = state.dumpState()
 
   def triggerFlush(): Unit = {
     val needTrigger = state.read(st => st.immutableMemTables.length >=

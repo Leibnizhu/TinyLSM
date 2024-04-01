@@ -1,5 +1,6 @@
 package io.github.leibnizhu.tinylsm.app
 
+import io.github.leibnizhu.tinylsm.mvcc.Transaction
 import io.github.leibnizhu.tinylsm.utils.{Bound, Config}
 import io.github.leibnizhu.tinylsm.{LsmStorageInner, LsmStorageOptions}
 import requests.{RequestFailedException, get}
@@ -16,19 +17,30 @@ class CliContext(playgroundMode: Boolean,
                  debugMode: Boolean,
                  host: String,
                  port: Int) {
+  // for playground 模式
+  private var currentTxn: Option[Transaction] = None
+  // for 连接服务器模式，非 playground
+  private var currentTxnId: Option[Int] = None
 
-  def get(key: String): Unit = {
+  Runtime.getRuntime.addShutdownHook(new Thread(() => {
+    rollbackCurrentTxn()
+  }))
+
+  def get(key: String): Unit =
     if (playgroundMode) {
-      val value = playgroundLsm.get.get(key)
+      val value = currentTxn match
+        case Some(txn) => txn.get(key)
+        case None => playgroundLsm.get.get(key)
       if (value.isDefined) {
         println(value.get)
       } else {
-        println("> Key does not exists: " + key)
+        println(">>> Key does not exists: " + key)
       }
     } else {
       try {
         val encodedKey = URLEncoder.encode(key, StandardCharsets.UTF_8)
-        val r = requests.get(s"http://$host:$port/key/$encodedKey")
+        val tidParam = currentTxnId.map(tid => s"?tid=$tid").getOrElse("")
+        val r = requests.get(s"http://$host:$port/key/$encodedKey$tidParam")
         println(r.text())
       } catch
         case e: RequestFailedException => if (e.response.statusCode == 404) {
@@ -37,65 +49,147 @@ class CliContext(playgroundMode: Boolean,
           println(">>> Server error: " + e.response.text())
         }
     }
-  }
 
-  def delete(key: String): Unit = {
+  def delete(key: String): Unit =
     if (playgroundMode) {
-      playgroundLsm.get.delete(key)
+      currentTxn match
+        case Some(txn) => txn.delete(key)
+        case None => playgroundLsm.get.delete(key)
       println("Done")
     } else {
       val encodedKey = URLEncoder.encode(key, StandardCharsets.UTF_8)
-      requests.delete(s"http://$host:$port/key/$encodedKey")
+      val tidParam = currentTxnId.map(tid => s"?tid=$tid").getOrElse("")
+      requests.delete(s"http://$host:$port/key/$encodedKey$tidParam")
     }
-  }
 
-  def put(key: String, value: String): Unit = {
+  def put(key: String, value: String): Unit =
     if (playgroundMode) {
-      playgroundLsm.get.put(key, value)
+      currentTxn match
+        case Some(txn) => txn.put(key, value)
+        case None => playgroundLsm.get.put(key, value)
       println("Done")
     } else {
       val encodedKey = URLEncoder.encode(key, StandardCharsets.UTF_8)
       val encodedValue = URLEncoder.encode(value, StandardCharsets.UTF_8)
-      requests.post(s"http://$host:$port/key/$encodedKey?value=$encodedValue")
+      val tidParam = currentTxnId.map(tid => s"&tid=$tid").getOrElse("")
+      requests.post(s"http://$host:$port/key/$encodedKey?value=$encodedValue$tidParam")
     }
-  }
 
   private val validBoundType = Set("unbounded", "excluded", "included")
 
   def scan(fromType: String, fromKey: String, toType: String, toKey: String): Unit = {
     if (!validBoundType.contains(fromType.toLowerCase)) {
-      println("Invalid command, fromType must be one of: " + validBoundType)
+      println(">>> Invalid command, fromType must be one of: " + validBoundType)
     }
     if (!validBoundType.contains(toType.toLowerCase)) {
-      println("Invalid command, toType must be one of: " + validBoundType)
+      println(">>> Invalid command, toType must be one of: " + validBoundType)
     }
 
     if (playgroundMode) {
       val lower = Bound(fromType, fromKey)
       val upper = Bound(toType, toKey)
-      val itr = playgroundLsm.get.scan(lower, upper)
+      val itr = currentTxn match
+        case Some(txn) => txn.scan(lower, upper)
+        case None => playgroundLsm.get.scan(lower, upper)
       val sj = new StringJoiner("\n")
       println(itr.joinAllKeyValue(sj).toString)
     } else {
       val encodedFromKey = URLEncoder.encode(fromKey, StandardCharsets.UTF_8)
       val encodedToKey = URLEncoder.encode(toKey, StandardCharsets.UTF_8)
-      val r = requests.get(s"http://$host:$port/scan?fromType=$fromType&fromKey=$encodedFromKey&toType=$toType&toKey=$encodedToKey")
+      val tidParam = currentTxnId.map(tid => s"&tid=$tid").getOrElse("")
+      val r = requests.get(s"http://$host:$port/scan?fromType=$fromType&fromKey=$encodedFromKey&toType=$toType&toKey=$encodedToKey$tidParam")
       println(r.text())
     }
   }
 
   def flush(): Unit = {
     if (!debugMode) {
-      println("flush command can only be used in debug mode!")
+      println(">>> flush command can only be used in debug mode!")
       return
     }
     if (playgroundMode) {
       playgroundLsm.get.forceFreezeMemTable()
       playgroundLsm.get.forceFlushNextImmutableMemTable()
     } else {
-      requests.post(s"http://$host:$port/flush")
+      val r = requests.post(s"http://$host:$port/sys/flush")
+      println(">>> " + r.text())
     }
   }
+
+  def status(): Unit = {
+    if (!debugMode) {
+      println(">>> status command can only be used in debug mode!")
+      return
+    }
+    if (playgroundMode) {
+      playgroundLsm.get.dumpState()
+    } else {
+      val r = requests.post(s"http://$host:$port/sys/state")
+      println(r.text())
+    }
+  }
+
+  def newTxn(): Unit =
+    if (playgroundMode) {
+      currentTxn match
+        case Some(txn) => println(s">>> Already start a Transaction, ID= ${txn.tid}")
+        case None =>
+          currentTxn = Some(playgroundLsm.get.newTxn())
+          println(s"Start a new Transaction, ID: ${currentTxn.get.tid}")
+    } else {
+      currentTxnId match
+        case Some(tid) => println(s">>> Already start a Transaction, ID= $tid")
+        case None =>
+          val r = requests.post(s"http://$host:$port/txn")
+          if (r.statusCode / 100 == 2) {
+            currentTxnId = Some(r.text().toInt)
+            println(s">>> Start a new Transaction, ID: ${currentTxnId.get}")
+          } else {
+            println(">>> " + r.text())
+          }
+    }
+
+  def commitCurrentTxn(): Unit =
+    if (playgroundMode) {
+      currentTxn match
+        case Some(txn) =>
+          txn.commit()
+          currentTxn = None
+          println(s">>> Committed Transaction, ID: ${txn.tid}")
+        case None => println(">>> No active Transaction!")
+    } else {
+      currentTxnId match
+        case Some(tid) =>
+          val r = requests.post(s"http://$host:$port/txn/$tid/commit")
+          if (r.statusCode / 100 == 2) {
+            currentTxnId = None
+            println(s">>> Committed Transaction, ID: $tid")
+          } else {
+            println(">>> " + r.text())
+          }
+        case None => println(">>> No active Transaction!")
+    }
+
+  def rollbackCurrentTxn(): Unit =
+    if (playgroundMode) {
+      currentTxn match
+        case Some(txn) =>
+          txn.rollback()
+          currentTxn = None
+          println(s">>> Rollback Transaction, ID: ${txn.tid}")
+        case None => println(">>> No active Transaction!")
+    } else {
+      currentTxnId match
+        case Some(tid) =>
+          val r = requests.post(s"http://$host:$port/txn/$tid/rollback")
+          if (r.statusCode / 100 == 2) {
+            currentTxnId = None
+            println(s">>> Rollback Transaction, ID: $tid")
+          } else {
+            println(">>> " + r.text())
+          }
+        case None => println(">>> No active Transaction!")
+    }
 }
 
 object CliContext {

@@ -36,17 +36,18 @@ class LsmMvccInner(
     ts.execute((ts, wm) => wm.watermark().getOrElse(ts))
   }
 
-  def newTxn(inner: LsmStorageInner, serializable: Boolean): Transaction = ts.execute((readTs, watermark) => {
-    watermark.addReader(readTs)
-    Transaction(
-      readTs = readTs,
-      inner = inner,
-      localStorage = new ConcurrentSkipListMap(),
-      committed = new AtomicBoolean(false),
-      
-      keyHashes = if (serializable) Some(Mutex((new util.HashSet[Int](), new util.HashSet[Int]()))) else None
-    )
-  })
+  def newTxn(inner: LsmStorageInner, serializable: Boolean, readOnce: Boolean = false): Transaction =
+    ts.execute((readTs, watermark) => {
+      watermark.addReader(readTs)
+      Transaction(
+        readTs = readTs,
+        inner = inner,
+        localStorage = new ConcurrentSkipListMap(),
+        committed = new AtomicBoolean(false),
+        keyHashes = if (serializable) Some(Mutex((new util.HashSet[Int](), new util.HashSet[Int]()))) else None,
+        readOnce = readOnce,
+      )
+    })
 }
 
 object LsmMvccInner {

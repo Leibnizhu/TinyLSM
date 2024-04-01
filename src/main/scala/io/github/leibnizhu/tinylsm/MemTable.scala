@@ -91,7 +91,7 @@ object MemTable {
 
   def recoverFromWal(id: Int, walPath: File): MemTable = {
     val map = new ConcurrentSkipListMap[MemTableKey, MemTableValue]()
-    val wal = new WriteAheadLog(walPath).recover(map)
+    val wal = WriteAheadLog(walPath).recover(map)
     new MemTable(id, map, Some(wal), AtomicInteger(0))
   }
 }

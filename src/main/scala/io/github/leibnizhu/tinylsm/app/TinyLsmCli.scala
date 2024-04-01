@@ -61,7 +61,11 @@ object TinyLsmCli {
       } else {
         cliContext.scan(words(1), words(2), words(3), words(4))
       }
+      case "txn" => cliContext.newTxn()
+      case "commit" => cliContext.commitCurrentTxn()
+      case "rollback" => cliContext.rollbackCurrentTxn()
       case "flush" => cliContext.flush()
+      case "status" => cliContext.status()
       case _ => println(s"Unsupported command: '${words.head}', you can type :help for more information or <TAB> for auto complete")
   }
 
@@ -78,8 +82,12 @@ object TinyLsmCli {
       |  get <key> : Get value by key.
       |  delete <key> : Delete a key.
       |  put <key> <value> : Put value by key.
-      |  scan <Unbound|Excluded|Included> <fromKey> <Unbound|Excluded|Included> <toKey> : scan by key range.
-      |  flush : force flush MemTable to SST.
+      |  scan <Unbound|Excluded|Included> <fromKey> <Unbound|Excluded|Included> <toKey> : Scan by key range.
+      |  flush : Force flush MemTable to SST.
+      |  status : Show TinyLSM status.
+      |  txn: Start a new transaction
+      |  commit: Commit current transaction
+      |  rollback: rollback current transaction
       |  :help : Show this help info.
       |  :quit or :exit : Quit TinyLsm cli.""".stripMargin)
 
@@ -91,6 +99,10 @@ object TinyLsmCli {
       new ArgumentCompleter(new StringsCompleter("delete"), NullCompleter.INSTANCE),
       new ArgumentCompleter(new StringsCompleter("scan"), boundCompleter, NullCompleter.INSTANCE, boundCompleter, NullCompleter.INSTANCE),
       new ArgumentCompleter(new StringsCompleter("flush"), NullCompleter.INSTANCE),
+      new ArgumentCompleter(new StringsCompleter("status"), NullCompleter.INSTANCE),
+      new ArgumentCompleter(new StringsCompleter("txn"), NullCompleter.INSTANCE),
+      new ArgumentCompleter(new StringsCompleter("commit"), NullCompleter.INSTANCE),
+      new ArgumentCompleter(new StringsCompleter("rollback"), NullCompleter.INSTANCE),
       new ArgumentCompleter(new StringsCompleter(":help"), NullCompleter.INSTANCE),
       new ArgumentCompleter(new StringsCompleter(":quit"), NullCompleter.INSTANCE),
     )
