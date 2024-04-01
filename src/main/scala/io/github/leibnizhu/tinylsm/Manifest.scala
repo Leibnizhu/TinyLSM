@@ -58,7 +58,7 @@ class Manifest(file: File, targetSize: Int = 1024) {
           backupFile.deleteOnExit()
         }
         file.createNewFile()
-        val record = ManifestSnapshot(snapshot.immutableMemTables.map(_.id), snapshot.l0SsTables, snapshot.levels)
+        val record = ManifestSnapshot(snapshot.memTable.id, snapshot.immutableMemTables.map(_.id), snapshot.l0SsTables, snapshot.levels)
         addRecord(record)
         log.info("Manifest size before and after compact: {} => {}", curSize, file.length())
 
@@ -105,5 +105,5 @@ case class ManifestNewMemtable(id: Int) extends ManifestRecord
 case class ManifestCompaction(task: CompactionTask, output: List[Int])
   extends ManifestRecord
 
-case class ManifestSnapshot(frozenMt: List[Int], l0: List[Int], levels: List[(Int, List[Int])])
+case class ManifestSnapshot(curMt: Int, frozenMt: List[Int], l0: List[Int], levels: List[(Int, List[Int])])
   extends ManifestRecord

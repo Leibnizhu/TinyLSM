@@ -34,15 +34,19 @@ object LsmStorageInner {
       val memTables = new mutable.HashSet[Int]()
       // 根据 manifest的记录顺序重做 state。注意 ssTables 还是空的，这一步先不处理
       for (record <- records) record match
-        case ManifestSnapshot(frozenMt, l0, levels) =>
-          memTables ++= frozenMt
+        case ManifestSnapshot(curMut, frozenMt, l0, levels) =>
+          memTables ++= frozenMt += curMut
+          nextSstId.set(nextSstId.get().max(curMut))
+          if(frozenMt.nonEmpty){
+            nextSstId.set(nextSstId.get().max(frozenMt.max))
+          }
           state.l0SsTables = l0
           state.levels = levels
         case ManifestNewMemtable(memtableId) =>
           nextSstId.set(nextSstId.get().max(memtableId))
           memTables += memtableId
         case ManifestFlush(sstId) =>
-          assert(memTables(sstId), "memtable not exist?")
+          assert(memTables(sstId), s"memtable $sstId not exist? All memtables: $memTables")
           memTables -= sstId
           if (compactionController.flushToL0()) {
             state.l0SsTables = sstId :: state.l0SsTables
