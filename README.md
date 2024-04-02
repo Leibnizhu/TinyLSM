@@ -1,6 +1,8 @@
 # TinyLSM
 
-[English Document](README.md), [中文文档](README-CN.md)  
+- [English Document](README.md)
+- [中文文档](README-CN.md)  
+
 Tiny LSM in scala, [Reference to LSM in a Week](https://skyzh.github.io/mini-lsm/00-preface.html)
 
 ## Requirement

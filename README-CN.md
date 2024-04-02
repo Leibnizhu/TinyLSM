@@ -1,6 +1,8 @@
 # TinyLSM
 
-[English Document](README.md), [中文文档](README-CN.md)  
+- [English Document](README.md)
+- [中文文档](README-CN.md)
+
 使用Scala开发的羽量级LSM k-v 存储, [可参考 LSM in a Week](https://skyzh.github.io/mini-lsm/00-preface.html)
 
 ## 环境要求
