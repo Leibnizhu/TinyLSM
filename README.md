@@ -123,18 +123,16 @@ get key
 
 ## TODO
 
-- [ ] Benchmarking			
-- [ ] Block Compression			
-- [ ] Trivial Move and Parallel Compaction			
-- [ ] Alternative Block Encodings			
-- [ ] Rate Limiter and I/O Optimizations			
-- [ ] Build Your Own Block Cache			
-- [ ] Build Your Own SkipList			
-- [ ] Async Engine			
-- [ ] IO-uring-based I/O engine			
-- [ ] Prefetching			
-- [ ] Key-Value Separation			
-- [ ] Column Families			
-- [ ] Sharding			
-- [ ] Compaction Optimizations			
+- [ ] Benchmarking
+- [ ] Block Compression
+- [ ] Trivial Move and Parallel Compaction
+- [ ] Alternative Block Encodings
+- [ ] Rate Limiter and I/O Optimizations
+- [ ] Async Engine
+- [ ] IO-uring-based I/O engine
+- [ ] Prefetching
+- [ ] Key-Value Separation
+- [ ] Column Families
+- [ ] Sharding
+- [ ] Compaction Optimizations
 - [ ] SQL over Mini-LSM

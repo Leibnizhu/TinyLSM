@@ -38,6 +38,7 @@ class TxnIterator(
   }
 
   private def addToReadSet(key: Key): Unit = if (_txn.keyHashes.isDefined) {
+    // TODO 记录key范围 而非每个key的hash
     _txn.keyHashes.get.execute((_, readHashes) => readHashes.add(key.keyHash()))
   }
 }
