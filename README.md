@@ -1,6 +1,7 @@
 # TinyLSM
 
-Tiny LSM in scala, [Reference to...](https://skyzh.github.io/mini-lsm/00-preface.html)
+[English Document](README.md), [中文文档](README-CN.md)  
+Tiny LSM in scala, [Reference to LSM in a Week](https://skyzh.github.io/mini-lsm/00-preface.html)
 
 ## Requirement
 
@@ -19,9 +20,8 @@ Configuration lookup order:
 
 1. JVM system properties, e.g., `-Dkey.subkey=value`
 2. Operation system environment e.g., `export TINY_LSM_KEY_SUBKEY=value`
-3. `.env` file in classpath, using operation system environment key
-4. config file specified by JVM system properties `config.file` or operation system environment `TINY_LSM_CONFIG_FILE`,
-   using JVM system properties key
+3. `.env` file in classpath, using operation system environment key, e.g., `TINY_LSM_KEY_SUBKEY=value`
+4. config file specified by JVM system properties `config.file` or operation system environment `TINY_LSM_CONFIG_FILE`; this config file uses JVM system properties key, e.g., `key.subkey=value`
 
 | environment key               | system properties name | meaning                                                                      | default value             |
 |-------------------------------|------------------------|------------------------------------------------------------------------------|---------------------------|
