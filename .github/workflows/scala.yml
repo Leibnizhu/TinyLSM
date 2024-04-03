@@ -60,7 +60,7 @@ jobs:
           type=ref,event=tag
           type=ref,event=branch
 
-    - name: Build and push to DockerHub
+    - name: Push to DockerHub
       uses: docker/build-push-action@v3
       with:
         context: .

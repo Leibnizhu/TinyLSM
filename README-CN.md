@@ -92,22 +92,22 @@ base.level.size.mb=100
 
 ### 获取 Docker Image
 
-可以从 [docker hub](https://hub.docker.com/r/leibniz007/tiny-lsm/tags) 拉取镜像:
+可以从 [docker hub](https://hub.docker.com/r/leibniz007/tinylsm/tags) 拉取镜像:
 
 ```bash
-docker pull leibniz007/tiny-lsm:latest
+docker pull leibniz007/tinylsm:latest
 ```
 
 或使用源码编译Docker镜像。请先确保 `docker` 已安装，然后执行：
 
 ```shell
-docker build . -f Dockerfile -t leibniz007/tiny-lsm:latest --network=host --target prod
+docker build . -f Dockerfile -t leibniz007/tinylsm:latest --network=host --target prod
 ```
 
 ### 运行
 
 ```shell
-docker run --rm -d --name tinylsm -v /path/to/tinylsm:/etc/tinylsm leibniz007/tiny-lsm:latest
+docker run --rm -d --name tinylsm -v /path/to/tinylsm:/etc/tinylsm leibniz007/tinylsm:latest
 docker exec -it tinylsm bash
 
 # 以下是在Docker容器的 bash 中
