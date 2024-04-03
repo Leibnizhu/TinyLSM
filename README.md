@@ -108,7 +108,9 @@ docker build . -f Dockerfile -t leibniz007/tinylsm:latest --network=host --targe
 ### Run
 
 ```shell
-docker run --rm -d --name tinylsm -v /path/to/tinylsm:/etc/tinylsm leibniz007/tinylsm:latest
+mkdir tinylsm
+# edit tinylsm/tinylsm.conf by yourself
+docker run --rm -d --name tinylsm -v $(pwd)/tinylsm:/etc/tinylsm -p 9527:9527 leibniz007/tinylsm:latest
 docker exec -it tinylsm bash
 
 # in container's bash

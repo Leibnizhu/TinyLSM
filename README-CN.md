@@ -107,7 +107,7 @@ docker build . -f Dockerfile -t leibniz007/tinylsm:latest --network=host --targe
 ### 运行
 
 ```shell
-docker run --rm -d --name tinylsm -v /path/to/tinylsm:/etc/tinylsm leibniz007/tinylsm:latest
+docker run --rm -d --name tinylsm -v /path/to/tinylsm:/etc/tinylsm -p 9527:9527 leibniz007/tinylsm:latest
 docker exec -it tinylsm bash
 
 # 以下是在Docker容器的 bash 中

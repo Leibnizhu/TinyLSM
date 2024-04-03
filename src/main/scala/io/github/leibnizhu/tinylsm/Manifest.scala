@@ -27,6 +27,9 @@ class Manifest(file: File, targetSize: Int = 1024) {
     (rwLock.readLock(), rwLock.writeLock())
   }
 
+  if (!file.getParentFile.exists()) {
+    file.getParentFile.mkdirs()
+  }
   if (!file.exists()) {
     file.createNewFile()
   }

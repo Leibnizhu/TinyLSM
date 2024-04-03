@@ -12,10 +12,11 @@ RUN sed -i -E 's/(security|deb)\.debian\.org/mirrors.aliyun.com/g' /etc/apt/sour
     && apt-get clean && apt-get update \
     && apt-get -y install tini
 
-COPY --from=builder /tmp/bin/* /etc/tinylsm/
-COPY --from=builder /tmp/target/scala-3.3.1/TinyLsmAssembly.jar /etc/tinylsm/TinyLsmAssembly.jar
+COPY --from=builder /tmp/bin/* /opt/package/tinylsm/
+COPY --from=builder /tmp/target/scala-3.3.1/TinyLsmAssembly.jar /opt/package/tinylsm/TinyLsmAssembly.jar
 
-RUN ln -s /etc/tinylsm/tinylsm-cli /usr/bin/tinylsm-cli
-WORKDIR /etc/tinylsm
+RUN ln -s /opt/package/tinylsm/tinylsm-cli /usr/bin/tinylsm-cli
+RUN mkdir -p /etc/tinylsm/data
+WORKDIR /opt/package/tinylsm
 ENTRYPOINT ["tini", "--"]
-CMD ["bash", "/etc/tinylsm/tinylsm"]
+CMD ["bash", "/opt/package/tinylsm/tinylsm"]
