@@ -1,6 +1,6 @@
 scalaVersion := "3.3.1"
 name := "ScalaTinyLsm"
-version := "0.3-SNAPSHOT"
+version := "0.3"
 Test / parallelExecution := false
 
 //scalacOptions := Seq("-unchecked", "-deprecation")
