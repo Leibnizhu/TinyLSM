@@ -54,7 +54,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v4
       with:
-        images: leibniz/tinylsm
+        images: leibniz007/tinylsm
         tags: |
           type=raw,value=latest,enable={{is_default_branch}}
           type=ref,event=tag
