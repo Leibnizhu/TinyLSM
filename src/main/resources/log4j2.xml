@@ -12,9 +12,8 @@
     </Appenders>
 
     <Loggers>
-        <Logger name="org.apache.http" level="INFO"/>
         <!--<Root level="DEBUG">-->
-        <Root level="INFO">
+        <Root level="${env:LOG_LEVEL:-INFO}">
             <AppenderRef ref="STDOUT"/>
         </Root>
     </Loggers>

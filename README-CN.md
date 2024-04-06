@@ -86,7 +86,8 @@ compaction.max.levels=5
 base.level.size.mb=100
 ```
 
-然后执行 `export TINY_LSM_CONFIG_FILE=/path/to/tinylsm.conf` (对于Docker运行则为增加 `-e TINY_LSM_CONFIG_FILE=/path/to/tinylsm.conf` 参数） 再启动 TinyLSM。
+然后执行 `export TINY_LSM_CONFIG_FILE=/path/to/tinylsm.conf` (
+对于Docker运行则为增加 `-e TINY_LSM_CONFIG_FILE=/path/to/tinylsm.conf` 参数） 再启动 TinyLSM。
 
 ## 使用方法
 
@@ -124,9 +125,21 @@ get key
 :quit
 ```
 
+## BenchMark
+
+| 项目           | 结果                   |
+|--------------|----------------------|
+| get 10k keys | 1.161 ± 0.792   s/op |
+| put 10k keys | 0.035 ± 0.458   s/op |
+
+等价于:
+
+1. `get` 一个key要 116.1 ± 79.2 us
+2. `put` 一个key要 3.5 ± 45.8 us
+
 ## TODO
 
-- [ ] Benchmarking
+- [x] Benchmarking
 - [ ] Block Compression
 - [ ] Trivial Move and Parallel Compaction
 - [ ] Alternative Block Encodings

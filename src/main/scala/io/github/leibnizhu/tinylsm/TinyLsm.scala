@@ -74,6 +74,7 @@ class TinyLsm(val inner: LsmStorageInner) {
   def close(): Unit = {
     flushThread.cancel()
     compactionThread.cancel()
+    manifestCompactionThread.cancel()
     // 开了wal的话只要确保Memtable写入WAL即可
     if (inner.options.enableWal) {
       inner.syncWal()

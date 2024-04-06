@@ -1,7 +1,7 @@
 # TinyLSM
 
 - [English Document](README.md)
-- [中文文档](README-CN.md)  
+- [中文文档](README-CN.md)
 
 Tiny LSM in scala, [Reference to LSM in a Week](https://skyzh.github.io/mini-lsm/00-preface.html)
 
@@ -23,7 +23,8 @@ Configuration lookup order:
 1. JVM system properties, e.g., `-Dkey.subkey=value`
 2. Operation system environment e.g., `export TINY_LSM_KEY_SUBKEY=value`
 3. `.env` file in classpath, using operation system environment key, e.g., `TINY_LSM_KEY_SUBKEY=value`
-4. config file specified by JVM system properties `config.file` or operation system environment `TINY_LSM_CONFIG_FILE`; this config file uses JVM system properties key, e.g., `key.subkey=value`
+4. config file specified by JVM system properties `config.file` or operation system environment `TINY_LSM_CONFIG_FILE`;
+   this config file uses JVM system properties key, e.g., `key.subkey=value`
 
 | environment key               | system properties name | meaning                                                                      | default value             |
 |-------------------------------|------------------------|------------------------------------------------------------------------------|---------------------------|
@@ -125,9 +126,21 @@ get key
 :quit
 ```
 
+## BenchMark
+
+| Item         | result               |
+|--------------|----------------------|
+| get 10k keys | 1.161 ± 0.792   s/op |
+| put 10k keys | 0.035 ± 0.458   s/op |
+
+Equivalent to:
+
+1. `get` one key costs 116.1 ± 79.2 us
+2. `put` one key costs 3.5 ± 45.8 us
+
 ## TODO
 
-- [ ] Benchmarking
+- [x] Benchmarking
 - [ ] Block Compression
 - [ ] Trivial Move and Parallel Compaction
 - [ ] Alternative Block Encodings

@@ -30,3 +30,5 @@ assembly / assemblyMergeStrategy := {
     val oldStrategy = (assembly / assemblyMergeStrategy).value
     oldStrategy(x)
 }
+
+enablePlugins(JmhPlugin)

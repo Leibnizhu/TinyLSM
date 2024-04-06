@@ -2,6 +2,7 @@ package io.github.leibnizhu.tinylsm
 
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions.*
+import org.slf4j.LoggerFactory
 
 import java.util
 import java.util.concurrent.locks.{Lock, ReentrantLock, ReentrantReadWriteLock}
@@ -22,6 +23,8 @@ case class LsmStorageState(
                             // SST 对象
                             var ssTables: Map[Int, SsTable] = Map()
                           ) {
+  private val log = LoggerFactory.getLogger(this.getClass)
+  
   // 对 MemTable 做 freeze 操作的读写锁
   private val (readLock, writeLock) = {
     val rwLock = ReentrantReadWriteLock()
@@ -72,7 +75,7 @@ case class LsmStorageState(
       innerSb.append(s"L$level\t(${files.length}): [${files.mkString(", ")}]").append("\n")
     }
     innerSb.append(s"SST: {${snapshot.ssTables.keys.mkString(", ")}}")
-    println(innerSb.toString())
+    log.info(innerSb.toString())
     innerSb.toString()
   }
 }
