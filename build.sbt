@@ -14,6 +14,7 @@ libraryDependencies ++= Seq(
   "org.apache.logging.log4j" % "log4j-core" % "2.23.0" % "compile",
   "org.jline" % "jline" % "3.25.1" % "compile",
   "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.15.3" % "compile",
+  "com.github.luben" % "zstd-jni" % "1.5.6-2" % "compile",
   "org.scalatest" %% "scalatest" % "3.2.9" % Test,
   "org.mockito" % "mockito-core" % "4.11.0" % Test
 )

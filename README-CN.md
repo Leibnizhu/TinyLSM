@@ -1,5 +1,7 @@
 # TinyLSM
 
+[![Docker](https://img.shields.io/docker/v/leibniz007/tinylsm?label=Docker&style=flat)](https://hub.docker.com/r/leibniz007/tinylsm/tags) ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/Leibnizhu/TinyLSM/scala.yml) ![GitHub top language](https://img.shields.io/github/languages/top/Leibnizhu/TinyLSM) ![Github Created At](https://img.shields.io/github/created-at/Leibnizhu/TinyLSM)
+
 - [English Document](README.md)
 - [中文文档](README-CN.md)
 
@@ -126,6 +128,8 @@ get key
 ```
 
 ## BenchMark
+
+Apple M1 Pro 8 core
 
 | 项目           | 结果                   |
 |--------------|----------------------|
