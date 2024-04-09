@@ -7,6 +7,9 @@ case class FileObject(file: Option[File], size: Long) {
     if (file.isEmpty) {
       throw new IllegalArgumentException("FileObject cannot read file when file is not set")
     }
+    if (length <= 0) {
+      return Array[Byte]()
+    }
     val accessFile = new RandomAccessFile(file.get, "r")
     accessFile.seek(offset)
     val buffer = new Array[Byte](length.intValue)

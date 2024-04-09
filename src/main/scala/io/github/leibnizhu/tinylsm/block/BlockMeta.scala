@@ -20,8 +20,8 @@ class BlockMeta(
     case that: BlockMeta =>
       that.canEqual(this) &&
         offset == that.offset &&
-        (firstKey.equals(that.firstKey)) &&
-        (lastKey.equals(that.lastKey))
+        firstKey.equals(that.firstKey) &&
+        lastKey.equals(that.lastKey)
     case _ => false
 
   override def hashCode(): Int =
@@ -39,7 +39,7 @@ object BlockMeta {
    * @param buffer     要写入的buffer
    * @param maxTs      当前block中最大时间戳
    */
-  def encode(blockMetas: ArrayBuffer[BlockMeta], buffer: ByteArrayWriter, maxTs: Long): Unit = {
+  def encode(blockMetas: Array[BlockMeta], buffer: ByteArrayWriter, maxTs: Long): Unit = {
     // meta序列化长度计算
     // 先存储meta的个数，Int
     var estimateSize: Int = SIZE_OF_INT

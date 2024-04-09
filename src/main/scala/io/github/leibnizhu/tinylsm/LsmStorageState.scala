@@ -24,7 +24,7 @@ case class LsmStorageState(
                             var ssTables: Map[Int, SsTable] = Map()
                           ) {
   private val log = LoggerFactory.getLogger(this.getClass)
-  
+
   // 对 MemTable 做 freeze 操作的读写锁
   private val (readLock, writeLock) = {
     val rwLock = ReentrantReadWriteLock()

@@ -1,6 +1,7 @@
 package io.github.leibnizhu.tinylsm.block
 
 import io.github.leibnizhu.tinylsm.*
+import io.github.leibnizhu.tinylsm.compress.SsTableCompressor
 import io.github.leibnizhu.tinylsm.utils.{ByteArrayReader, ByteArrayWriter}
 
 /**
@@ -17,7 +18,7 @@ import io.github.leibnizhu.tinylsm.utils.{ByteArrayReader, ByteArrayWriter}
  * | key_overlap_len (2B) | remaining_key_len (2B) | key (remaining_key_len) | timestamp (8B) | value_len (2B) | value (varlen) | ... |
  * -----------------------------------------------------------------------
  */
-class Block(val data: Array[Byte], val offsets: Array[Int]) {
+class Block(val data: Array[Byte], val offsets: Array[Int], val compressor: Option[SsTableCompressor] = None) {
 
   /**
    * 将当前Block编码为byte数组
@@ -49,12 +50,12 @@ object Block {
    *
    * @param bytes byte数组
    */
-  def decode(bytes: Array[Byte]): Block = {
+  def decode(bytes: Array[Byte], compressor: Option[SsTableCompressor] = None): Block = {
     val buffer = ByteArrayReader(bytes)
     val numOfElement = buffer.readTailUint16()
     // 总长度减去 所有offset + offset长度2B 就是要读的data长度
     val dataBytes = buffer.readBytes(bytes.length - numOfElement * SIZE_OF_U16 - SIZE_OF_U16)
     val offsetIntArray = (0 until numOfElement).map(_ => buffer.readUint16()).toArray
-    Block(dataBytes, offsetIntArray)
+    Block(dataBytes, offsetIntArray, compressor)
   }
 }

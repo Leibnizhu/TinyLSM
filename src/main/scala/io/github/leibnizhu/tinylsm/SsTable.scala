@@ -1,6 +1,7 @@
 package io.github.leibnizhu.tinylsm
 
 import io.github.leibnizhu.tinylsm.block.{Block, BlockBuilder, BlockCache, BlockMeta}
+import io.github.leibnizhu.tinylsm.compress.SsTableCompressor
 import io.github.leibnizhu.tinylsm.iterator.*
 import io.github.leibnizhu.tinylsm.utils.ByteTransOps.bytesToInt
 import io.github.leibnizhu.tinylsm.utils.{Bloom, ByteArrayReader, ByteArrayWriter, FileObject}
@@ -32,7 +33,8 @@ class SsTable(val file: FileObject,
               val lastKey: MemTableKey,
               val bloom: Option[Bloom],
               // SST存储的最大时间戳
-              val maxTimestamp: Long = 0) {
+              val maxTimestamp: Long = 0,
+              val compressor: Option[SsTableCompressor]) {
 
   def readBlock(blockIndex: Int): Block = {
     val blockOffset = blockMeta(blockIndex).offset
@@ -48,7 +50,7 @@ class SsTable(val file: FileObject,
     if (MurmurHash3.seqHash(blockData) != checksum) {
       throw new IllegalStateException("Block data checksum mismatched!!!")
     }
-    Block.decode(blockData)
+    Block.decode(blockData, compressor)
   }
 
   /**
@@ -111,9 +113,13 @@ class SsTable(val file: FileObject,
 object SsTable {
   def open(id: Int, blockCache: Option[BlockCache], file: FileObject): SsTable = {
     val len = file.size
-    // 参考 SsTableBuilder.build ，最后是bloom的offset,先读bloom，再读meta
-    val bloomOffset = bytesToInt(file.read(len - 4, 4))
-    val rawBloom = file.read(bloomOffset, len - 4 - bloomOffset)
+    // 参考 SsTableBuilder.build ，最后是dict的offset,先读dict、然后bloom，再读meta
+    val dictOffset = bytesToInt(file.read(len - 4, 4))
+    val compressDict = file.read(dictOffset, len - 4 - dictOffset)
+    val compressor = SsTableCompressor.recover(compressDict)
+
+    val bloomOffset = bytesToInt(file.read(dictOffset - 4, 4))
+    val rawBloom = file.read(bloomOffset, dictOffset - 4 - bloomOffset)
     val bloomFilter = Bloom.decode(rawBloom)
 
     // 读meta，bloom开始再向前4byte就是meta的offset了
@@ -131,7 +137,8 @@ object SsTable {
       firstKey = blockMeta.head.firstKey.copy(),
       lastKey = blockMeta.last.lastKey.copy(),
       bloom = Some(bloomFilter),
-      maxTimestamp = maxTs
+      maxTimestamp = maxTs,
+      compressor = compressor
     )
   }
 
@@ -145,7 +152,8 @@ object SsTable {
       firstKey = firstKey,
       lastKey = lastKey,
       bloom = None,
-      maxTimestamp = 0
+      maxTimestamp = 0,
+      compressor = None
     )
   }
 }
@@ -155,7 +163,7 @@ object SsTable {
  *
  * @param blockSize Block大小
  */
-class SsTableBuilder(val blockSize: Int) {
+class SsTableBuilder(val blockSize: Int, val compressor: Option[SsTableCompressor] = None) {
   private val log = LoggerFactory.getLogger(this.getClass)
   // 当前Block的builder
   private var builder = BlockBuilder(blockSize)
@@ -181,6 +189,8 @@ class SsTableBuilder(val blockSize: Int) {
       maxTs = key.ts
     }
     keyHashes.addOne(key.keyHash())
+    // value字典采样
+    compressor.foreach(_.addDictSample(value))
     // add可能因为BlockBuilder满了导致失败
     if (builder.add(key, value)) {
       lastKey = Some(key)
@@ -223,9 +233,11 @@ class SsTableBuilder(val blockSize: Int) {
     finishBlock()
 
     // meta写入buffer
-    val buffer = data
+    val (buffer, finalMatas) = compressor match
+      case Some(c) => c.compressSsTable(data, meta.toArray)
+      case None => (data, meta.toArray)
     val metaOffset = buffer.length
-    BlockMeta.encode(meta, buffer, maxTs)
+    BlockMeta.encode(finalMatas, buffer, maxTs)
     buffer.putUint32(metaOffset)
 
     //  bloom 写入 buffer
@@ -234,19 +246,29 @@ class SsTableBuilder(val blockSize: Int) {
     bloom.encode(buffer)
     buffer.putUint32(bloomOffset)
 
+    // 压缩字典写入buffer
+    val (dictType, dict) = compressor match
+      case Some(c) => c.generateDict()
+      case None => (SsTableCompressor.NONE_COMPRESSOR, Array[Byte]())
+    val dictOffset = buffer.length
+    buffer.putByte(dictType)
+    buffer.putBytes(dict)
+    buffer.putUint32(dictOffset)
+
     // 生成sst文件
     val file = FileObject.create(path, buffer.toArray)
     log.info(s"Created new SST file: ${file.file.get.getName}")
     new SsTable(
       file = file,
       id = id,
-      blockMeta = meta.toArray,
+      blockMeta = finalMatas,
       blockMetaOffset = metaOffset,
       blockCache = blockCache,
-      firstKey = meta.head.firstKey.copy(),
-      lastKey = meta.last.lastKey.copy(),
+      firstKey = finalMatas.head.firstKey.copy(),
+      lastKey = finalMatas.last.lastKey.copy(),
       bloom = Some(bloom),
-      maxTimestamp = maxTs
+      maxTimestamp = maxTs,
+      compressor = compressor
     )
   }
 }

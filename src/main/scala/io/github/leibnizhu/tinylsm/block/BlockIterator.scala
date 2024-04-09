@@ -13,7 +13,7 @@ class BlockIterator(block: Block) extends StorageIterator[MemTableKey] {
   /**
    * 当前value在Block中data的下标
    */
-  private var curValuePos: (Int, Int) = (0, 0)
+  private var curValue: Option[MemTableValue] = None
   private val firstKey = block.getFirstKey()
 
   def seekToFirst(): Unit = {
@@ -52,7 +52,7 @@ class BlockIterator(block: Block) extends StorageIterator[MemTableKey] {
 
   override def value(): MemTableValue = {
     assert(isValid, "BlockIterator is invalid")
-    block.data.slice(curValuePos._1, curValuePos._2)
+    curValue.orNull
   }
 
   override def isValid: Boolean = {
@@ -82,7 +82,7 @@ class BlockIterator(block: Block) extends StorageIterator[MemTableKey] {
     if (index >= block.offsets.length) {
       // 越界，则不可用
       curKey = None
-      curValuePos = (0, 0)
+      curValue = None
       return
     }
 
@@ -98,7 +98,11 @@ class BlockIterator(block: Block) extends StorageIterator[MemTableKey] {
     val valueLength = blockData.readUint16()
     // entry开头+overlap 2B+剩余key 2B+剩余key内容+时间戳 8B+value长度2B
     val valueOffset = entryOffset + SIZE_OF_U16 * 2 + restKeyLength + SIZE_OF_LONG + SIZE_OF_U16
-    curValuePos = (valueOffset, valueOffset + valueLength)
+    val rawValue = block.data.slice(valueOffset, valueOffset + valueLength)
+    curValue = Some(block.compressor match
+      case Some(c) => c.decompress(rawValue, valueLength)
+      case None => rawValue
+    )
     this.index = index
   }
 }

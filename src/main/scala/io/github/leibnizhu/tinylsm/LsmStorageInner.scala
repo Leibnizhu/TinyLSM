@@ -37,7 +37,7 @@ object LsmStorageInner {
         case ManifestSnapshot(curMut, frozenMt, l0, levels) =>
           memTables ++= frozenMt += curMut
           nextSstId.set(nextSstId.get().max(curMut))
-          if(frozenMt.nonEmpty){
+          if (frozenMt.nonEmpty) {
             nextSstId.set(nextSstId.get().max(frozenMt.max))
           }
           state.l0SsTables = l0
