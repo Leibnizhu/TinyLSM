@@ -41,6 +41,7 @@ Configuration lookup order:
 | TINY_LSM_DATA_DIR             | data.dir               |                                                                              | /etc/tinylsm/data         |
 | TINY_LSM_CONFIG_FILE          | config.file            |                                                                              | /etc/tinylsm/tinylsm.conf |
 | TINY_LSM_COMPACTION_STRATEGY  | compaction.strategy    | leveled/tiered/simple/full/none                                              | leveled                   |
+| TINY_LSM_COMPRESSOR_TYPE      | compressor.type        | Value storage compression, none/no/zstd                                      | zstd                      |
 
 Compaction strategy config detail as below.
 
@@ -70,6 +71,15 @@ Simple compaction configs:
 | TINY_LSM_COMPACTION_LEVEL0_FILE_NUM_TRIGGER | compaction.level0.file.num.trigger |         | 5       |
 | TINY_LSM_COMPACTION_MAX_LEVELS              | compaction.max.levels              |         | 5       |
 
+Value storage compression config detail as below.
+
+Zstd compression configs:
+
+| environment key           | system properties name | meaning | default      |
+|---------------------------|------------------------|---------|--------------|
+| TINY_LSM_ZSTD_SAMPLE_SIZE | zstd.sample.size       |         | 1048576(1MB) |
+| TINY_LSM_ZSTD_DICT_SIZE   | zstd.dict.size         |         | 16384(16KB)  |
+
 For example, write a config file in `/path/to/tinylsm.conf` :
 
 ```properties
@@ -86,6 +96,9 @@ compaction.level.size.multiplier=5
 compaction.level0.file.num.trigger=5
 compaction.max.levels=5
 base.level.size.mb=100
+compressor.type=zstd
+zstd.sample.size=1048576
+zstd.dict.size=16384
 ```
 
 then `export TINY_LSM_CONFIG_FILE=/path/to/tinylsm.conf`( or `-e TINY_LSM_CONFIG_FILE=/path/to/tinylsm.conf` for docker
@@ -145,7 +158,7 @@ Equivalent to:
 ## TODO
 
 - [x] Benchmarking
-- [ ] Block Compression
+- [x] Block Compression
 - [ ] Trivial Move and Parallel Compaction
 - [ ] Alternative Block Encodings
 - [ ] Rate Limiter and I/O Optimizations

@@ -1,7 +1,8 @@
 package io.github.leibnizhu.tinylsm.block
 
+import io.github.leibnizhu.tinylsm.compress.SsTableCompressor
 import io.github.leibnizhu.tinylsm.utils.ByteArrayWriter
-import io.github.leibnizhu.tinylsm.{MemTableKey, MemTableValue, SIZE_OF_LONG, SIZE_OF_U16}
+import io.github.leibnizhu.tinylsm.{MemTableKey, MemTableValue, SIZE_OF_U16}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -20,7 +21,7 @@ class BlockBuilder(val blockSize: Int) {
    * @param value value
    * @return 是否添加成功
    */
-  def add(key: MemTableKey, value: MemTableValue): Boolean = {
+  def add(key: MemTableKey, value: MemTableValue, compressor: SsTableCompressor = SsTableCompressor.DEFAULT): Boolean = {
     // 基础验证，key非空、预估体积也不能超过 blockSize
     assert(key != null && key.nonEmpty, "key must not be empty")
     // 一条数据会增加 记录key长度的2byte、key本身，记录value长度的2byte、value本身、记录offset的2byte，所以乘以3
@@ -44,10 +45,13 @@ class BlockBuilder(val blockSize: Int) {
     data.putBytes(key.bytes.slice(overlap, key.length))
     // 时间戳
     data.putUint64(key.ts)
-    // value的长度
+    val compressed = compressor.compress(value)
+    // 压缩后的value实际长度
+    data.putUint16(compressed.length)
+    // value的原始长度
     data.putUint16(value.length)
-    // value内容
-    data.putBytes(value)
+    // 压缩后 value内容
+    data.putBytes(compressed)
 
     if (firstKey.isEmpty) {
       firstKey = Some(key)

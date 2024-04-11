@@ -1,4 +1,4 @@
-package io.github.leibnizhu.tinylsm.block
+package io.github.leibnizhu.tinylsm.compress
 
 import com.github.luben.zstd.{Zstd, ZstdDictCompress, ZstdDictDecompress, ZstdDictTrainer}
 import org.scalatest.funsuite.AnyFunSuite
@@ -11,7 +11,7 @@ class ZstdDictTest extends AnyFunSuite {
 
   private def valueOf(i: Int) = "value_" + "%02000d".format(i)
 
-  test("dictUse") {
+  test("zstd_dict_test") {
     // 采样训练字典
     val trainer = new ZstdDictTrainer(1024 * 1024, 16 * 1024)
     for (i <- 1 until 10000 by 100) {

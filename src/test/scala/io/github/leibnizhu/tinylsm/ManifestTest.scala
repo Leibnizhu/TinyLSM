@@ -5,6 +5,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import io.github.leibnizhu.tinylsm.TestUtils.{compactionOption, dumpFilesInDir, tempDir}
 import io.github.leibnizhu.tinylsm.compact.*
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{LeveledCompactionOptions, SimpleCompactionOptions, TieredCompactionOptions}
+import io.github.leibnizhu.tinylsm.compress.CompressorOptions
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File
@@ -83,6 +84,7 @@ class ManifestTest extends AnyFunSuite {
       1024,
       2,
       options,
+      CompressorOptions.None, 
       false,
       false))
     for (i <- 0 to 20) {

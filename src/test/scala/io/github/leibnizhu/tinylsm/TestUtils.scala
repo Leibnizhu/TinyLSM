@@ -3,6 +3,7 @@ package io.github.leibnizhu.tinylsm
 import io.github.leibnizhu.tinylsm.block.BlockCache
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{LeveledCompactionOptions, SimpleCompactionOptions, TieredCompactionOptions}
+import io.github.leibnizhu.tinylsm.compress.CompressorOptions
 import io.github.leibnizhu.tinylsm.iterator.{MergeIterator, SsTableIterator, StorageIterator}
 import io.github.leibnizhu.tinylsm.utils.Unbounded
 import org.scalatest.Assertions.{assert, assertResult, assertThrows}
@@ -113,6 +114,7 @@ object TestUtils {
     1 << 20,
     2,
     compactOpt,
+    CompressorOptions.None,
     false,
     false)
 

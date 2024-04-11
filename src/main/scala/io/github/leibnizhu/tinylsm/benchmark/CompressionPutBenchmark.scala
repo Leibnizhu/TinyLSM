@@ -5,12 +5,13 @@ import io.github.leibnizhu.tinylsm.compress.CompressorOptions
 import io.github.leibnizhu.tinylsm.{LsmStorageOptions, TinyLsm}
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
+import org.slf4j.{Logger, LoggerFactory}
 
 import java.io.File
 
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
-class PutBenchmark {
+class CompressionPutBenchmark {
   private var storageDir: File = _
   private var storage: TinyLsm = _
 
@@ -21,7 +22,7 @@ class PutBenchmark {
     storageDir = new File(tempDirPath)
     storageDir.mkdirs()
     val compactOption = CompactionOptions.LeveledCompactionOptions(2, 2, 4, 20)
-    val options = LsmStorageOptions(4096, 1 << 20, 1 << 20, 2, compactOption, CompressorOptions.None, false, false)
+    val options = LsmStorageOptions(4096, 1 << 20, 1 << 20, 2, compactOption, CompressorOptions.Zstd(), false, false)
     storage = TinyLsm(storageDir, options)
   }
 

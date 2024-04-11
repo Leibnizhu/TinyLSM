@@ -11,7 +11,7 @@ class ByteArrayWriter {
     reserve(size)
   }
 
-  private val buffer = new ArrayBuffer[Byte]()
+  val buffer = new ArrayBuffer[Byte]()
 
   def length: Int = buffer.length
 
@@ -36,7 +36,7 @@ class ByteArrayWriter {
     this
   }
 
-  def putBytes(bytes: Array[Byte]): ByteArrayWriter = {
+  def putBytes(bytes: IterableOnce[Byte]): ByteArrayWriter = {
     buffer.appendAll(bytes)
     this
   }

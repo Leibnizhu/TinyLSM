@@ -96,13 +96,11 @@ class BlockIterator(block: Block) extends StorageIterator[MemTableKey] {
     val ts = blockData.readUint64()
     curKey = Some(MemTableKey(keyBytes, ts))
     val valueLength = blockData.readUint16()
-    // entry开头+overlap 2B+剩余key 2B+剩余key内容+时间戳 8B+value长度2B
-    val valueOffset = entryOffset + SIZE_OF_U16 * 2 + restKeyLength + SIZE_OF_LONG + SIZE_OF_U16
+    val rawValueLength = blockData.readUint16()
+    // entry开头+overlap 2B+剩余key 2B+剩余key内容+时间戳 8B+value长度2B+value原始长度2B
+    val valueOffset = entryOffset + SIZE_OF_U16 * 2 + restKeyLength + SIZE_OF_LONG + SIZE_OF_U16 * 2
     val rawValue = block.data.slice(valueOffset, valueOffset + valueLength)
-    curValue = Some(block.compressor match
-      case Some(c) => c.decompress(rawValue, valueLength)
-      case None => rawValue
-    )
+    curValue = Some(block.compressor.decompress(rawValue, rawValueLength))
     this.index = index
   }
 }

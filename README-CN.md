@@ -41,6 +41,7 @@
 | TINY_LSM_DATA_DIR             | data.dir             |                                     | /etc/tinylsm/data         |
 | TINY_LSM_CONFIG_FILE          | config.file          |                                     | /etc/tinylsm/tinylsm.conf |
 | TINY_LSM_COMPACTION_STRATEGY  | compaction.strategy  | leveled/tiered/simple/full/none     | leveled                   |
+| TINY_LSM_COMPRESSOR_TYPE      | compressor.type      | value存储压缩算法, none/no/zstd           | zstd                      |
 
 SST压缩（compaction）的详细配置如下。
 
@@ -70,6 +71,15 @@ Simple compaction 配置：
 | TINY_LSM_COMPACTION_LEVEL0_FILE_NUM_TRIGGER | compaction.level0.file.num.trigger |    | 5   |
 | TINY_LSM_COMPACTION_MAX_LEVELS              | compaction.max.levels              |    | 5   |
 
+Value存储压缩（compression）的详细配置如下。
+
+`Zstd` 压缩配置：
+
+| 环境变量配置名                   | 系统属性配置名          | 含义 | 默认值          |
+|---------------------------|------------------|----|--------------|
+| TINY_LSM_ZSTD_SAMPLE_SIZE | zstd.sample.size |    | 1048576(1MB) |
+| TINY_LSM_ZSTD_DICT_SIZE   | zstd.dict.size   |    | 16384(16KB)  |
+
 举例，可编写一个配置文件 `/path/to/tinylsm.conf` :
 
 ```properties
@@ -86,6 +96,9 @@ compaction.level.size.multiplier=5
 compaction.level0.file.num.trigger=5
 compaction.max.levels=5
 base.level.size.mb=100
+compressor.type=zstd
+zstd.sample.size=1048576
+zstd.dict.size=16384
 ```
 
 然后执行 `export TINY_LSM_CONFIG_FILE=/path/to/tinylsm.conf` (
@@ -144,7 +157,7 @@ Apple M1 Pro 8 core
 ## TODO
 
 - [x] Benchmarking
-- [ ] Block Compression
+- [x] Block Compression
 - [ ] Trivial Move and Parallel Compaction
 - [ ] Alternative Block Encodings
 - [ ] Rate Limiter and I/O Optimizations

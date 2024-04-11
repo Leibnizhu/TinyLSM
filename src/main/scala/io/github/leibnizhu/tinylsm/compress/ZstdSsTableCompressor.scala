@@ -1,42 +1,60 @@
 package io.github.leibnizhu.tinylsm.compress
 
-import com.github.luben.zstd.{ZstdDecompressCtx, ZstdDictTrainer}
+import com.github.luben.zstd.{Zstd, ZstdCompressCtx, ZstdDecompressCtx, ZstdDictTrainer}
 import io.github.leibnizhu.tinylsm.MemTableValue
-import io.github.leibnizhu.tinylsm.block.BlockMeta
-import io.github.leibnizhu.tinylsm.utils.ByteArrayWriter
 
 import java.util.concurrent.atomic.AtomicInteger
 
-class ZstdSsTableCompressor extends SsTableCompressor {
+class ZstdSsTableCompressor(sampleSize: Int = 1024 * 1024, dictSize: Int = 16 * 1024) extends SsTableCompressor {
 
-  private val dictTrainer = new ZstdDictTrainer(1024 * 1024, 16 * 1024)
+  private val dictTrainer = new ZstdDictTrainer(sampleSize, dictSize)
   private val sampleCnt = new AtomicInteger(0)
-  private var dict: ZstdDecompressCtx = _
+  private val decompressCtx: ZstdDecompressCtx = new ZstdDecompressCtx().setMagicless(false)
+  private val compressCtx: ZstdCompressCtx = new ZstdCompressCtx().setMagicless(false)
+    .setDictID(false).setLevel(Zstd.defaultCompressionLevel)
 
-  def loadDict(oldDict: Array[Byte]): ZstdSsTableCompressor = {
-    this.dict = new ZstdDecompressCtx()
-    this.dict.loadDict(oldDict)
+  def loadDict(dict: Array[Byte]): ZstdSsTableCompressor = {
+    this.decompressCtx.loadDict(dict)
+    this.compressCtx.loadDict(dict)
     this
   }
 
   override def addDictSample(sample: MemTableValue): Unit = {
-    if (sampleCnt.incrementAndGet() % 100 == 0) {
+    val cnt = sampleCnt.incrementAndGet()
+    // 前20条全部采集，保证采样率
+    if (cnt <= 20 || cnt % 100 == 0) {
       dictTrainer.addSample(sample)
     }
   }
 
-  override def generateDict(): (Byte, Array[Byte]) = {
+  override def generateDict(): Array[Byte] = {
     val rawDict = dictTrainer.trainSamples
     loadDict(rawDict)
-    (1.toByte, rawDict)
+    rawDict
   }
 
-  override def compressSsTable(blockData: ByteArrayWriter, meta: Array[BlockMeta]): (ByteArrayWriter, Array[BlockMeta]) = ???
-
-  override def decompress(compressed: Array[Byte], originLength: Int): Array[Byte] = {
-    if (dict == null) {
+  override def compress(origin: Array[Byte]): Array[Byte] = {
+    if (compressCtx == null) {
       throw new IllegalStateException("ZSTD dictionary is not init yet, plz call generateDict() or loadDict()")
     }
-    dict.decompress(compressed, originLength)
+    compressCtx.compress(origin)
   }
+
+  override def decompress(compressed: Array[Byte], originLength: Int): Array[Byte] = {
+    if (decompressCtx == null) {
+      throw new IllegalStateException("ZSTD dictionary is not init yet, plz call generateDict() or loadDict()")
+    }
+    decompressCtx.decompress(compressed, originLength)
+  }
+
+  override def close(): Unit = {
+    compressCtx.close()
+    decompressCtx.close()
+  }
+
+  override val DICT_TYPE: Byte = ZstdSsTableCompressor.DICT_TYPE
+}
+
+object ZstdSsTableCompressor {
+  val DICT_TYPE: Byte = 1
 }

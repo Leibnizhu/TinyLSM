@@ -2,6 +2,7 @@ package io.github.leibnizhu.tinylsm
 
 import io.github.leibnizhu.tinylsm.TestUtils.{TS_ENABLED, checkIteratorWithTs, tempDir}
 import io.github.leibnizhu.tinylsm.block.{BlockCache, BlockIterator}
+import io.github.leibnizhu.tinylsm.compress.ZstdSsTableCompressor
 import io.github.leibnizhu.tinylsm.iterator.*
 import io.github.leibnizhu.tinylsm.utils.FileObject
 import org.scalatest.Entry
@@ -149,5 +150,45 @@ class SsTableTest extends AnyFunSuite {
     val builtSst = builder.build(1, None, sstFile)
     val readSst = SsTable.open(1, None, FileObject.open(sstFile))
     checkIteratorWithTs(data, SsTableIterator.createAndSeekToFirst(readSst))
+  }
+
+
+  private val compressKeyNum: Int = 10000
+
+  private def compressKeyOf(i: Int) = "key_" + "%0200d".format(i * 5)
+
+  private def compressValueOf(i: Int) = "value_" + "%0200d".format(i)
+
+  private def generateCompressedSst(): SsTable = {
+    val builder = SsTableBuilder(10240, new ZstdSsTableCompressor())
+    for (i <- 0 until compressKeyNum) {
+      val key = compressKeyOf(i)
+      val value = compressValueOf(i)
+      builder.add(key, value)
+    }
+    val sstFile = prepareSstFile()
+    println("SST file: " + sstFile.getAbsolutePath)
+    val ssTable = builder.build(0, Some(BlockCache(10)), sstFile)
+    assert(sstFile.exists())
+    ssTable
+  }
+
+  test("compressed_sst_decode") {
+    val sst = generateCompressedSst()
+    val newSst = SsTable.open(0, None, sst.file)
+    assertResult(sst.blockMeta)(newSst.blockMeta)
+    assertResult(compressKeyOf(0).getBytes)(newSst.firstKey.bytes)
+    assertResult(compressKeyOf(compressKeyNum - 1).getBytes)(newSst.lastKey.bytes)
+
+    val firstBlock = newSst.readBlock(0)
+    val blockItr1 = BlockIterator(firstBlock)
+    blockItr1.seekToKey(MemTableKey.applyForTest(compressKeyOf(0)))
+    assertResult(compressKeyOf(0))(new String(blockItr1.key().bytes))
+
+    val secondBlock = newSst.readBlock(1)
+    val blockItr2 = BlockIterator(secondBlock)
+    // 每个block 存了200+条，所以50应该在第二个block，seekToKey能直接定位到250的key
+    blockItr2.seekToKey(MemTableKey.applyForTest(compressKeyOf(250)))
+    assertResult(compressKeyOf(250))(new String(blockItr2.key().bytes))
   }
 }

@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory
 
 import java.io.*
 import scala.collection.immutable.ArraySeq
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.math.Ordering.Implicits.infixOrderingOps
 import scala.util.hashing.MurmurHash3
@@ -34,7 +35,7 @@ class SsTable(val file: FileObject,
               val bloom: Option[Bloom],
               // SST存储的最大时间戳
               val maxTimestamp: Long = 0,
-              val compressor: Option[SsTableCompressor]) {
+              val compressor: SsTableCompressor = SsTableCompressor.DEFAULT) {
 
   def readBlock(blockIndex: Int): Block = {
     val blockOffset = blockMeta(blockIndex).offset
@@ -153,7 +154,6 @@ object SsTable {
       lastKey = lastKey,
       bloom = None,
       maxTimestamp = 0,
-      compressor = None
     )
   }
 }
@@ -163,17 +163,24 @@ object SsTable {
  *
  * @param blockSize Block大小
  */
-class SsTableBuilder(val blockSize: Int, val compressor: Option[SsTableCompressor] = None) {
+class SsTableBuilder(val blockSize: Int, val compressor: SsTableCompressor = SsTableCompressor.DEFAULT) {
   private val log = LoggerFactory.getLogger(this.getClass)
   // 当前Block的builder
   private var builder = BlockBuilder(blockSize)
   // 当前Block的第一个和最后一个Key
   private var firstKey: Option[MemTableKey] = None
   private var lastKey: Option[MemTableKey] = None
-  private val data: ByteArrayWriter = new ByteArrayWriter()
+  private[tinylsm] val data: ByteArrayWriter = new ByteArrayWriter()
   var meta: ArrayBuffer[BlockMeta] = new ArrayBuffer()
   private val keyHashes: ArrayBuffer[Int] = new ArrayBuffer()
   private var maxTs: Long = 0
+  private var trainMode = true
+  private val blocks = ArrayBuffer[Block]()
+
+  def compressMode(): SsTableBuilder = {
+    trainMode = false
+    this
+  }
 
   /**
    * 往SST增加一个kv对
@@ -190,15 +197,18 @@ class SsTableBuilder(val blockSize: Int, val compressor: Option[SsTableCompresso
     }
     keyHashes.addOne(key.keyHash())
     // value字典采样
-    compressor.foreach(_.addDictSample(value))
+    if (trainMode) {
+      compressor.addDictSample(value)
+    }
+    val blockCompressor = if (trainMode) SsTableCompressor.DEFAULT else compressor
     // add可能因为BlockBuilder满了导致失败
-    if (builder.add(key, value)) {
+    if (builder.add(key, value, blockCompressor)) {
       lastKey = Some(key)
       return
     }
     //  到了这里即 BlockBuilder.add 失败了，是因为BlockBuilder满了，需要创建一个新的 BlockBuilder 并重新add
     finishBlock()
-    assert(builder.add(key, value))
+    assert(builder.add(key, value, blockCompressor))
     //那么此时这个key是新的Block的第一个key
     firstKey = Some(key)
     lastKey = Some(key)
@@ -209,12 +219,13 @@ class SsTableBuilder(val blockSize: Int, val compressor: Option[SsTableCompresso
   /**
    * 一个Block写完、满了后，的处理
    */
-  private def finishBlock(): Unit = {
+  private[tinylsm] def finishBlock(): Unit = {
     // 新建Builder并交换
-    val prevBuilder = builder
+    val curBlock = builder.build()
+    blocks += curBlock
     builder = BlockBuilder(blockSize)
     // 也可以用B+树，而非排序的block
-    val encodedBlock = prevBuilder.build().encode()
+    val encodedBlock = curBlock.encode()
     meta.addOne(new BlockMeta(data.length, firstKey.get.copy(), lastKey.get.copy()))
     val checkSum = byteArrayHash(encodedBlock)
     data.putBytes(encodedBlock)
@@ -234,8 +245,8 @@ class SsTableBuilder(val blockSize: Int, val compressor: Option[SsTableCompresso
 
     // meta写入buffer
     val (buffer, finalMatas) = compressor match
-      case Some(c) => c.compressSsTable(data, meta.toArray)
-      case None => (data, meta.toArray)
+      case SsTableCompressor.DEFAULT => (data, meta.toArray)
+      case c => c.compressSsTable(blockSize, blocks, meta.toArray)
     val metaOffset = buffer.length
     BlockMeta.encode(finalMatas, buffer, maxTs)
     buffer.putUint32(metaOffset)
@@ -247,19 +258,19 @@ class SsTableBuilder(val blockSize: Int, val compressor: Option[SsTableCompresso
     buffer.putUint32(bloomOffset)
 
     // 压缩字典写入buffer
-    val (dictType, dict) = compressor match
-      case Some(c) => c.generateDict()
-      case None => (SsTableCompressor.NONE_COMPRESSOR, Array[Byte]())
+    val dict = compressor.generateDict()
     val dictOffset = buffer.length
-    buffer.putByte(dictType)
+    buffer.putByte(compressor.DICT_TYPE)
     buffer.putBytes(dict)
     buffer.putUint32(dictOffset)
+    compressor.close()
 
     // 生成sst文件
-    val file = FileObject.create(path, buffer.toArray)
-    log.info(s"Created new SST file: ${file.file.get.getName}")
+    val fileObj = FileObject.create(path, buffer.toArray)
+    val file = fileObj.file.get
+    log.info("Created new SST file: {} {} KB", file.getName, "%.3f".format(file.length() / 1024.0))
     new SsTable(
-      file = file,
+      file = fileObj,
       id = id,
       blockMeta = finalMatas,
       blockMetaOffset = metaOffset,

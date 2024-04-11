@@ -28,6 +28,10 @@ enum Config(private val name: String, val defaultVal: String) {
   case CompactionMaxSizeAmpPercent extends Config("COMPACTION_MAX_SIZE_AMP_PERCENT", "200")
   case CompactionMinMergeWidth extends Config("COMPACTION_MIN_MERGE_WIDTH", "2")
 
+  // Compressor 配置
+  case CompressorType extends Config("COMPRESSOR_TYPE", "zstd")
+  case CompressorZstdSampleSize extends Config("ZSTD_SAMPLE_SIZE", (1024 * 1024).toString)
+  case CompressorZstdDictSize extends Config("ZSTD_DICT_SIZE", (16 * 1024).toString)
 
   /**
    * 优先级：

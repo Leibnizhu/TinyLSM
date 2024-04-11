@@ -1,9 +1,7 @@
 package io.github.leibnizhu.tinylsm.block
 
 import com.github.blemale.scaffeine.{Cache, Scaffeine}
-import io.github.leibnizhu.tinylsm.block.Block
 
-import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.*
 
 

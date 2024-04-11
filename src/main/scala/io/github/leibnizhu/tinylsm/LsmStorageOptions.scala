@@ -1,6 +1,7 @@
 package io.github.leibnizhu.tinylsm
 
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions
+import io.github.leibnizhu.tinylsm.compress.CompressorOptions
 import io.github.leibnizhu.tinylsm.utils.Config
 
 case class LsmStorageOptions
@@ -15,6 +16,8 @@ case class LsmStorageOptions
   numMemTableLimit: Int,
   // Compaction配置
   compactionOptions: CompactionOptions,
+  // value压缩配置
+  compressorOptions: CompressorOptions,
   // 是否启用WAL
   enableWal: Boolean,
   // Transaction 是否可序列化
@@ -28,6 +31,7 @@ object LsmStorageOptions {
     1 << 20,
     50,
     CompactionOptions.NoCompaction,
+    CompressorOptions.None,
     false,
     false)
 
@@ -37,6 +41,7 @@ object LsmStorageOptions {
     Config.TargetManifestSize.getInt,
     Config.MemTableLimitNum.getInt,
     CompactionOptions.fromConfig(),
+    CompressorOptions.fromConfig(),
     Config.EnableWal.getBoolean,
     Config.Serializable.getBoolean
   )
