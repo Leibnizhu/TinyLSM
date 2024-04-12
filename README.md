@@ -41,7 +41,7 @@ Configuration lookup order:
 | TINY_LSM_DATA_DIR             | data.dir               |                                                                              | /etc/tinylsm/data         |
 | TINY_LSM_CONFIG_FILE          | config.file            |                                                                              | /etc/tinylsm/tinylsm.conf |
 | TINY_LSM_COMPACTION_STRATEGY  | compaction.strategy    | leveled/tiered/simple/full/none                                              | leveled                   |
-| TINY_LSM_COMPRESSOR_TYPE      | compressor.type        | Value storage compression, none/no/zstd                                      | zstd                      |
+| TINY_LSM_COMPRESSOR_TYPE      | compressor.type        | Value storage compression, none/no/zstd/zlib                                 | zstd                      |
 
 Compaction strategy config detail as below.
 
@@ -79,6 +79,12 @@ Zstd compression configs:
 |---------------------------|------------------------|---------|--------------|
 | TINY_LSM_ZSTD_SAMPLE_SIZE | zstd.sample.size       |         | 1048576(1MB) |
 | TINY_LSM_ZSTD_DICT_SIZE   | zstd.dict.size         |         | 16384(16KB)  |
+
+Zlib compression configs:
+
+| environment key     | system properties name | meaning           | default |
+|---------------------|------------------------|-------------------|---------|
+| TINY_LSM_ZLIB_LEVEL | zlib.level             | -1 = default, 1-9 | -1      |
 
 For example, write a config file in `/path/to/tinylsm.conf` :
 
@@ -145,10 +151,12 @@ get key
 
 Apple M1 Pro 8 core
 
-| Item         | result               |
-|--------------|----------------------|
-| get 10k keys | 1.161 ± 0.792   s/op |
-| put 10k keys | 0.035 ± 0.458   s/op |
+| Item                   | result               |
+|------------------------|----------------------|
+| get 10k keys           | 1.161 ± 0.792   s/op |
+| get 10k keys with zstd | 1.023 ± 0.150   s/op |
+| get 10k keys with zlib | 1.081 ± 0.238   s/op |
+| put 10k keys           | 0.035 ± 0.458   s/op |
 
 Equivalent to:
 

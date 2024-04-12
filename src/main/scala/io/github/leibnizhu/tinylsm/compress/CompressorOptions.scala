@@ -13,6 +13,8 @@ enum CompressorOptions {
              sampleSize: Int = 1024 * 1024,
              dictSize: Int = 16 * 1024
            ) extends CompressorOptions
+
+  case Zlib(level: Int = -1) extends CompressorOptions
 }
 
 object CompressorOptions {
@@ -22,6 +24,7 @@ object CompressorOptions {
         sampleSize = Config.CompressorZstdSampleSize.getInt,
         dictSize = Config.CompressorZstdDictSize.getInt
       )
+      case "zlib" => Zlib(Config.CompressorZlibLevel.getInt)
       case "none" | "no" => None
       case s: String => throw new IllegalArgumentException("Unsupported compaction strategy: " + s)
     }

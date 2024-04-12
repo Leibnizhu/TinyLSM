@@ -1,6 +1,7 @@
 package io.github.leibnizhu.tinylsm.iterator
 
 import io.github.leibnizhu.tinylsm.TestUtils.tempDir
+import io.github.leibnizhu.tinylsm.compress.SsTableCompressor
 import io.github.leibnizhu.tinylsm.{MemTableKey, SsTable, SsTableBuilder}
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -31,7 +32,7 @@ class SstConcatIteratorTest extends AnyFunSuite {
   }
 
   private def generateConcatSst(startKey: Int, endKey: Int, dir: File, id: Int): SsTable = {
-    val builder = SsTableBuilder(128)
+    val builder = SsTableBuilder(128, SsTableCompressor.none())
     for (idx <- startKey until endKey) {
       builder.add("%05d".format(idx), "test")
     }

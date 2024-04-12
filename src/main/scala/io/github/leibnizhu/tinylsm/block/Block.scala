@@ -18,7 +18,7 @@ import io.github.leibnizhu.tinylsm.utils.{ByteArrayReader, ByteArrayWriter}
  * | key_overlap_len (2B) | remaining_key_len (2B) | key (remaining_key_len) | timestamp (8B) | value_len (2B) | value (varlen) | ... |
  * -----------------------------------------------------------------------
  */
-class Block(val data: Array[Byte], val offsets: Array[Int], val compressor: SsTableCompressor = SsTableCompressor.DEFAULT) {
+class Block(val data: Array[Byte], val offsets: Array[Int], var compressor: SsTableCompressor) {
 
   /**
    * 将当前Block编码为byte数组
@@ -50,7 +50,7 @@ object Block {
    *
    * @param bytes byte数组
    */
-  def decode(bytes: Array[Byte], compressor: SsTableCompressor = SsTableCompressor.DEFAULT): Block = {
+  def decode(bytes: Array[Byte], compressor: SsTableCompressor = SsTableCompressor.none()): Block = {
     val buffer = ByteArrayReader(bytes)
     val numOfElement = buffer.readTailUint16()
     // 总长度减去 所有offset + offset长度2B 就是要读的data长度

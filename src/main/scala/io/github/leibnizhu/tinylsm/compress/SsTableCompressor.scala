@@ -2,6 +2,9 @@ package io.github.leibnizhu.tinylsm.compress
 
 import com.github.blemale.scaffeine.Scaffeine
 import io.github.leibnizhu.tinylsm.block.{Block, BlockMeta}
+import io.github.leibnizhu.tinylsm.compress.CompressState.{Compress, Decompress, Train}
+import io.github.leibnizhu.tinylsm.compress.CompressorOptions.{Zlib, Zstd}
+import io.github.leibnizhu.tinylsm.compress.SsTableCompressor.none
 import io.github.leibnizhu.tinylsm.iterator.SsTableIterator
 import io.github.leibnizhu.tinylsm.utils.ByteArrayWriter
 import io.github.leibnizhu.tinylsm.{MemTableValue, SsTable, SsTableBuilder}
@@ -9,8 +12,21 @@ import org.slf4j.LoggerFactory
 
 import scala.collection.mutable.ArrayBuffer
 
+/**
+ * SSTable的value压缩器
+ * 生命周期应该是跟着SSTable走，序列化到SST文件，可以从SST文件恢复
+ * 其中如果有动态字典，也应该是针对当前SST（的多个Block）的value
+ */
 trait SsTableCompressor extends AutoCloseable {
   private val log = LoggerFactory.getLogger(this.getClass)
+  private[compress] var state: CompressState = Train
+
+  def changeState(newState: CompressState): SsTableCompressor = {
+    state = newState
+    this
+  }
+
+  def isState(specState: CompressState): Boolean = state == specState
 
   val DICT_TYPE: Byte
 
@@ -31,15 +47,20 @@ trait SsTableCompressor extends AutoCloseable {
   /**
    * 压缩SSTable
    *
-   * @param blocks 未压缩的block们
-   * @param meta   BlockMeta们
+   * @param blockSize block预估大小
+   * @param blockData 原始block数据
+   * @param blocks    未压缩的block们
+   * @param meta      BlockMeta们
    * @return (已压缩的block数据, 与压缩后block数据匹配的Array[BlockMeta])
    */
-  def compressSsTable(blockSize: Int, blocks: ArrayBuffer[Block], meta: Array[BlockMeta]): (ByteArrayWriter, Array[BlockMeta]) = {
-    generateDict()
+  def compressSsTable(blockSize: Int, blockData: ByteArrayWriter,
+                      blocks: ArrayBuffer[Block], meta: Array[BlockMeta]): (ByteArrayWriter, Array[BlockMeta]) = {
     val sstId = -1
     val blockCache = Scaffeine().maximumSize(meta.length).build[(Int, Int), Block]()
-    blocks.zipWithIndex.foreach((block, idx) => blockCache.put((sstId, idx), block))
+    blocks.zipWithIndex.foreach((block, idx) => {
+      //      block.compressor = none(Decompress)
+      blockCache.put((sstId, idx), block)
+    })
     val sst = SsTable(
       file = null,
       id = sstId,
@@ -50,16 +71,19 @@ trait SsTableCompressor extends AutoCloseable {
       lastKey = meta.last.lastKey.copy(),
       bloom = None,
       maxTimestamp = 0,
+      // 前面没压缩，可以直接读
+      compressor = none(Decompress)
     )
     val sstIter = SsTableIterator.createAndSeekToFirst(sst)
-    val newSstBuilder = SsTableBuilder(blockSize, this).compressMode()
+    this.changeState(Compress)
+    val newSstBuilder = SsTableBuilder(blockSize, this)
     while (sstIter.isValid) {
       newSstBuilder.add(sstIter.key(), sstIter.value())
       sstIter.next()
     }
     newSstBuilder.finishBlock()
-    log.info("Completed SST compression. Before compression: {} Blocks, about {} KB; After compression: {} Blocks, {} KB",
-      blocks.length, "%.2f".format(blockSize * blocks.length / 1024.0),
+    log.info("Completed SST compression. Before compression: {} Blocks, {} KB; After compression: {} Blocks, {} KB",
+      blocks.length, "%.2f".format(blockData.length / 1024.0),
       newSstBuilder.meta.length, "%.2f".format(newSstBuilder.data.length / 1024.0))
     (newSstBuilder.data, newSstBuilder.meta.toArray)
   }
@@ -85,18 +109,25 @@ trait SsTableCompressor extends AutoCloseable {
 object SsTableCompressor {
   private val log = LoggerFactory.getLogger(this.getClass)
 
-  def recover(rawDict: Array[Byte]): SsTableCompressor = if (rawDict.isEmpty) SsTableCompressor.DEFAULT else {
+  def recover(rawDict: Array[Byte]): SsTableCompressor = (if (rawDict.isEmpty) NoneSsTableCompressor() else {
     val dictType = rawDict.head
     dictType match
       case ZstdSsTableCompressor.DICT_TYPE =>
         val dict = rawDict.slice(1, rawDict.length)
         ZstdSsTableCompressor().loadDict(dict)
+      case ZlibSsTableCompressor.DICT_TYPE =>
+        ZlibSsTableCompressor()
       case NoneSsTableCompressor.DICT_TYPE =>
-        NoneSsTableCompressor
+        NoneSsTableCompressor()
       case _ =>
         log.error("Unsupported SsTableCompressor type: {}", dictType)
-        SsTableCompressor.DEFAULT
-  }
+        NoneSsTableCompressor()
+  }).changeState(CompressState.Decompress)
 
-  val DEFAULT = NoneSsTableCompressor
+  def create(options: CompressorOptions): SsTableCompressor = options match
+    case Zstd(sampleSize, dictSize) => ZstdSsTableCompressor(sampleSize, dictSize)
+    case Zlib(level) => ZlibSsTableCompressor(level)
+    case CompressorOptions.None => NoneSsTableCompressor()
+
+  def none(initState: CompressState = Train): SsTableCompressor = NoneSsTableCompressor().changeState(initState)
 }

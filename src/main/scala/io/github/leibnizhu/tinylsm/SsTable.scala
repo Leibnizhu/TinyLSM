@@ -1,6 +1,7 @@
 package io.github.leibnizhu.tinylsm
 
 import io.github.leibnizhu.tinylsm.block.{Block, BlockBuilder, BlockCache, BlockMeta}
+import io.github.leibnizhu.tinylsm.compress.CompressState.Decompress
 import io.github.leibnizhu.tinylsm.compress.SsTableCompressor
 import io.github.leibnizhu.tinylsm.iterator.*
 import io.github.leibnizhu.tinylsm.utils.ByteTransOps.bytesToInt
@@ -35,7 +36,9 @@ class SsTable(val file: FileObject,
               val bloom: Option[Bloom],
               // SST存储的最大时间戳
               val maxTimestamp: Long = 0,
-              val compressor: SsTableCompressor = SsTableCompressor.DEFAULT) {
+              val compressor: SsTableCompressor) {
+  // SsTable创建后用于读取，compressor应该都是解压模式；只有生成的时候用到训练和压缩模式
+  compressor.changeState(Decompress)
 
   def readBlock(blockIndex: Int): Block = {
     val blockOffset = blockMeta(blockIndex).offset
@@ -154,6 +157,7 @@ object SsTable {
       lastKey = lastKey,
       bloom = None,
       maxTimestamp = 0,
+      compressor = SsTableCompressor.none()
     )
   }
 }
@@ -163,10 +167,10 @@ object SsTable {
  *
  * @param blockSize Block大小
  */
-class SsTableBuilder(val blockSize: Int, val compressor: SsTableCompressor = SsTableCompressor.DEFAULT) {
+class SsTableBuilder(val blockSize: Int, val compressor: SsTableCompressor) {
   private val log = LoggerFactory.getLogger(this.getClass)
   // 当前Block的builder
-  private var builder = BlockBuilder(blockSize)
+  private var builder = BlockBuilder(blockSize, compressor)
   // 当前Block的第一个和最后一个Key
   private var firstKey: Option[MemTableKey] = None
   private var lastKey: Option[MemTableKey] = None
@@ -174,13 +178,7 @@ class SsTableBuilder(val blockSize: Int, val compressor: SsTableCompressor = SsT
   var meta: ArrayBuffer[BlockMeta] = new ArrayBuffer()
   private val keyHashes: ArrayBuffer[Int] = new ArrayBuffer()
   private var maxTs: Long = 0
-  private var trainMode = true
   private val blocks = ArrayBuffer[Block]()
-
-  def compressMode(): SsTableBuilder = {
-    trainMode = false
-    this
-  }
 
   /**
    * 往SST增加一个kv对
@@ -197,18 +195,15 @@ class SsTableBuilder(val blockSize: Int, val compressor: SsTableCompressor = SsT
     }
     keyHashes.addOne(key.keyHash())
     // value字典采样
-    if (trainMode) {
-      compressor.addDictSample(value)
-    }
-    val blockCompressor = if (trainMode) SsTableCompressor.DEFAULT else compressor
+    compressor.addDictSample(value)
     // add可能因为BlockBuilder满了导致失败
-    if (builder.add(key, value, blockCompressor)) {
+    if (builder.add(key, value)) {
       lastKey = Some(key)
       return
     }
     //  到了这里即 BlockBuilder.add 失败了，是因为BlockBuilder满了，需要创建一个新的 BlockBuilder 并重新add
     finishBlock()
-    assert(builder.add(key, value, blockCompressor))
+    assert(builder.add(key, value))
     //那么此时这个key是新的Block的第一个key
     firstKey = Some(key)
     lastKey = Some(key)
@@ -223,7 +218,7 @@ class SsTableBuilder(val blockSize: Int, val compressor: SsTableCompressor = SsT
     // 新建Builder并交换
     val curBlock = builder.build()
     blocks += curBlock
-    builder = BlockBuilder(blockSize)
+    builder = BlockBuilder(blockSize, compressor)
     // 也可以用B+树，而非排序的block
     val encodedBlock = curBlock.encode()
     meta.addOne(new BlockMeta(data.length, firstKey.get.copy(), lastKey.get.copy()))
@@ -243,10 +238,11 @@ class SsTableBuilder(val blockSize: Int, val compressor: SsTableCompressor = SsT
     // 剩余的数据作为一个Block
     finishBlock()
 
+    // 生成压缩字典、对value执行压缩
+    val dict = compressor.generateDict()
+    val (buffer, finalMatas) = compressor.compressSsTable(blockSize, data, blocks, meta.toArray)
+
     // meta写入buffer
-    val (buffer, finalMatas) = compressor match
-      case SsTableCompressor.DEFAULT => (data, meta.toArray)
-      case c => c.compressSsTable(blockSize, blocks, meta.toArray)
     val metaOffset = buffer.length
     BlockMeta.encode(finalMatas, buffer, maxTs)
     buffer.putUint32(metaOffset)
@@ -258,12 +254,10 @@ class SsTableBuilder(val blockSize: Int, val compressor: SsTableCompressor = SsT
     buffer.putUint32(bloomOffset)
 
     // 压缩字典写入buffer
-    val dict = compressor.generateDict()
     val dictOffset = buffer.length
     buffer.putByte(compressor.DICT_TYPE)
     buffer.putBytes(dict)
     buffer.putUint32(dictOffset)
-    compressor.close()
 
     // 生成sst文件
     val fileObj = FileObject.create(path, buffer.toArray)

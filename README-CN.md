@@ -41,7 +41,7 @@
 | TINY_LSM_DATA_DIR             | data.dir             |                                     | /etc/tinylsm/data         |
 | TINY_LSM_CONFIG_FILE          | config.file          |                                     | /etc/tinylsm/tinylsm.conf |
 | TINY_LSM_COMPACTION_STRATEGY  | compaction.strategy  | leveled/tiered/simple/full/none     | leveled                   |
-| TINY_LSM_COMPRESSOR_TYPE      | compressor.type      | value存储压缩算法, none/no/zstd           | zstd                      |
+| TINY_LSM_COMPRESSOR_TYPE      | compressor.type      | value存储压缩算法, none/no/zstd/zlib      | zstd                      |
 
 SST压缩（compaction）的详细配置如下。
 
@@ -79,6 +79,12 @@ Value存储压缩（compression）的详细配置如下。
 |---------------------------|------------------|----|--------------|
 | TINY_LSM_ZSTD_SAMPLE_SIZE | zstd.sample.size |    | 1048576(1MB) |
 | TINY_LSM_ZSTD_DICT_SIZE   | zstd.dict.size   |    | 16384(16KB)  |
+
+`Zlib` 压缩配置：
+
+| environment key     | system properties name | meaning          | default |
+|---------------------|------------------------|------------------|---------|
+| TINY_LSM_ZLIB_LEVEL | zlib.level             | 压缩级别，-1=默认, 取1-9 | -1      |
 
 举例，可编写一个配置文件 `/path/to/tinylsm.conf` :
 
@@ -144,10 +150,12 @@ get key
 
 Apple M1 Pro 8 core
 
-| 项目           | 结果                   |
-|--------------|----------------------|
-| get 10k keys | 1.161 ± 0.792   s/op |
-| put 10k keys | 0.035 ± 0.458   s/op |
+| 项目                     | 结果                   |
+|------------------------|----------------------|
+| get 10k keys           | 1.161 ± 0.792   s/op |
+| get 10k keys with zstd | 1.023 ± 0.150   s/op |
+| get 10k keys with zlib | 1.081 ± 0.238   s/op |
+| put 10k keys           | 0.035 ± 0.458   s/op |
 
 等价于:
 

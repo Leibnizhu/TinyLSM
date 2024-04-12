@@ -3,6 +3,7 @@ package io.github.leibnizhu.tinylsm
 import io.github.leibnizhu.tinylsm.MemTableKey.{TS_MAX, TS_RANGE_END}
 import io.github.leibnizhu.tinylsm.block.BlockCache
 import io.github.leibnizhu.tinylsm.compact.{CompactionController, CompactionFilter, FullCompactionTask}
+import io.github.leibnizhu.tinylsm.compress.SsTableCompressor
 import io.github.leibnizhu.tinylsm.iterator.*
 import io.github.leibnizhu.tinylsm.mvcc.{LsmMvccInner, Transaction}
 import io.github.leibnizhu.tinylsm.utils.*
@@ -299,7 +300,7 @@ private[tinylsm] case class LsmStorageInner(
       state.stateLock.lock()
       val flushMemTable = state.immutableMemTables.last
       // 构建SST、写入SST文件
-      val builder = SsTableBuilder(options.blockSize)
+      val builder = SsTableBuilder(options.blockSize, SsTableCompressor.create(options.compressorOptions))
       flushMemTable.flush(builder)
       val sstId = flushMemTable.id
       val sst = builder.build(sstId, Some(blockCache), fileOfSst(sstId))
@@ -405,7 +406,7 @@ private[tinylsm] case class LsmStorageInner(
     val compactionFilters = this.compactionFilters.asScala.toList
     while (iter.isValid) breakable {
       if (builder.isEmpty) {
-        builder = Some(SsTableBuilder(options.blockSize))
+        builder = Some(SsTableBuilder(options.blockSize, SsTableCompressor.create(options.compressorOptions)))
       }
 
       val sameAsLastKey = iter.key().rawKey().equals(lastKey)
@@ -453,7 +454,7 @@ private[tinylsm] case class LsmStorageInner(
         val sstId = nextSstId.incrementAndGet()
         val sst = innerBuilder.build(sstId, Some(blockCache), fileOfSst(sstId))
         newSstList += sst
-        innerBuilder = SsTableBuilder(options.blockSize)
+        innerBuilder = SsTableBuilder(options.blockSize, SsTableCompressor.create(options.compressorOptions))
         builder = Some(innerBuilder)
       }
       innerBuilder.add(iter.key(), iter.value())

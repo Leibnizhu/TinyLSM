@@ -2,6 +2,7 @@ package io.github.leibnizhu.tinylsm.mvcc
 
 import io.github.leibnizhu.tinylsm.TestUtils.*
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions
+import io.github.leibnizhu.tinylsm.compress.SsTableCompressor
 import io.github.leibnizhu.tinylsm.utils.{Excluded, Included, Unbounded}
 import io.github.leibnizhu.tinylsm.{MemTableKey, SsTableBuilder, TestUtils, TinyLsm, WriteBatchRecord}
 import org.scalatest.funsuite.AnyFunSuite
@@ -218,7 +219,7 @@ class LsmMvccTest extends AnyFunSuite {
   }
 
   test("week3_day3_task3_sst_ts") {
-    val builder = new SsTableBuilder(16);
+    val builder = new SsTableBuilder(16, SsTableCompressor.none());
     builder.add(MemTableKey("11".getBytes, 1), "11".getBytes)
     builder.add(MemTableKey("22".getBytes, 2), "22".getBytes)
     builder.add(MemTableKey("33".getBytes, 3), "11".getBytes)

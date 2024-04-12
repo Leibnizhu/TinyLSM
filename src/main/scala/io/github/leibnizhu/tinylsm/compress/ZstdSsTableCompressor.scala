@@ -1,11 +1,14 @@
 package io.github.leibnizhu.tinylsm.compress
 
-import com.github.luben.zstd.{Zstd, ZstdCompressCtx, ZstdDecompressCtx, ZstdDictTrainer}
+import com.github.luben.zstd.*
 import io.github.leibnizhu.tinylsm.MemTableValue
+import io.github.leibnizhu.tinylsm.compress.CompressState.{Compress, Decompress, Train}
+import org.slf4j.LoggerFactory
 
 import java.util.concurrent.atomic.AtomicInteger
 
 class ZstdSsTableCompressor(sampleSize: Int = 1024 * 1024, dictSize: Int = 16 * 1024) extends SsTableCompressor {
+  private val log = LoggerFactory.getLogger(this.getClass)
 
   private val dictTrainer = new ZstdDictTrainer(sampleSize, dictSize)
   private val sampleCnt = new AtomicInteger(0)
@@ -19,7 +22,7 @@ class ZstdSsTableCompressor(sampleSize: Int = 1024 * 1024, dictSize: Int = 16 * 
     this
   }
 
-  override def addDictSample(sample: MemTableValue): Unit = {
+  override def addDictSample(sample: MemTableValue): Unit = if (isState(Train)) {
     val cnt = sampleCnt.incrementAndGet()
     // 前20条全部采集，保证采样率
     if (cnt <= 20 || cnt % 100 == 0) {
@@ -27,25 +30,25 @@ class ZstdSsTableCompressor(sampleSize: Int = 1024 * 1024, dictSize: Int = 16 * 
     }
   }
 
-  override def generateDict(): Array[Byte] = {
+  override def generateDict(): Array[Byte] = try {
     val rawDict = dictTrainer.trainSamples
     loadDict(rawDict)
     rawDict
-  }
+  } catch
+    case e: ZstdException =>
+      // 可能采样数量不够，无法训练字典
+      log.error("Train zstd dict failed: {}", e.getMessage)
+      Array()
 
-  override def compress(origin: Array[Byte]): Array[Byte] = {
-    if (compressCtx == null) {
-      throw new IllegalStateException("ZSTD dictionary is not init yet, plz call generateDict() or loadDict()")
-    }
-    compressCtx.compress(origin)
-  }
+  override def compress(origin: Array[Byte]): Array[Byte] = state match
+    case Decompress => throw new IllegalStateException("ZstdSsTableCompressor is not in compress state")
+    case Train => origin
+    case Compress => compressCtx.compress(origin)
 
-  override def decompress(compressed: Array[Byte], originLength: Int): Array[Byte] = {
-    if (decompressCtx == null) {
-      throw new IllegalStateException("ZSTD dictionary is not init yet, plz call generateDict() or loadDict()")
-    }
-    decompressCtx.decompress(compressed, originLength)
-  }
+  override def decompress(compressed: Array[Byte], originLength: Int): Array[Byte] = state match
+    // 如果是同个Compressor在压缩或训练的模式下调用 decompress，那么应该是在读取未压缩数据进行压缩，直接返回原始数据即可
+    case Train | Compress => compressed
+    case Decompress => decompressCtx.decompress(compressed, originLength)
 
   override def close(): Unit = {
     compressCtx.close()

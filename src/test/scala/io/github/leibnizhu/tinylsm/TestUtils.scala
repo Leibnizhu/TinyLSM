@@ -3,7 +3,7 @@ package io.github.leibnizhu.tinylsm
 import io.github.leibnizhu.tinylsm.block.BlockCache
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions
 import io.github.leibnizhu.tinylsm.compact.CompactionOptions.{LeveledCompactionOptions, SimpleCompactionOptions, TieredCompactionOptions}
-import io.github.leibnizhu.tinylsm.compress.CompressorOptions
+import io.github.leibnizhu.tinylsm.compress.{CompressorOptions, SsTableCompressor}
 import io.github.leibnizhu.tinylsm.iterator.{MergeIterator, SsTableIterator, StorageIterator}
 import io.github.leibnizhu.tinylsm.utils.Unbounded
 import org.scalatest.Assertions.{assert, assertResult, assertThrows}
@@ -83,7 +83,7 @@ object TestUtils {
   }
 
   def generateSst(id: Int, path: File, data: Seq[MemTableEntry], blockCache: Option[BlockCache]): SsTable = {
-    val builder = SsTableBuilder(128)
+    val builder = SsTableBuilder(128, SsTableCompressor.none())
     for (entry <- data) {
       builder.add(entry.getKey, entry.getValue)
     }

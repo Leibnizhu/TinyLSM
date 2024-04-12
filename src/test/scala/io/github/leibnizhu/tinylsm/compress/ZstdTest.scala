@@ -6,7 +6,7 @@ import org.slf4j.LoggerFactory
 
 import java.nio.charset.StandardCharsets
 
-class ZstdDictTest extends AnyFunSuite {
+class ZstdTest extends AnyFunSuite {
   private val log = LoggerFactory.getLogger(this.getClass)
 
   private def valueOf(i: Int) = "value_" + "%02000d".format(i)

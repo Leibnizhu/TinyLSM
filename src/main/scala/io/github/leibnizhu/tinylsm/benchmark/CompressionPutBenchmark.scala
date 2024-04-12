@@ -5,7 +5,6 @@ import io.github.leibnizhu.tinylsm.compress.CompressorOptions
 import io.github.leibnizhu.tinylsm.{LsmStorageOptions, TinyLsm}
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
-import org.slf4j.{Logger, LoggerFactory}
 
 import java.io.File
 

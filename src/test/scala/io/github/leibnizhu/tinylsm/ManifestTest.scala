@@ -84,7 +84,7 @@ class ManifestTest extends AnyFunSuite {
       1024,
       2,
       options,
-      CompressorOptions.None, 
+      CompressorOptions.None,
       false,
       false))
     for (i <- 0 to 20) {

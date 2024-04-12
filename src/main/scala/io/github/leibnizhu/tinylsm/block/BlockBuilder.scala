@@ -6,7 +6,7 @@ import io.github.leibnizhu.tinylsm.{MemTableKey, MemTableValue, SIZE_OF_U16}
 
 import scala.collection.mutable.ArrayBuffer
 
-class BlockBuilder(val blockSize: Int) {
+class BlockBuilder(val blockSize: Int, val compressor: SsTableCompressor = SsTableCompressor.none()) {
   // 序列化的Entry数据
   val data = new ByteArrayWriter()
   // 直接放offset，虽然入参是Int，其实需要的是无符号short，写入磁盘时按2byte
@@ -21,7 +21,7 @@ class BlockBuilder(val blockSize: Int) {
    * @param value value
    * @return 是否添加成功
    */
-  def add(key: MemTableKey, value: MemTableValue, compressor: SsTableCompressor = SsTableCompressor.DEFAULT): Boolean = {
+  def add(key: MemTableKey, value: MemTableValue): Boolean = {
     // 基础验证，key非空、预估体积也不能超过 blockSize
     assert(key != null && key.nonEmpty, "key must not be empty")
     // 一条数据会增加 记录key长度的2byte、key本身，记录value长度的2byte、value本身、记录offset的2byte，所以乘以3
@@ -103,6 +103,6 @@ class BlockBuilder(val blockSize: Int) {
     if (isEmpty) {
       throw new IllegalStateException("block should not be empty")
     }
-    Block(data.toArray, offsets.toArray)
+    Block(data.toArray, offsets.toArray, compressor)
   }
 }

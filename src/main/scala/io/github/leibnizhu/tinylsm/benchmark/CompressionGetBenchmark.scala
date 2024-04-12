@@ -5,15 +5,16 @@ import io.github.leibnizhu.tinylsm.compress.CompressorOptions
 import io.github.leibnizhu.tinylsm.{LsmStorageOptions, TinyLsm}
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
-import org.slf4j.{Logger, LoggerFactory}
 
 import java.io.File
 
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
 class CompressionGetBenchmark {
-  private var storageDir: File = _
-  private var storage: TinyLsm = _
+  private var zstdStorageDir: File = _
+  private var zstdStorage: TinyLsm = _
+  private var zlibStorageDir: File = _
+  private var zlibStorage: TinyLsm = _
 
   private def keyOf(i: Int) = "key_" + "%02000d".format(i)
 
@@ -21,32 +22,53 @@ class CompressionGetBenchmark {
 
   @Setup(Level.Trial)
   def init(): Unit = {
-    val tempDirPath = List(System.getProperty("java.io.tmpdir"), "LsmBenchmark", System.currentTimeMillis().toString)
-      .mkString(File.separator)
-    storageDir = new File(tempDirPath)
-    storageDir.mkdirs()
+    zstdStorageDir = new File(List(System.getProperty("java.io.tmpdir"), "LsmBenchmark-Zstd", System.currentTimeMillis().toString)
+      .mkString(File.separator))
+    zstdStorageDir.mkdirs()
     val compactOption = CompactionOptions.LeveledCompactionOptions(2, 2, 4, 20)
-    val options = LsmStorageOptions(4096, 1 << 20, 1 << 20, 2, compactOption, CompressorOptions.Zstd(), false, false)
-    storage = TinyLsm(storageDir, options)
+    val zstdOptions = LsmStorageOptions(4096, 1 << 20, 1 << 20, 2, compactOption, CompressorOptions.Zstd(), false, false)
+    zstdStorage = TinyLsm(zstdStorageDir, zstdOptions)
     for (i <- 1 until 10000) {
-      storage.put(keyOf(i), valueOf(i))
+      zstdStorage.put(keyOf(i), valueOf(i))
+    }
+
+    zlibStorageDir = new File(List(System.getProperty("java.io.tmpdir"), "LsmBenchmark-Zlib", System.currentTimeMillis().toString)
+      .mkString(File.separator))
+    zlibStorageDir.mkdirs()
+    val zlibOptions = LsmStorageOptions(4096, 1 << 20, 1 << 20, 2, compactOption, CompressorOptions.Zlib(), false, false)
+    zlibStorage = TinyLsm(zlibStorageDir, zlibOptions)
+    for (i <- 1 until 10000) {
+      zlibStorage.put(keyOf(i), valueOf(i))
     }
   }
 
   @Benchmark
-  def get10k(blackHole: Blackhole): String = {
+  def get10kZstd(blackHole: Blackhole): String = {
     for (i <- 1 until 10000) {
-      storage.get(keyOf(i))
+      zstdStorage.get(keyOf(i))
     }
-    val value = storage.get(keyOf(1)).get
+    val value = zstdStorage.get(keyOf(1)).get
+    blackHole.consume(value)
+    value
+  }
+
+  @Benchmark
+  def get10kZlib(blackHole: Blackhole): String = {
+    for (i <- 1 until 10000) {
+      zlibStorage.get(keyOf(i))
+    }
+    val value = zlibStorage.get(keyOf(1)).get
     blackHole.consume(value)
     value
   }
 
   @TearDown(Level.Trial)
   def close(): Unit = {
-    storage.close()
-    storageDir.listFiles().foreach(_.delete())
-    storageDir.delete()
+    zstdStorage.close()
+    zstdStorageDir.listFiles().foreach(_.delete())
+    zstdStorageDir.delete()
+    zlibStorage.close()
+    zlibStorageDir.listFiles().foreach(_.delete())
+    zlibStorageDir.delete()
   }
 }
