@@ -7,14 +7,17 @@ import org.slf4j.LoggerFactory
 
 import java.util.concurrent.atomic.AtomicInteger
 
-class ZstdSsTableCompressor(sampleSize: Int = 1024 * 1024, dictSize: Int = 16 * 1024) extends SsTableCompressor {
+class ZstdSsTableCompressor(
+                             sampleSize: Int = 1024 * 1024,
+                             dictSize: Int = 16 * 1024,
+                             level: Int = Zstd.defaultCompressionLevel
+                           ) extends SsTableCompressor {
   private val log = LoggerFactory.getLogger(this.getClass)
 
   private val dictTrainer = new ZstdDictTrainer(sampleSize, dictSize)
   private val sampleCnt = new AtomicInteger(0)
   private val decompressCtx: ZstdDecompressCtx = new ZstdDecompressCtx().setMagicless(false)
-  private val compressCtx: ZstdCompressCtx = new ZstdCompressCtx().setMagicless(false)
-    .setDictID(false).setLevel(Zstd.defaultCompressionLevel)
+  private val compressCtx: ZstdCompressCtx = new ZstdCompressCtx().setMagicless(false).setDictID(false).setLevel(level)
 
   def loadDict(dict: Array[Byte]): ZstdSsTableCompressor = {
     this.decompressCtx.loadDict(dict)

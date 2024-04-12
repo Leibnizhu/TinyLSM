@@ -3,7 +3,7 @@ package io.github.leibnizhu.tinylsm.compress
 import com.github.blemale.scaffeine.Scaffeine
 import io.github.leibnizhu.tinylsm.block.{Block, BlockMeta}
 import io.github.leibnizhu.tinylsm.compress.CompressState.{Compress, Decompress, Train}
-import io.github.leibnizhu.tinylsm.compress.CompressorOptions.{Zlib, Zstd}
+import io.github.leibnizhu.tinylsm.compress.CompressorOptions.{Lz4, Zlib, Zstd}
 import io.github.leibnizhu.tinylsm.compress.SsTableCompressor.none
 import io.github.leibnizhu.tinylsm.iterator.SsTableIterator
 import io.github.leibnizhu.tinylsm.utils.ByteArrayWriter
@@ -119,14 +119,17 @@ object SsTableCompressor {
         ZlibSsTableCompressor()
       case NoneSsTableCompressor.DICT_TYPE =>
         NoneSsTableCompressor()
+      case Lz4SsTableCompressor.DICT_TYPE =>
+        Lz4SsTableCompressor()
       case _ =>
         log.error("Unsupported SsTableCompressor type: {}", dictType)
         NoneSsTableCompressor()
   }).changeState(CompressState.Decompress)
 
   def create(options: CompressorOptions): SsTableCompressor = options match
-    case Zstd(sampleSize, dictSize) => ZstdSsTableCompressor(sampleSize, dictSize)
+    case Zstd(sampleSize, dictSize, level) => ZstdSsTableCompressor(sampleSize, dictSize, level)
     case Zlib(level) => ZlibSsTableCompressor(level)
+    case Lz4(level) => Lz4SsTableCompressor(level)
     case CompressorOptions.None => NoneSsTableCompressor()
 
   def none(initState: CompressState = Train): SsTableCompressor = NoneSsTableCompressor().changeState(initState)

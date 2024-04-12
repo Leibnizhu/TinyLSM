@@ -11,10 +11,13 @@ enum CompressorOptions {
 
   case Zstd(
              sampleSize: Int = 1024 * 1024,
-             dictSize: Int = 16 * 1024
+             dictSize: Int = 16 * 1024,
+             level: Int = 3
            ) extends CompressorOptions
 
   case Zlib(level: Int = -1) extends CompressorOptions
+
+  case Lz4(level: Int = -1) extends CompressorOptions
 }
 
 object CompressorOptions {
@@ -22,9 +25,11 @@ object CompressorOptions {
     Config.CompressorType.get().toLowerCase match {
       case "zstd" => Zstd(
         sampleSize = Config.CompressorZstdSampleSize.getInt,
-        dictSize = Config.CompressorZstdDictSize.getInt
+        dictSize = Config.CompressorZstdDictSize.getInt,
+        level = Config.CompressorZstdLevel.getInt
       )
       case "zlib" => Zlib(Config.CompressorZlibLevel.getInt)
+      case "lz4" => Lz4(Config.CompressorLz4Level.getInt)
       case "none" | "no" => None
       case s: String => throw new IllegalArgumentException("Unsupported compaction strategy: " + s)
     }

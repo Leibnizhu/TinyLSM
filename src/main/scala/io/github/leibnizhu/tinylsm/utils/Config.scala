@@ -32,7 +32,9 @@ enum Config(private val name: String, val defaultVal: String) {
   case CompressorType extends Config("COMPRESSOR_TYPE", "zstd")
   case CompressorZstdSampleSize extends Config("ZSTD_SAMPLE_SIZE", (1024 * 1024).toString)
   case CompressorZstdDictSize extends Config("ZSTD_DICT_SIZE", (16 * 1024).toString)
+  case CompressorZstdLevel extends Config("ZSTD_LEVEL", "3")
   case CompressorZlibLevel extends Config("ZLIB_LEVEL", "-1")
+  case CompressorLz4Level extends Config("LZ4_LEVEL", "-1")
 
   /**
    * 优先级：

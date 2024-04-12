@@ -41,7 +41,7 @@ Configuration lookup order:
 | TINY_LSM_DATA_DIR             | data.dir               |                                                                              | /etc/tinylsm/data         |
 | TINY_LSM_CONFIG_FILE          | config.file            |                                                                              | /etc/tinylsm/tinylsm.conf |
 | TINY_LSM_COMPACTION_STRATEGY  | compaction.strategy    | leveled/tiered/simple/full/none                                              | leveled                   |
-| TINY_LSM_COMPRESSOR_TYPE      | compressor.type        | Value storage compression, none/no/zstd/zlib                                 | zstd                      |
+| TINY_LSM_COMPRESSOR_TYPE      | compressor.type        | Value storage compression, none/no/zstd/zlib/lz4                             | zstd                      |
 
 Compaction strategy config detail as below.
 
@@ -79,12 +79,19 @@ Zstd compression configs:
 |---------------------------|------------------------|---------|--------------|
 | TINY_LSM_ZSTD_SAMPLE_SIZE | zstd.sample.size       |         | 1048576(1MB) |
 | TINY_LSM_ZSTD_DICT_SIZE   | zstd.dict.size         |         | 16384(16KB)  |
+| TINY_LSM_ZSTD_LEVEL       | zstd.level             | 1-22    | 3            |
 
 Zlib compression configs:
 
 | environment key     | system properties name | meaning           | default |
 |---------------------|------------------------|-------------------|---------|
 | TINY_LSM_ZLIB_LEVEL | zlib.level             | -1 = default, 1-9 | -1      |
+
+LZ4 compression configs:
+
+| environment key    | system properties name | meaning                | default |
+|--------------------|------------------------|------------------------|---------|
+| TINY_LSM_LZ4_LEVEL | lz4.level              | -1 = fast, 1-17 = high | -1      |
 
 For example, write a config file in `/path/to/tinylsm.conf` :
 

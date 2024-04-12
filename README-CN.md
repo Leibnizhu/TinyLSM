@@ -41,7 +41,7 @@
 | TINY_LSM_DATA_DIR             | data.dir             |                                     | /etc/tinylsm/data         |
 | TINY_LSM_CONFIG_FILE          | config.file          |                                     | /etc/tinylsm/tinylsm.conf |
 | TINY_LSM_COMPACTION_STRATEGY  | compaction.strategy  | leveled/tiered/simple/full/none     | leveled                   |
-| TINY_LSM_COMPRESSOR_TYPE      | compressor.type      | value存储压缩算法, none/no/zstd/zlib      | zstd                      |
+| TINY_LSM_COMPRESSOR_TYPE      | compressor.type      | value存储压缩算法, none/no/zstd/zlib/lz4  | zstd                      |
 
 SST压缩（compaction）的详细配置如下。
 
@@ -75,16 +75,23 @@ Value存储压缩（compression）的详细配置如下。
 
 `Zstd` 压缩配置：
 
-| 环境变量配置名                   | 系统属性配置名          | 含义 | 默认值          |
-|---------------------------|------------------|----|--------------|
-| TINY_LSM_ZSTD_SAMPLE_SIZE | zstd.sample.size |    | 1048576(1MB) |
-| TINY_LSM_ZSTD_DICT_SIZE   | zstd.dict.size   |    | 16384(16KB)  |
+| 环境变量配置名                   | 系统属性配置名          | 含义   | 默认值          |
+|---------------------------|------------------|------|--------------|
+| TINY_LSM_ZSTD_SAMPLE_SIZE | zstd.sample.size |      | 1048576(1MB) |
+| TINY_LSM_ZSTD_DICT_SIZE   | zstd.dict.size   |      | 16384(16KB)  |
+| TINY_LSM_ZSTD_LEVEL       | zstd.level       | 1-22 | 3            |
 
 `Zlib` 压缩配置：
 
 | environment key     | system properties name | meaning          | default |
 |---------------------|------------------------|------------------|---------|
 | TINY_LSM_ZLIB_LEVEL | zlib.level             | 压缩级别，-1=默认, 取1-9 | -1      |
+
+`LZ4` 压缩配置：
+
+| environment key    | system properties name | meaning              | default |
+|--------------------|------------------------|----------------------|---------|
+| TINY_LSM_LZ4_LEVEL | lz4.level              | -1 = 快速, 1-17 = 压缩级别 | -1      |
 
 举例，可编写一个配置文件 `/path/to/tinylsm.conf` :
 
