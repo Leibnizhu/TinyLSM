@@ -195,7 +195,9 @@ class SsTableBuilder(val blockSize: Int, val compressor: SsTableCompressor) {
     }
     keyHashes.addOne(key.keyHash())
     // value字典采样
-    compressor.addDictSample(value)
+    if (compressor.needTrainDict()) {
+      compressor.addDictSample(value)
+    }
     // add可能因为BlockBuilder满了导致失败
     if (builder.add(key, value)) {
       lastKey = Some(key)
@@ -262,7 +264,7 @@ class SsTableBuilder(val blockSize: Int, val compressor: SsTableCompressor) {
     // 生成sst文件
     val fileObj = FileObject.create(path, buffer.toArray)
     val file = fileObj.file.get
-    log.info("Created new SST file: {} {} KB", file.getName, "%.3f".format(file.length() / 1024.0))
+    log.info("Created new SST with {} file: {} {} KB", compressor, file.getName, "%.3f".format(file.length() / 1024.0))
     new SsTable(
       file = fileObj,
       id = id,

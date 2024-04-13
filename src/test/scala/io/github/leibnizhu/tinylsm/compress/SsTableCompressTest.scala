@@ -37,8 +37,29 @@ class SsTableCompressTest extends AnyFunSuite {
     ssTable
   }
 
-  test("zstd_compressed_sst_decode") {
+  test("zstd_compressed_with_dict_sst_decode") {
     val sst = generateCompressedSst(new ZstdSsTableCompressor())
+    val newSst = SsTable.open(0, None, sst.file)
+    assertResult(sst.blockMeta)(newSst.blockMeta)
+    assertResult(compressKeyOf(0).getBytes)(newSst.firstKey.bytes)
+    assertResult(compressKeyOf(compressKeyNum - 1).getBytes)(newSst.lastKey.bytes)
+
+    val firstBlock = newSst.readBlock(0)
+    val blockItr1 = BlockIterator(firstBlock)
+    blockItr1.seekToKey(MemTableKey.applyForTest(compressKeyOf(0)))
+    assertResult(compressKeyOf(0))(new String(blockItr1.key().bytes))
+    assertResult(compressValueOf(0))(new String(blockItr1.value()))
+
+    val secondBlock = newSst.readBlock(1)
+    val blockItr2 = BlockIterator(secondBlock)
+    // 每个block 存了200+条，所以250应该在第二个block，seekToKey能直接定位到250的key
+    blockItr2.seekToKey(MemTableKey.applyForTest(compressKeyOf(250)))
+    assertResult(compressKeyOf(250))(new String(blockItr2.key().bytes))
+    assertResult(compressValueOf(250))(new String(blockItr2.value()))
+  }
+
+  test("zstd_compressed_without_dict_sst_decode") {
+    val sst = generateCompressedSst(new ZstdSsTableCompressor(trainDict = false))
     val newSst = SsTable.open(0, None, sst.file)
     assertResult(sst.blockMeta)(newSst.blockMeta)
     assertResult(compressKeyOf(0).getBytes)(newSst.firstKey.bytes)

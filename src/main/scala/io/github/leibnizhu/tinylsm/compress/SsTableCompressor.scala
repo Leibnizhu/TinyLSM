@@ -28,6 +28,8 @@ trait SsTableCompressor extends AutoCloseable {
 
   def isState(specState: CompressState): Boolean = state == specState
 
+  def needTrainDict(): Boolean
+
   val DICT_TYPE: Byte
 
   /**
@@ -54,39 +56,43 @@ trait SsTableCompressor extends AutoCloseable {
    * @return (已压缩的block数据, 与压缩后block数据匹配的Array[BlockMeta])
    */
   def compressSsTable(blockSize: Int, blockData: ByteArrayWriter,
-                      blocks: ArrayBuffer[Block], meta: Array[BlockMeta]): (ByteArrayWriter, Array[BlockMeta]) = {
-    val sstId = -1
-    val blockCache = Scaffeine().maximumSize(meta.length).build[(Int, Int), Block]()
-    blocks.zipWithIndex.foreach((block, idx) => {
-      //      block.compressor = none(Decompress)
-      blockCache.put((sstId, idx), block)
-    })
-    val sst = SsTable(
-      file = null,
-      id = sstId,
-      blockMeta = meta,
-      blockMetaOffset = 0,
-      blockCache = Some(blockCache),
-      firstKey = meta.head.firstKey.copy(),
-      lastKey = meta.last.lastKey.copy(),
-      bloom = None,
-      maxTimestamp = 0,
-      // 前面没压缩，可以直接读
-      compressor = none(Decompress)
-    )
-    val sstIter = SsTableIterator.createAndSeekToFirst(sst)
-    this.changeState(Compress)
-    val newSstBuilder = SsTableBuilder(blockSize, this)
-    while (sstIter.isValid) {
-      newSstBuilder.add(sstIter.key(), sstIter.value())
-      sstIter.next()
+                      blocks: ArrayBuffer[Block], meta: Array[BlockMeta]): (ByteArrayWriter, Array[BlockMeta]) =
+    if (needTrainDict()) {
+      // 如果需要训练字典，那么之前生成的sst是没压缩的，需要重新遍历这个未完成的sst的数据，重新压缩生成新的block和meta数据
+      val sstId = -1
+      val blockCache = Scaffeine().maximumSize(meta.length).build[(Int, Int), Block]()
+      blocks.zipWithIndex.foreach((block, idx) => {
+        //      block.compressor = none(Decompress)
+        blockCache.put((sstId, idx), block)
+      })
+      val sst = SsTable(
+        file = null,
+        id = sstId,
+        blockMeta = meta,
+        blockMetaOffset = 0,
+        blockCache = Some(blockCache),
+        firstKey = meta.head.firstKey.copy(),
+        lastKey = meta.last.lastKey.copy(),
+        bloom = None,
+        maxTimestamp = 0,
+        // 前面没压缩，可以直接读
+        compressor = none(Decompress)
+      )
+      val sstIter = SsTableIterator.createAndSeekToFirst(sst)
+      this.changeState(Compress)
+      val newSstBuilder = SsTableBuilder(blockSize, this)
+      while (sstIter.isValid) {
+        newSstBuilder.add(sstIter.key(), sstIter.value())
+        sstIter.next()
+      }
+      newSstBuilder.finishBlock()
+      log.info("Completed SST compression. Before compression: {} Blocks, {} KB; After compression: {} Blocks, {} KB",
+        blocks.length, "%.2f".format(blockData.length / 1024.0),
+        newSstBuilder.meta.length, "%.2f".format(newSstBuilder.data.length / 1024.0))
+      (newSstBuilder.data, newSstBuilder.meta.toArray)
+    } else {
+      (blockData, meta)
     }
-    newSstBuilder.finishBlock()
-    log.info("Completed SST compression. Before compression: {} Blocks, {} KB; After compression: {} Blocks, {} KB",
-      blocks.length, "%.2f".format(blockData.length / 1024.0),
-      newSstBuilder.meta.length, "%.2f".format(newSstBuilder.data.length / 1024.0))
-    (newSstBuilder.data, newSstBuilder.meta.toArray)
-  }
 
   /**
    * 压缩单个值
@@ -127,7 +133,7 @@ object SsTableCompressor {
   }).changeState(CompressState.Decompress)
 
   def create(options: CompressorOptions): SsTableCompressor = options match
-    case Zstd(sampleSize, dictSize, level) => ZstdSsTableCompressor(sampleSize, dictSize, level)
+    case Zstd(trainDict, sampleSize, dictSize, level) => ZstdSsTableCompressor(trainDict, sampleSize, dictSize, level)
     case Zlib(level) => ZlibSsTableCompressor(level)
     case Lz4(level) => Lz4SsTableCompressor(level)
     case CompressorOptions.None => NoneSsTableCompressor()

@@ -77,6 +77,7 @@ Value存储压缩（compression）的详细配置如下。
 
 | 环境变量配置名                   | 系统属性配置名          | 含义   | 默认值          |
 |---------------------------|------------------|------|--------------|
+| TINY_LSM_ZSTD_TRAIN_DICT  | zstd.train.dict  |      | true         |
 | TINY_LSM_ZSTD_SAMPLE_SIZE | zstd.sample.size |      | 1048576(1MB) |
 | TINY_LSM_ZSTD_DICT_SIZE   | zstd.dict.size   |      | 16384(16KB)  |
 | TINY_LSM_ZSTD_LEVEL       | zstd.level       | 1-22 | 3            |
@@ -110,6 +111,7 @@ compaction.level0.file.num.trigger=5
 compaction.max.levels=5
 base.level.size.mb=100
 compressor.type=zstd
+zstd.train.dict=true
 zstd.sample.size=1048576
 zstd.dict.size=16384
 ```

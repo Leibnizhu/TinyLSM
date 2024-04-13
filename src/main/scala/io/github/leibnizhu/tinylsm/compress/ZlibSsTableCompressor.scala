@@ -13,14 +13,15 @@ class ZlibSsTableCompressor(level: Int = Deflater.DEFAULT_COMPRESSION) extends S
 
   override val DICT_TYPE: Byte = ZlibSsTableCompressor.DICT_TYPE
 
+  override def needTrainDict(): Boolean = false
+
   override def addDictSample(sample: MemTableValue): Unit = {}
 
   override def generateDict(): Array[Byte] = Array()
 
   override def compress(origin: Array[Byte]): Array[Byte] = state match
     case Decompress => throw new IllegalStateException("ZlibSsTableCompressor is not in compress state")
-    case Train => origin
-    case Compress => doCompress(origin)
+    case Train | Compress => doCompress(origin)
 
   private def doCompress(origin: Array[Byte]) = {
     val deflater = new Deflater(level)
@@ -49,6 +50,8 @@ class ZlibSsTableCompressor(level: Int = Deflater.DEFAULT_COMPRESSION) extends S
   }
 
   override def close(): Unit = {}
+
+  override def toString: String = s"ZLib(level $level)"
 }
 
 object ZlibSsTableCompressor {

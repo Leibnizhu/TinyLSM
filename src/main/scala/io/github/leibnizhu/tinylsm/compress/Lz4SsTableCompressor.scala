@@ -10,6 +10,8 @@ class Lz4SsTableCompressor(level: Int = -1) extends SsTableCompressor {
     (if (level == -1) factory.fastCompressor() else factory.highCompressor(level), factory.fastDecompressor())
   }
 
+  override def needTrainDict(): Boolean = false
+
   override val DICT_TYPE: Byte = Lz4SsTableCompressor.DICT_TYPE
 
   override def addDictSample(sample: MemTableValue): Unit = {}
@@ -18,20 +20,16 @@ class Lz4SsTableCompressor(level: Int = -1) extends SsTableCompressor {
 
   override def compress(origin: Array[Byte]): Array[Byte] = state match
     case Decompress => throw new IllegalStateException("Lz4SsTableCompressor is not in compress state")
-    case Train => origin
-    case Compress => doCompress(origin)
-
-  private def doCompress(origin: Array[Byte]) = compressor.compress(origin)
+    case Train | Compress => compressor.compress(origin)
 
   override def decompress(compressed: Array[Byte], originLength: Int): Array[Byte] = state match
     // 如果是同个Compressor在压缩或训练的模式下调用 decompress，那么应该是在读取未压缩数据进行压缩，直接返回原始数据即可
     case Train | Compress => compressed
-    case Decompress => doDecompress(compressed, originLength)
-
-  private def doDecompress(compressed: Array[Byte], originLength: Int) =
-    decompressor.decompress(compressed, originLength)
+    case Decompress => decompressor.decompress(compressed, originLength)
 
   override def close(): Unit = {}
+
+  override def toString: String = s"LZ4(${if (level == -1) "fast" else ("level " + level)})"
 
 }
 

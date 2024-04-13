@@ -8,9 +8,10 @@ import org.slf4j.LoggerFactory
 import java.util.concurrent.atomic.AtomicInteger
 
 class ZstdSsTableCompressor(
+                             trainDict: Boolean = true,
                              sampleSize: Int = 1024 * 1024,
                              dictSize: Int = 16 * 1024,
-                             level: Int = Zstd.defaultCompressionLevel
+                             level: Int = Zstd.defaultCompressionLevel,
                            ) extends SsTableCompressor {
   private val log = LoggerFactory.getLogger(this.getClass)
 
@@ -19,9 +20,13 @@ class ZstdSsTableCompressor(
   private val decompressCtx: ZstdDecompressCtx = new ZstdDecompressCtx().setMagicless(false)
   private val compressCtx: ZstdCompressCtx = new ZstdCompressCtx().setMagicless(false).setDictID(false).setLevel(level)
 
-  def loadDict(dict: Array[Byte]): ZstdSsTableCompressor = {
-    this.decompressCtx.loadDict(dict)
-    this.compressCtx.loadDict(dict)
+  override def needTrainDict(): Boolean = trainDict
+
+  private[compress] def loadDict(dict: Array[Byte]): ZstdSsTableCompressor = {
+    if (dict.nonEmpty) {
+      this.decompressCtx.loadDict(dict)
+      this.compressCtx.loadDict(dict)
+    }
     this
   }
 
@@ -33,19 +38,21 @@ class ZstdSsTableCompressor(
     }
   }
 
-  override def generateDict(): Array[Byte] = try {
-    val rawDict = dictTrainer.trainSamples
-    loadDict(rawDict)
-    rawDict
-  } catch
-    case e: ZstdException =>
-      // 可能采样数量不够，无法训练字典
-      log.error("Train zstd dict failed: {}", e.getMessage)
-      Array()
+  override def generateDict(): Array[Byte] = if (trainDict) {
+    try {
+      val rawDict = dictTrainer.trainSamples
+      loadDict(rawDict)
+      rawDict
+    } catch
+      case e: ZstdException =>
+        // 可能采样数量不够，无法训练字典
+        log.error("Train zstd dict failed: {}", e.getMessage)
+        Array()
+  } else Array()
 
   override def compress(origin: Array[Byte]): Array[Byte] = state match
     case Decompress => throw new IllegalStateException("ZstdSsTableCompressor is not in compress state")
-    case Train => origin
+    case Train => if (trainDict) origin else compressCtx.compress(origin)
     case Compress => compressCtx.compress(origin)
 
   override def decompress(compressed: Array[Byte], originLength: Int): Array[Byte] = state match
@@ -59,6 +66,8 @@ class ZstdSsTableCompressor(
   }
 
   override val DICT_TYPE: Byte = ZstdSsTableCompressor.DICT_TYPE
+
+  override def toString: String = s"ZStd(level $level)"
 }
 
 object ZstdSsTableCompressor {

@@ -8,13 +8,11 @@ import scala.collection.mutable.ArrayBuffer
 
 class NoneSsTableCompressor extends SsTableCompressor {
 
+  override def needTrainDict(): Boolean = false
+
   override def addDictSample(sample: MemTableValue): Unit = {}
 
   override def generateDict(): Array[Byte] = Array()
-
-  override def compressSsTable(blockSize: Int, blockData: ByteArrayWriter,
-                               blocks: ArrayBuffer[Block], meta: Array[BlockMeta]): (ByteArrayWriter, Array[BlockMeta]) =
-    (blockData, meta)
 
   override def compress(origin: Array[Byte]): Array[Byte] = origin
 
@@ -23,6 +21,8 @@ class NoneSsTableCompressor extends SsTableCompressor {
   override def close(): Unit = {}
 
   override val DICT_TYPE: Byte = NoneSsTableCompressor.DICT_TYPE
+
+  override def toString: String = "No Compression"
 }
 
 object NoneSsTableCompressor {

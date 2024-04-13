@@ -77,6 +77,7 @@ Zstd compression configs:
 
 | environment key           | system properties name | meaning | default      |
 |---------------------------|------------------------|---------|--------------|
+| TINY_LSM_ZSTD_TRAIN_DICT  | zstd.train.dict        |         | true         |
 | TINY_LSM_ZSTD_SAMPLE_SIZE | zstd.sample.size       |         | 1048576(1MB) |
 | TINY_LSM_ZSTD_DICT_SIZE   | zstd.dict.size         |         | 16384(16KB)  |
 | TINY_LSM_ZSTD_LEVEL       | zstd.level             | 1-22    | 3            |
