@@ -19,12 +19,14 @@ import scala.util.hashing.MurmurHash3
  * SST包括多个DataBlock和一个Index
  * SST文件一般 256MB
  * SST结构
- * ---------------------------------------------------------------------------------------------------------
- * |      Block Section      |          Meta Section        |            Bloom Section           |  Extra  |
- * ---------------------------------------------------------------------------------------------------------
- * |   data  | ... |   data  | metadata | meta block offset | bloom filter | bloom filter offset |         |
- * | block 1 |     | block N |  varlen  |         u32       |    varlen    |        u32          |         |
- * ---------------------------------------------------------------------------------------------------------
+ * --------------------------------------------------------------------------------------------------------------------------------------
+ * |      Block Section      |          Meta Section        |            Bloom Section           |                   Dict               |
+ * --------------------------------------------------------------------------------------------------------------------------------------
+ * |   data  | ... |   data  | metadata | meta block offset | bloom filter | bloom filter offset |  dict type | dict data | dict offset |
+ * | block 1 |     | block N |  varlen  |         u32       |    varlen    |        u32          |     1B     |   varlen  |     u32     |
+ * --------------------------------------------------------------------------------------------------------------------------------------
+ *
+ * TODO 考虑其他SST编码结构，如增加二级索引 https://disc-projects.bu.edu/lethe/， 或B+ Tree
  */
 class SsTable(val file: FileObject,
               private val id: Int,

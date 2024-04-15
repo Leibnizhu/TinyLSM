@@ -4,6 +4,8 @@ import io.github.leibnizhu.tinylsm.{MemTableEntry, MemTableKey, MemTableValue}
 
 /**
  * 用于遍历一个MemTable的迭代器
+ * TODO MemTable最大体积是 LsmStorageOptions.targetSstSize，而这个 MemTableIterator 可能被用户长期持有，flush后还不会被gc
+ * 所以可以实现一个 ForegroundIterator，定期更新实际的存储结构，释放原始的 MemTableIterator
  *
  * @param iterator MemTable内部数据MemTableEntry的迭代器
  */

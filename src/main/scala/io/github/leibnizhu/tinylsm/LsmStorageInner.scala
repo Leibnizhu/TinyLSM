@@ -137,6 +137,8 @@ private[tinylsm] case class LsmStorageInner(
     assert(key != null && !key.isEmpty, "key cannot be empty")
     val snapshot = state.read(_.copy())
 
+    // TODO 提前结束
+
     // Memtable 部分的迭代器
     val memTableIters = (snapshot.memTable :: snapshot.immutableMemTables)
       .map(mt => mt.scan(Included(MemTableKey.withBeginTs(key)), Included(MemTableKey.withEndTs(key))))
@@ -519,6 +521,7 @@ private[tinylsm] case class LsmStorageInner(
       options.numMemTableLimit)
     if (needTrigger) {
       log.info("Trigger flush earliest MemTable to SST...")
+      // TODO 如果 immutable Memtable个数超过限值太多，需要多批量flush
       forceFlushNextImmutableMemTable()
     }
   }

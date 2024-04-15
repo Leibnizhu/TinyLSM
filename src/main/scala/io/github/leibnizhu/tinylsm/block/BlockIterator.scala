@@ -4,6 +4,12 @@ import io.github.leibnizhu.tinylsm.*
 import io.github.leibnizhu.tinylsm.iterator.StorageIterator
 import io.github.leibnizhu.tinylsm.utils.ByteArrayReader
 
+/**
+ * Block数据的迭代器
+ * TODO 实现 prev 方法前向迭代，从而可以反向scan
+ *
+ * @param block block对象
+ */
 class BlockIterator(block: Block) extends StorageIterator[MemTableKey] {
   private var index: Int = 0
   /**

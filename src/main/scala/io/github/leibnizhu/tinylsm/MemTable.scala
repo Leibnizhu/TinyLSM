@@ -12,6 +12,7 @@ import scala.jdk.CollectionConverters.*
 
 /**
  * MemTable。
+ * 目前用 SkipListMap实现，也可以用 BTree、vector、自适应基数树ART 实现。
  * 其大小增长到 LsmStorageOptions.targetSstSize 之后，需要冻结，并flush到磁盘
  *
  * @param id              MemTable唯一标识，应该是自增的，或至少是单调增的
