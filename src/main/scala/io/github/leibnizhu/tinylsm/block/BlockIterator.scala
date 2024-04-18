@@ -6,7 +6,6 @@ import io.github.leibnizhu.tinylsm.utils.ByteArrayReader
 
 /**
  * Block数据的迭代器
- * TODO 实现 prev 方法前向迭代，从而可以反向scan
  *
  * @param block block对象
  */

@@ -4,7 +4,6 @@ import io.github.leibnizhu.tinylsm.{Key, MemTableValue}
 
 /**
  * 主要用于包装异常处理
- * TODO 优化泛型声明
  *
  * @param iter 要包装的 StorageIterator 迭代器
  */

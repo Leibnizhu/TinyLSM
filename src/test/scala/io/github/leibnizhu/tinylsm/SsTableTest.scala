@@ -78,6 +78,10 @@ class SsTableTest extends AnyFunSuite {
     // 每个block 存了5条，所以7应该在第二个block，seekToKey能直接定位到7的key
     blockItr.seekToKey(MemTableKey.applyForTest(keyOf(7)))
     assertResult(keyOf(7))(new String(blockItr.key().bytes))
+    assertResult(valueOf(7))(new String(blockItr.value()))
+    blockItr.prev()
+    assertResult(keyOf(6))(new String(blockItr.key().bytes))
+    assertResult(valueOf(6))(new String(blockItr.value()))
   }
 
   test("week1_day4_task2_sst_iterator") {
