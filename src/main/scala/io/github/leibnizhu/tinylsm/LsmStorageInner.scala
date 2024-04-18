@@ -300,29 +300,31 @@ private[tinylsm] case class LsmStorageInner(
     }
     try {
       state.stateLock.lock()
-      val flushMemTable = state.immutableMemTables.last
-      // 构建SST、写入SST文件
-      val builder = SsTableBuilder(options.blockSize, SsTableCompressor.create(options.compressorOptions))
-      flushMemTable.flush(builder)
-      val sstId = flushMemTable.id
-      val sst = builder.build(sstId, Some(blockCache), fileOfSst(sstId))
+      // 极端情况，immutable Memtable个数可能超过限值太多，所以这里改成全部flush了
+      // 倒序，从早到新遍历所有已冻结的memtable进行flush操作
+      for (flushMemTable <- state.immutableMemTables.reverse) {
+        // 构建SST、写入SST文件
+        val builder = SsTableBuilder(options.blockSize, SsTableCompressor.create(options.compressorOptions))
+        flushMemTable.flush(builder)
+        val sstId = flushMemTable.id
+        val sst = builder.build(sstId, Some(blockCache), fileOfSst(sstId))
+        if (compactionController.flushToL0()) {
+          state.l0SsTables = sstId :: state.l0SsTables
+        } else {
+          // Tiered compaction不能flush到L0, 每次都写到levels的最前面，Tier ID是对应第一个SST的ID
+          state.levels = (sstId, List(sstId)) :: state.levels
+        }
+        state.ssTables = state.ssTables + (sstId -> sst)
 
+        // 删除WAL文件
+        if (options.enableWal) {
+          val deleteWal = fileOfWal(sstId).delete()
+          log.info("Deleted WAL file {} {}", fileOfWal(sstId).getName, if (deleteWal) "success" else "failed")
+        }
+        manifest.foreach(_.addRecord(ManifestFlush(sstId)))
+      }
       // 移除MemTable、加入到L0 table
-      state.immutableMemTables = state.immutableMemTables.slice(0, state.immutableMemTables.length - 1)
-      if (compactionController.flushToL0()) {
-        state.l0SsTables = sstId :: state.l0SsTables
-      } else {
-        // Tiered compaction不能flush到L0, 每次都写到levels的最前面，Tier ID是对应第一个SST的ID
-        state.levels = (sstId, List(sstId)) :: state.levels
-      }
-      state.ssTables = state.ssTables + (sstId -> sst)
-
-      // 删除WAL文件
-      if (options.enableWal) {
-        val deleteWal = fileOfWal(sstId).delete()
-        log.info("Deleted WAL file {} {}", fileOfWal(sstId).getName, if (deleteWal) "success" else "failed")
-      }
-      manifest.foreach(_.addRecord(ManifestFlush(sstId)))
+      state.immutableMemTables = List()
     } finally {
       state.stateLock.unlock()
     }
@@ -517,11 +519,10 @@ private[tinylsm] case class LsmStorageInner(
   def dumpState(): String = state.dumpState()
 
   def triggerFlush(): Unit = {
-    val needTrigger = state.read(st => st.immutableMemTables.length >=
-      options.numMemTableLimit)
+    val (memtableNum, numLimit) = state.read(st => (st.immutableMemTables.length, options.numMemTableLimit))
+    val needTrigger = memtableNum >= numLimit
     if (needTrigger) {
       log.info("Trigger flush earliest MemTable to SST...")
-      // TODO 如果 immutable Memtable个数超过限值太多，需要多批量flush
       forceFlushNextImmutableMemTable()
     }
   }
