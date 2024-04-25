@@ -13,6 +13,7 @@ object Bound {
     case "unbounded" => Unbounded()
     case "excluded" => Excluded(boundKey)
     case "included" => Included(boundKey)
+    case _ => throw new IllegalArgumentException(s"Unsupported bound type: $boundType")
 
   //  def withBeginTs(bound: Bound): Bound = replaceTs(bound, MemTableKey.TS_RANGE_BEGIN)
   def withBeginTs(bound: Bound): Bound = bound match

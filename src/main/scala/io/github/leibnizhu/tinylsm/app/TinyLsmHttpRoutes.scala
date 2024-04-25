@@ -1,11 +1,11 @@
 package io.github.leibnizhu.tinylsm.app
 
-import akka.actor.typed.scaladsl.AskPattern.*
+import akka.actor.typed.scaladsl.AskPattern._
 import akka.actor.typed.{ActorRef, ActorSystem}
-import akka.http.scaladsl.server.Directives.*
+import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.util.Timeout
-import io.github.leibnizhu.tinylsm.app.TinyLsmHttpRegistry.{CommonResponse, DeleteByKey, GetByKey, PutValue}
+import io.github.leibnizhu.tinylsm.app.TinyLsmHttpRegistry._
 
 import java.time.Duration
 import scala.concurrent.Future
@@ -28,34 +28,77 @@ class TinyLsmHttpRoutes(registry: ActorRef[TinyLsmHttpRegistry.Command])
   private def putValue(key: String, value: String, tid: Option[Int]): Future[CommonResponse] =
     registry.ask(PutValue(key, value, tid, _))
 
+  private def scan(fromType: String, fromKey: String, toType: String, toKey: String,
+                   tid: Option[Int] = None): Future[CommonResponse] =
+    registry.ask(ScanRange(fromType, fromKey, toType, toKey, tid, _))
+
+  private def dumpState(): Future[CommonResponse] = registry.ask(State.apply)
+
+  private def forceFlush(): Future[CommonResponse] = registry.ask(Flush.apply)
+
+  private def newTransaction(): Future[CommonResponse] = registry.ask(CreateTxn.apply)
+
+  private def commitTransaction(tid: Int): Future[CommonResponse] = registry.ask(CommitTxn(tid, _))
+
+  private def rollbackTransaction(tid: Int): Future[CommonResponse] = registry.ask(RollbackTxn(tid, _))
+
   val routes: Route =
-    pathPrefix("key") {
-      concat(
-        // key get/put/delete starts
+    concat(
+      // key api get/put/delete starts
+      pathPrefix("key") {
         path(Segment) { key =>
           parameter(Symbol("tid").as[Int].?) { tid =>
-            concat(
-              get {
-                onSuccess(getByKey(key, tid)) { response =>
-                  complete(response.status, response.content)
-                }
-              },
+            get {
+              onSuccess(getByKey(key, tid))(_.response())
+            } ~
               post {
                 parameter(Symbol("value")) { value =>
-                  onSuccess(putValue(key, value, tid)) { response =>
-                    complete(response.status, response.content)
-                  }
+                  onSuccess(putValue(key, value, tid))(_.response())
                 }
-              },
+              } ~
               delete {
-                onSuccess(deleteByKey(key, tid)) { response =>
-                  complete(response.status, response.content)
-                }
+                onSuccess(deleteByKey(key, tid))(_.response())
               }
-            )
           }
         }
-      )
-      // key get/put/delete ends
-    }
+        // key api get/put/delete ends
+      },
+      // scan api starts
+      path("scan") {
+        get {
+          parameter(Symbol("fromType"), Symbol("fromKey"), Symbol("toType"), Symbol("toKey"), Symbol("tid").as[Int].?) {
+            (fromType, fromKey, toType, toKey, tid) =>
+              onSuccess(scan(fromType, fromKey, toType, toKey, tid))(_.response())
+          }
+        }
+        // scan api ends
+      },
+      // system api starts
+      pathPrefix("sys") {
+        post {
+          path("flush") {
+            onSuccess(forceFlush())(_.response())
+          } ~
+            path("state") {
+              onSuccess(dumpState())(_.response())
+            }
+        }
+        // system api ends
+      },
+      // transaction api starts
+      post {
+        path("txn") {
+          onSuccess(newTransaction())(_.response())
+        } ~
+          pathPrefix("txn" / IntNumber) { tid =>
+            path("commit") {
+              onSuccess(commitTransaction(tid))(_.response())
+            } ~
+              path("rollback") {
+                onSuccess(rollbackTransaction(tid))(_.response())
+              }
+          }
+        // transaction api ends
+      }
+    )
 }

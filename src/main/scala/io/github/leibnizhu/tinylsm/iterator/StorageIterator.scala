@@ -48,7 +48,7 @@ trait StorageIterator[K <: Comparable[K] with Key] {
   final def joinAllKeyValue(sj: StringJoiner): StringJoiner = {
     while (isValid) {
       (key(), value()) match
-        case (curKey: MemTableKey, curValue: MemTableValue) =>
+        case (curKey: Key, curValue: MemTableValue) =>
           sj.add(curKey.toString)
           sj.add(new String(curValue))
         case _ =>
