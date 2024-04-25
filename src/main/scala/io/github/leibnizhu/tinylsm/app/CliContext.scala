@@ -212,7 +212,7 @@ object CliContext {
       playgroundLsm,
       debugMode,
       argMap.getOrElse("host", "localhost").asInstanceOf[String],
-      argMap.getOrElse("port", Config.Port.defaultVal.toInt).asInstanceOf[Int]
+      argMap.getOrElse("port", Config.HttpPort.defaultVal.toInt).asInstanceOf[Int]
     )
   }
 }

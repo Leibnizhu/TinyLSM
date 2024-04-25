@@ -30,7 +30,8 @@ Configuration lookup order:
 
 | environment key               | system properties name | meaning                                                                      | default value             |
 |-------------------------------|------------------------|------------------------------------------------------------------------------|---------------------------|
-| TINY_LSM_PORT                 | port                   |                                                                              | 9527                      |
+| TINY_LSM_HTTP_PORT            | http.port              |                                                                              | 9527                      |
+| TINY_LSM_RPC_PORT             | rpc.port               |                                                                              | 9526                      |
 | TINY_LSM_LISTEN               | listen                 |                                                                              | 0.0.0.0                   |
 | TINY_LSM_BLOCK_SIZE           | block.size             | Block size in bytes                                                          | 4096                      |
 | TINY_LSM_TARGET_SST_SIZE      | target.sst.size        | SST size in bytes, also the approximate memtable capacity limit              | 2 << 20 (2MB)             |
@@ -97,7 +98,7 @@ LZ4 compression configs:
 For example, write a config file in `/path/to/tinylsm.conf` :
 
 ```properties
-port=9527
+http.port=9527
 listen=0.0.0.0
 block.size=4096
 target.sst.size=2097152

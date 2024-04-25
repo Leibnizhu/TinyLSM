@@ -30,7 +30,8 @@
 
 | 环境变量配置名                       | 系统属性配置名              | 含义                                  | 默认值                       |
 |-------------------------------|----------------------|-------------------------------------|---------------------------|
-| TINY_LSM_PORT                 | port                 |                                     | 9527                      |
+| TINY_LSM_HTTP_PORT            | http.port            |                                     | 9527                      |
+| TINY_LSM_RPC_PORT             | rpc.port             |                                     | 9526                      |
 | TINY_LSM_LISTEN               | listen               |                                     | 0.0.0.0                   |
 | TINY_LSM_BLOCK_SIZE           | block.size           | SST的Block大小阈值，单位为byte               | 4096                      |
 | TINY_LSM_TARGET_SST_SIZE      | target.sst.size      | SST大小阈值，单位为byte，同时用于MemTable预估大小的阈值 | 2 << 20 (2MB)             |
@@ -97,7 +98,7 @@ Value存储压缩（compression）的详细配置如下。
 举例，可编写一个配置文件 `/path/to/tinylsm.conf` :
 
 ```properties
-port=9527
+http.port=9527
 listen=0.0.0.0
 block.size=4096
 target.sst.size=2097152

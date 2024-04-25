@@ -10,7 +10,6 @@ import java.util.concurrent.ConcurrentSkipListMap
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import scala.jdk.CollectionConverters.*
 
-// TODO wal
 case class Transaction(
                         tid: Int = Transaction.ids.getAndIncrement(),
                         var readTs: Long,

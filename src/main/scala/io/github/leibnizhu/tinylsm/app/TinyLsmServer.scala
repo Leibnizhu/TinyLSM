@@ -1,0 +1,68 @@
+package io.github.leibnizhu.tinylsm.app
+
+import akka.actor.typed.ActorSystem
+import akka.actor.typed.scaladsl.Behaviors
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.server.Route
+import io.github.leibnizhu.tinylsm.mvcc.Transaction
+import io.github.leibnizhu.tinylsm.utils.Config
+import io.github.leibnizhu.tinylsm.{LsmStorageOptions, TinyLsm}
+import org.slf4j.LoggerFactory
+
+import java.io.File
+import java.util.concurrent.ConcurrentHashMap
+import scala.util.{Failure, Success}
+
+class TinyLsmServer(storage: TinyLsm, host: String, httpPort: Int) {
+  private val logger = LoggerFactory.getLogger(this.getClass)
+  Runtime.getRuntime.addShutdownHook(new Thread(() => {
+    logger.info("Start to close TinyLSM...")
+    storage.close()
+    logger.info("Finish closing TinyLSM...")
+  }))
+  private val transactions = new ConcurrentHashMap[Int, Transaction]()
+
+  def start(): Unit = {
+    //#server-bootstrapping
+    val rootBehavior = Behaviors.setup[Nothing] { context =>
+      val tinyLsmActor = context.spawn(TinyLsmHttpRegistry(storage, transactions).registry(), "TinyLsmActor")
+      context.watch(tinyLsmActor)
+      val routes = new TinyLsmHttpRoutes(tinyLsmActor)(context.system)
+      startHttpServer(routes.routes)(context.system)
+      Behaviors.empty
+    }
+    val system = ActorSystem[Nothing](rootBehavior, "TinyLsmAkkaHttpServer")
+    logger.info("===> TinyLSM Server Started")
+  }
+
+  private def startHttpServer(routes: Route)(implicit system: ActorSystem[_]): Unit = {
+    // Akka HTTP still needs a classic ActorSystem to start
+    import system.executionContext
+
+    val futureBinding = Http().newServerAt(host, httpPort).bind(routes)
+    futureBinding.onComplete {
+      case Success(binding) =>
+        val address = binding.localAddress
+        logger.info("TinyLSM HTTP Server online at http://{}:{}/", address.getHostString, address.getPort)
+      case Failure(ex) =>
+        logger.error("Failed to bind TinyLSM HTTP endpoint, terminating system", ex)
+        system.terminate()
+    }
+  }
+}
+
+object TinyLsmServer {
+  def main(args: Array[String]): Unit = {
+    Config.print()
+    TinyLsmServer().start()
+  }
+
+  def apply(): TinyLsmServer = {
+    val httpPort: Int = Config.HttpPort.getInt
+    val host: String = Config.Host.get()
+    val lsmOptions = LsmStorageOptions.fromConfig()
+    val dataDir = new File(Config.DataDir.get())
+    val storage = TinyLsm(dataDir, lsmOptions)
+    new TinyLsmServer(storage, host, httpPort)
+  }
+}

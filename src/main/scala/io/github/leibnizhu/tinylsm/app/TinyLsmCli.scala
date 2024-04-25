@@ -26,8 +26,7 @@ object TinyLsmCli {
           executeCommand(words.asScala, cliContext)
         }
       } catch
-        case e: UserInterruptException => gracefullyExit()
-        case e: EndOfFileException => gracefullyExit()
+        case _: UserInterruptException | _: EndOfFileException => gracefullyExit()
         case e: Exception => e.printStackTrace()
     }
   }

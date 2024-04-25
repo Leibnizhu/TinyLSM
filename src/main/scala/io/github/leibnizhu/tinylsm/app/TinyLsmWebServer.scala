@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 object TinyLsmWebServer extends cask.MainRoutes {
 
-  override def port: Int = Config.Port.getInt
+  override def port: Int = Config.HttpPort.getInt
 
   override def host: String = Config.Host.get()
 

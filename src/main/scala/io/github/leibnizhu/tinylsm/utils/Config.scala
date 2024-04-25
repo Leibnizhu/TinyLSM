@@ -8,7 +8,8 @@ enum Config(private val name: String, val defaultVal: String) {
 
   private val sysPropName = Config.toPropertyName(name)
 
-  case Port extends Config("PORT", "9527")
+  case HttpPort extends Config("HTTP_PORT", "9527")
+  case RpcPort extends Config("RPC_PORT", "9526")
   case Host extends Config("LISTEN", "0.0.0.0")
   case BlockSize extends Config("BLOCK_SIZE", "4096")
   case TargetSstSize extends Config("TARGET_SST_SIZE", (2 << 20).toString)
