@@ -31,7 +31,7 @@ Configuration lookup order:
 | environment key               | system properties name | meaning                                                                      | default value             |
 |-------------------------------|------------------------|------------------------------------------------------------------------------|---------------------------|
 | TINY_LSM_HTTP_PORT            | http.port              |                                                                              | 9527                      |
-| TINY_LSM_RPC_PORT             | rpc.port               |                                                                              | 9526                      |
+| TINY_LSM_GRPC_PORT            | grpc.port              |                                                                              | 9526                      |
 | TINY_LSM_LISTEN               | listen                 |                                                                              | 0.0.0.0                   |
 | TINY_LSM_BLOCK_SIZE           | block.size             | Block size in bytes                                                          | 4096                      |
 | TINY_LSM_TARGET_SST_SIZE      | target.sst.size        | SST size in bytes, also the approximate memtable capacity limit              | 2 << 20 (2MB)             |
@@ -141,7 +141,7 @@ docker build . -f Dockerfile -t leibniz007/tinylsm:latest --network=host --targe
 ```shell
 mkdir tinylsm
 # edit tinylsm/tinylsm.conf by yourself
-docker run --rm -d --name tinylsm -v $(pwd)/tinylsm:/etc/tinylsm -p 9527:9527 leibniz007/tinylsm:latest
+docker run --rm -d --name tinylsm -v $(pwd)/tinylsm:/etc/tinylsm -p 9527:9527 -p 9526:9526 leibniz007/tinylsm:latest
 docker exec -it tinylsm bash
 
 # in container's bash
@@ -155,6 +155,47 @@ delete key
 get key
 :quit
 ```
+
+### gRPC
+
+gRPC port is defined by enviroment `TINY_LSM_GRPC_PORT` or config property `grpc.port`, default port is `9526`.
+
+gRPC's definition refers to [tinylsm.proto](src/main/protobuf/tinylsm.proto).
+
+you can use gRPC clients like [evans](https://github.com/ktr0731/evans) or java/scala code to connect to gRPC server.
+Sample code as below:
+
+```scala
+import akka.actor.typed.ActorSystem
+import akka.actor.typed.scaladsl.Behaviors
+import akka.grpc.GrpcClientSettings
+import io.github.leibnizhu.tinylsm.grpc.*
+
+implicit val sys: ActorSystem[Nothing] = ActorSystem[Nothing](Behaviors.empty[Nothing], "TinyLsmClient")
+implicit val ec: ExecutionContext = sys.executionContext
+private val grpcClient = TinyLsmRpcServiceClient(GrpcClientSettings.connectToServiceAt("localhost", 9527).withTls(false))
+
+grpcClient.getKey(GetKeyRequest(key, None)) onComplete {
+  case Success(msg) => println(msg.value)
+  case Failure(e) => println(s">>> Server Error: $e")
+}
+```
+
+### Http API
+
+http port is defined by enviroment `TINY_LSM_HTTP_PORT` or config property `http.port`, default port is `9527`.
+
+| URL                     | parameter                                                                                      | usage                                |
+|-------------------------|------------------------------------------------------------------------------------------------|--------------------------------------|
+| GET /key/$key           | `tid`=Transaction ID                                                                           | get value by key                     |
+| POST /key/$key          | `tid`=Transaction ID, `value`=value                                                            | put value by key                     |
+| DELETE /key/$key        | `tid`=Transaction ID                                                                           | delete a key                         |
+| POST /scan              | `tid`=Transaction ID, `fromType`,`fromKey`,`toType`,`toKey`, type: unbounded/included/excluded | scan key-value by key range          |
+| POST /sys/flush         |                                                                                                | force flush memtable                 |
+| POST /sys/state         |                                                                                                | dump storage structure               |
+| POST /txn               |                                                                                                | start a new Transaction,return `tid` |
+| POST /txn/$tid/commit   |                                                                                                | commit a Transaction                 |
+| POST /txn/$tid/rollback |                                                                                                | rollback a new Transaction           |
 
 ## BenchMark
 

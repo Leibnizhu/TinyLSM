@@ -1,11 +1,11 @@
 package io.github.leibnizhu.tinylsm.app
 
-import akka.actor.typed.scaladsl.AskPattern._
+import akka.actor.typed.scaladsl.AskPattern.*
 import akka.actor.typed.{ActorRef, ActorSystem}
-import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.Directives.*
 import akka.http.scaladsl.server.Route
 import akka.util.Timeout
-import io.github.leibnizhu.tinylsm.app.TinyLsmHttpRegistry._
+import io.github.leibnizhu.tinylsm.app.TinyLsmHttpRegistry.*
 
 import java.time.Duration
 import scala.concurrent.Future

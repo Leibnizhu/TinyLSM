@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "io.github.leibnizhu.tinylsm.grpc";
+option java_outer_classname = "TinyLsmProto";
+
+service TinyLsmRpcService {
+  rpc GetKey(GetKeyRequest) returns (ValueReply) {}
+  rpc PutKey(PutKeyRequest) returns (EmptySuccessReply) {}
+  rpc DeleteKey(DeleteKeyRequest) returns (EmptySuccessReply) {}
+  rpc Scan(ScanRequest) returns (ScanReply) {}
+  rpc DumpState(Empty) returns (StateReply) {}
+  rpc ForceFlush(Empty) returns (EmptySuccessReply) {}
+  rpc CreateTxn(Empty) returns (NewTxnReply) {}
+  rpc CommitTxn(TxnRequest) returns (EmptySuccessReply) {}
+  rpc RollbackTxn(TxnRequest) returns (EmptySuccessReply) {}
+}
+
+message Empty {}
+
+message GetKeyRequest {
+  string key = 1;
+  optional int32 tid = 2;
+}
+
+message DeleteKeyRequest {
+  string key = 1;
+  optional int32 tid = 2;
+}
+
+message PutKeyRequest {
+  string key = 1;
+  string value = 2;
+  optional int32 tid = 3;
+}
+
+message ScanRequest {
+  enum BoundType {
+    UNBOUNDED = 0;
+    INCLUDED = 1;
+    EXCLUDED = 2;
+  }
+
+  BoundType fromType = 1;
+  string fromKey = 2;
+  BoundType toType = 3;
+  string toKey = 4;
+  optional int32 tid = 5;
+}
+
+message TxnRequest {
+  int32 tid = 1;
+}
+
+message EmptySuccessReply {
+  int32 bizCode = 1;
+  optional string message = 2;
+}
+
+message ValueReply {
+  string value = 1;
+  int32 bizCode = 2;
+  optional string message = 3;
+}
+
+message ScanReply {
+  message KeyValue {
+    string key = 1;
+    string value = 2;
+  }
+
+  repeated KeyValue kvs = 1;
+  int32 bizCode = 2;
+  optional string message = 3;
+}
+
+message StateReply {
+  string state = 1;
+  int32 bizCode = 2;
+  optional string message = 3;
+}
+
+message NewTxnReply {
+  int32 tid = 1;
+  int32 bizCode = 2;
+  optional string message = 3;
+}

@@ -19,7 +19,7 @@ object TinyLsmCli {
     while (true) {
       try {
         // 输入命令提示信息, 获取输入的信息
-        val line = lineReader.readLine("TinyLsm> ")
+        val line = lineReader.readLine(cliContext.cliPrompt())
         if (null != line && line.trim.nonEmpty) {
           // 解析输入的命令 解析成list
           val words = lineReader.getParsedLine.words();
@@ -45,7 +45,7 @@ object TinyLsmCli {
       } else {
         cliContext.get(words(1))
       }
-      case "delete" => if (words.length < 2) {
+      case "delete" | "del" => if (words.length < 2) {
         println("Invalid command, use: delete <key>")
       } else {
         cliContext.delete(words(1))

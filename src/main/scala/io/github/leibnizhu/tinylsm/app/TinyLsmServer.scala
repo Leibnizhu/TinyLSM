@@ -3,7 +3,10 @@ package io.github.leibnizhu.tinylsm.app
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
 import akka.http.scaladsl.server.Route
+import com.typesafe.config.ConfigFactory
+import io.github.leibnizhu.tinylsm.grpc.TinyLsmRpcServiceHandler
 import io.github.leibnizhu.tinylsm.mvcc.Transaction
 import io.github.leibnizhu.tinylsm.utils.Config
 import io.github.leibnizhu.tinylsm.{LsmStorageOptions, TinyLsm}
@@ -11,9 +14,11 @@ import org.slf4j.LoggerFactory
 
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import scala.concurrent.duration.*
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
-class TinyLsmServer(storage: TinyLsm, host: String, httpPort: Int) {
+class TinyLsmServer(storage: TinyLsm, host: String, httpPort: Int, rpcPort: Int) {
   private val logger = LoggerFactory.getLogger(this.getClass)
   Runtime.getRuntime.addShutdownHook(new Thread(() => {
     logger.info("Start to close TinyLSM...")
@@ -29,9 +34,12 @@ class TinyLsmServer(storage: TinyLsm, host: String, httpPort: Int) {
       context.watch(tinyLsmActor)
       val routes = new TinyLsmHttpRoutes(tinyLsmActor)(context.system)
       startHttpServer(routes.routes)(context.system)
+      startRpcServer()(context.system)
       Behaviors.empty
     }
-    val system = ActorSystem[Nothing](rootBehavior, "TinyLsmAkkaHttpServer")
+    val conf = ConfigFactory.parseString("akka.http.server.enable-http2=on")
+      .withFallback(ConfigFactory.defaultApplication())
+    val system = ActorSystem[Nothing](rootBehavior, "TinyLsmAkkaServer", conf)
     logger.info("===> TinyLSM Server Started")
   }
 
@@ -49,6 +57,28 @@ class TinyLsmServer(storage: TinyLsm, host: String, httpPort: Int) {
         system.terminate()
     }
   }
+
+  private def startRpcServer()(implicit system: ActorSystem[_]): Unit = {
+    implicit val ec: ExecutionContext = system.executionContext
+
+    val service: HttpRequest => Future[HttpResponse] =
+      TinyLsmRpcServiceHandler(TinyLsmRpcServiceImpl(storage, transactions, system))
+
+    val bound: Future[Http.ServerBinding] = Http()
+      .newServerAt(host, rpcPort)
+      .bind(service)
+      .map(_.addToCoordinatedShutdown(hardTerminationDeadline = 10.seconds))
+
+    bound.onComplete {
+      case Success(binding) =>
+        val address = binding.localAddress
+        logger.info("TinyLSM gRPC server online at {}:{}", address.getHostString, address.getPort)
+      case Failure(ex) =>
+        logger.info("Failed to bind TinyLSM gRPC endpoint, terminating system")
+        ex.printStackTrace()
+        system.terminate()
+    }
+  }
 }
 
 object TinyLsmServer {
@@ -58,11 +88,12 @@ object TinyLsmServer {
   }
 
   def apply(): TinyLsmServer = {
-    val httpPort: Int = Config.HttpPort.getInt
-    val host: String = Config.Host.get()
+    val httpPort = Config.HttpPort.getInt
+    val rpcPort = Config.GrpcPort.getInt
+    val host = Config.Host.get()
     val lsmOptions = LsmStorageOptions.fromConfig()
     val dataDir = new File(Config.DataDir.get())
     val storage = TinyLsm(dataDir, lsmOptions)
-    new TinyLsmServer(storage, host, httpPort)
+    new TinyLsmServer(storage, host, httpPort, rpcPort)
   }
 }

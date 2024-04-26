@@ -31,7 +31,7 @@
 | 环境变量配置名                       | 系统属性配置名              | 含义                                  | 默认值                       |
 |-------------------------------|----------------------|-------------------------------------|---------------------------|
 | TINY_LSM_HTTP_PORT            | http.port            |                                     | 9527                      |
-| TINY_LSM_RPC_PORT             | rpc.port             |                                     | 9526                      |
+| TINY_LSM_GRPC_PORT            | grpc.port            |                                     | 9526                      |
 | TINY_LSM_LISTEN               | listen               |                                     | 0.0.0.0                   |
 | TINY_LSM_BLOCK_SIZE           | block.size           | SST的Block大小阈值，单位为byte               | 4096                      |
 | TINY_LSM_TARGET_SST_SIZE      | target.sst.size      | SST大小阈值，单位为byte，同时用于MemTable预估大小的阈值 | 2 << 20 (2MB)             |
@@ -141,7 +141,7 @@ docker build . -f Dockerfile -t leibniz007/tinylsm:latest --network=host --targe
 ```shell
 mkdir tinylsm
 # 请自行编辑 tinylsm/tinylsm.conf 配置文件
-docker run --rm -d --name tinylsm -v $(pwd)/tinylsm:/etc/tinylsm -p 9527:9527 leibniz007/tinylsm:latest
+docker run --rm -d --name tinylsm -v $(pwd)/tinylsm:/etc/tinylsm -p 9527:9527 -p 9526:9526 leibniz007/tinylsm:latest
 docker exec -it tinylsm bash
 
 # 以下是在Docker容器的 bash 中
@@ -155,6 +155,48 @@ delete key
 get key
 :quit
 ```
+
+### gRPC
+
+gRPC端口由环境变量 `TINY_LSM_GRPC_PORT` 或属性 `grpc.port` 配置，默认为 `9526`。
+
+gRPC的定义参见 [tinylsm.proto](src/main/protobuf/tinylsm.proto)。
+
+可以使用gRPC客户端、如 [evans](https://github.com/ktr0731/evans) 等，或 java/scala 代码去连接gRPC服务。
+
+以下是使用scala连接的样例代码：
+
+```scala
+import akka.actor.typed.ActorSystem
+import akka.actor.typed.scaladsl.Behaviors
+import akka.grpc.GrpcClientSettings
+import io.github.leibnizhu.tinylsm.grpc.*
+
+implicit val sys: ActorSystem[Nothing] = ActorSystem[Nothing](Behaviors.empty[Nothing], "TinyLsmClient")
+implicit val ec: ExecutionContext = sys.executionContext
+private val grpcClient = TinyLsmRpcServiceClient(GrpcClientSettings.connectToServiceAt("localhost", 9527).withTls(false))
+
+grpcClient.getKey(GetKeyRequest(key, None)) onComplete {
+  case Success(msg) => println(msg.value)
+  case Failure(e) => println(s">>> Server Error: $e")
+}
+```
+
+### Http API
+
+http端口由环境变量 `TINY_LSM_HTTP_PORT` 或属性 `http.port` 配置，默认为 `9527`.
+
+| URL                     | 参数                                                                                    | 使用说明               |
+|-------------------------|---------------------------------------------------------------------------------------|--------------------|
+| GET /key/$key           | `tid`=事务ID                                                                            | 获取指定key的值          |
+| POST /key/$key          | `tid`=事务ID, `value`=value                                                             | 更新指定key的值          |
+| DELETE /key/$key        | `tid`=事务ID                                                                            | 删除指定key            |
+| POST /scan              | `tid`=事务ID, `fromType`,`fromKey`,`toType`,`toKey`, type取值：unbounded/included/excluded | 按key范围扫描           |
+| POST /sys/flush         |                                                                                       | 强制flush memtable   |
+| POST /sys/state         |                                                                                       | 打印当前存储结构           |
+| POST /txn               |                                                                                       | 开启新事务，返回事务ID `tid` |
+| POST /txn/$tid/commit   |                                                                                       | 提交事务               |
+| POST /txn/$tid/rollback |                                                                                       | 回滚事务               |
 
 ## BenchMark
 

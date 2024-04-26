@@ -1,6 +1,6 @@
 package io.github.leibnizhu.tinylsm.iterator
 
-import io.github.leibnizhu.tinylsm.{DELETE_TOMBSTONE, Key, MemTableKey, MemTableValue}
+import io.github.leibnizhu.tinylsm.{DELETE_TOMBSTONE, Key, MemTableValue}
 
 import java.util.StringJoiner
 
@@ -51,7 +51,7 @@ trait StorageIterator[K <: Comparable[K] with Key] {
         case (curKey: Key, curValue: MemTableValue) =>
           sj.add(curKey.toString)
           sj.add(new String(curValue))
-        case _ =>
+        case _ | null =>
       next()
     }
     sj

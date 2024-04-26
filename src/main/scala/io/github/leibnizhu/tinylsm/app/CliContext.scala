@@ -1,15 +1,20 @@
 package io.github.leibnizhu.tinylsm.app
 
+import akka.actor.typed.ActorSystem
+import akka.actor.typed.scaladsl.Behaviors
+import akka.grpc.GrpcClientSettings
+import io.github.leibnizhu.tinylsm.grpc.*
+import io.github.leibnizhu.tinylsm.grpc.ScanRequest.BoundType
 import io.github.leibnizhu.tinylsm.mvcc.Transaction
 import io.github.leibnizhu.tinylsm.utils.{Bound, Config}
 import io.github.leibnizhu.tinylsm.{LsmStorageInner, LsmStorageOptions}
-import requests.{RequestFailedException, get}
 
 import java.io.File
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 import java.util.StringJoiner
+import scala.concurrent.duration.*
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
+import scala.util.{Failure, Success}
 
 
 class CliContext(playgroundMode: Boolean,
@@ -18,13 +23,27 @@ class CliContext(playgroundMode: Boolean,
                  host: String,
                  port: Int) {
   // for playground 模式
-  private var currentTxn: Option[Transaction] = None
+  private[app] var currentTxn: Option[Transaction] = None
   // for 连接服务器模式，非 playground
-  private var currentTxnId: Option[Int] = None
+  private[app] var currentTxnId: Option[Int] = None
+
+  implicit val sys: ActorSystem[Nothing] = ActorSystem[Nothing](Behaviors.empty[Nothing], "TinyLsmClient")
+  implicit val ec: ExecutionContext = sys.executionContext
+  private val grpcClient = TinyLsmRpcServiceClient(GrpcClientSettings.connectToServiceAt(host, port).withTls(false))
 
   Runtime.getRuntime.addShutdownHook(new Thread(() => {
     rollbackCurrentTxn()
   }))
+
+  def cliPrompt(): String = if (playgroundMode) {
+    currentTxn match
+      case Some(txn) => s"TinyLsm(Txn:${txn.tid})> "
+      case None => "TinyLsm> "
+  } else {
+    currentTxnId match
+      case Some(tid) => s"TinyLsm(Txn:$tid)> "
+      case None => "TinyLsm> "
+  }
 
   def get(key: String): Unit =
     if (playgroundMode) {
@@ -37,17 +56,8 @@ class CliContext(playgroundMode: Boolean,
         println(">>> Key does not exists: " + key)
       }
     } else {
-      try {
-        val encodedKey = URLEncoder.encode(key, StandardCharsets.UTF_8)
-        val tidParam = currentTxnId.map(tid => s"?tid=$tid").getOrElse("")
-        val r = requests.get(s"http://$host:$port/key/$encodedKey$tidParam")
-        println(r.text())
-      } catch
-        case e: RequestFailedException => if (e.response.statusCode == 404) {
-          println(">>> Key does not exists: " + key)
-        } else {
-          println(">>> Server error: " + e.response.text())
-        }
+      val reply = grpcClient.getKey(GetKeyRequest(key, currentTxnId))
+      handleCommonReply(reply, _.bizCode, _.message, msg => println(msg.value))
     }
 
   def delete(key: String): Unit =
@@ -57,9 +67,8 @@ class CliContext(playgroundMode: Boolean,
         case None => playgroundLsm.get.delete(key)
       println("Done")
     } else {
-      val encodedKey = URLEncoder.encode(key, StandardCharsets.UTF_8)
-      val tidParam = currentTxnId.map(tid => s"?tid=$tid").getOrElse("")
-      requests.delete(s"http://$host:$port/key/$encodedKey$tidParam")
+      val reply = grpcClient.deleteKey(DeleteKeyRequest(key, currentTxnId))
+      handleEmptyReply(reply, "Delete success")
     }
 
   def put(key: String, value: String): Unit =
@@ -69,10 +78,8 @@ class CliContext(playgroundMode: Boolean,
         case None => playgroundLsm.get.put(key, value)
       println("Done")
     } else {
-      val encodedKey = URLEncoder.encode(key, StandardCharsets.UTF_8)
-      val encodedValue = URLEncoder.encode(value, StandardCharsets.UTF_8)
-      val tidParam = currentTxnId.map(tid => s"&tid=$tid").getOrElse("")
-      requests.post(s"http://$host:$port/key/$encodedKey?value=$encodedValue$tidParam")
+      val reply = grpcClient.putKey(PutKeyRequest(key, value, currentTxnId))
+      handleEmptyReply(reply, "Put value success")
     }
 
   private val validBoundType = Set("unbounded", "excluded", "included")
@@ -80,9 +87,11 @@ class CliContext(playgroundMode: Boolean,
   def scan(fromType: String, fromKey: String, toType: String, toKey: String): Unit = {
     if (!validBoundType.contains(fromType.toLowerCase)) {
       println(">>> Invalid command, fromType must be one of: " + validBoundType)
+      return
     }
     if (!validBoundType.contains(toType.toLowerCase)) {
       println(">>> Invalid command, toType must be one of: " + validBoundType)
+      return
     }
 
     if (playgroundMode) {
@@ -94,11 +103,16 @@ class CliContext(playgroundMode: Boolean,
       val sj = new StringJoiner("\n")
       println(itr.joinAllKeyValue(sj).toString)
     } else {
-      val encodedFromKey = URLEncoder.encode(fromKey, StandardCharsets.UTF_8)
-      val encodedToKey = URLEncoder.encode(toKey, StandardCharsets.UTF_8)
-      val tidParam = currentTxnId.map(tid => s"&tid=$tid").getOrElse("")
-      val r = requests.get(s"http://$host:$port/scan?fromType=$fromType&fromKey=$encodedFromKey&toType=$toType&toKey=$encodedToKey$tidParam")
-      println(r.text())
+      def toBoundType(t: String): BoundType = t.toLowerCase match
+        case "unbounded" => BoundType.UNBOUNDED
+        case "excluded" => BoundType.EXCLUDED
+        case "included" => BoundType.INCLUDED
+
+      val reply = grpcClient.scan(ScanRequest(toBoundType(fromType), fromKey, toBoundType(toType), toKey, currentTxnId))
+      handleCommonReply(reply, _.bizCode, _.message, msg => for (kv <- msg.kvs) {
+        println(kv.key)
+        println(kv.value)
+      })
     }
   }
 
@@ -111,8 +125,8 @@ class CliContext(playgroundMode: Boolean,
       playgroundLsm.get.forceFreezeMemTable()
       playgroundLsm.get.forceFlushNextImmutableMemTable()
     } else {
-      val r = requests.post(s"http://$host:$port/sys/flush")
-      println(">>> " + r.text())
+      val reply = grpcClient.forceFlush(Empty())
+      handleEmptyReply(reply, "Flush success")
     }
   }
 
@@ -124,8 +138,8 @@ class CliContext(playgroundMode: Boolean,
     if (playgroundMode) {
       playgroundLsm.get.dumpState()
     } else {
-      val r = requests.post(s"http://$host:$port/sys/state")
-      println(r.text())
+      val reply = grpcClient.dumpState(Empty())
+      handleCommonReply(reply, _.bizCode, _.message, msg => println(msg.state))
     }
   }
 
@@ -140,13 +154,11 @@ class CliContext(playgroundMode: Boolean,
       currentTxnId match
         case Some(tid) => println(s">>> Already start a Transaction, ID= $tid")
         case None =>
-          val r = requests.post(s"http://$host:$port/txn")
-          if (r.statusCode / 100 == 2) {
-            currentTxnId = Some(r.text().toInt)
-            println(s">>> Start a new Transaction, ID: ${currentTxnId.get}")
-          } else {
-            println(">>> " + r.text())
-          }
+          val reply = grpcClient.createTxn(Empty())
+          handleCommonReply(reply, _.bizCode, _.message, msg => {
+            currentTxnId = Some(msg.tid)
+            println(s">>> Start a new Transaction, ID: ${msg.tid}")
+          })
     }
 
   def commitCurrentTxn(): Unit =
@@ -160,13 +172,11 @@ class CliContext(playgroundMode: Boolean,
     } else {
       currentTxnId match
         case Some(tid) =>
-          val r = requests.post(s"http://$host:$port/txn/$tid/commit")
-          if (r.statusCode / 100 == 2) {
+          val reply = grpcClient.commitTxn(TxnRequest(tid))
+          handleCommonReply(reply, _.bizCode, _.message, msg => {
             currentTxnId = None
             println(s">>> Committed Transaction, ID: $tid")
-          } else {
-            println(">>> " + r.text())
-          }
+          })
         case None => println(">>> No active Transaction!")
     }
 
@@ -181,15 +191,30 @@ class CliContext(playgroundMode: Boolean,
     } else {
       currentTxnId match
         case Some(tid) =>
-          val r = requests.post(s"http://$host:$port/txn/$tid/rollback")
-          if (r.statusCode / 100 == 2) {
+          val reply = grpcClient.rollbackTxn(TxnRequest(tid))
+          handleCommonReply(reply, _.bizCode, _.message, msg => {
             currentTxnId = None
             println(s">>> Rollback Transaction, ID: $tid")
-          } else {
-            println(">>> " + r.text())
-          }
+          })
         case None => println(">>> No active Transaction!")
     }
+
+  private def handleEmptyReply(reply: Future[EmptySuccessReply], info: String): Unit =
+    handleCommonReply(reply, _.bizCode, _.message, _ => println(info))
+
+  private def handleCommonReply[R](reply: Future[R],
+                                   getCode: R => Int, getMessage: R => Option[String], action: R => Unit): Unit = {
+    reply onComplete {
+      case Success(msg) => getCode(msg) match
+        case BizCode.Success.code => action(msg)
+        case code: Int => println(">>> " + getMessage(msg).getOrElse(unknownError(code)))
+      case Failure(e) =>
+        println(s">>> Server Error: $e")
+    }
+    Await.result(reply, 5.second)
+  }
+
+  private def unknownError(bizCode: Int): String = s"Unknown error, code: $bizCode"
 }
 
 object CliContext {
@@ -212,7 +237,7 @@ object CliContext {
       playgroundLsm,
       debugMode,
       argMap.getOrElse("host", "localhost").asInstanceOf[String],
-      argMap.getOrElse("port", Config.HttpPort.defaultVal.toInt).asInstanceOf[Int]
+      argMap.getOrElse("port", Config.GrpcPort.defaultVal.toInt).asInstanceOf[Int]
     )
   }
 }
