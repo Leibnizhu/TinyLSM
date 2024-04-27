@@ -3,6 +3,7 @@ package io.github.leibnizhu.tinylsm.app
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
 import akka.grpc.GrpcClientSettings
+import com.google.protobuf.ByteString
 import io.github.leibnizhu.tinylsm.grpc.*
 import io.github.leibnizhu.tinylsm.grpc.ScanRequest.BoundType
 import io.github.leibnizhu.tinylsm.mvcc.Transaction
@@ -56,8 +57,8 @@ class CliContext(playgroundMode: Boolean,
         println(">>> Key does not exists: " + key)
       }
     } else {
-      val reply = grpcClient.getKey(GetKeyRequest(key, currentTxnId))
-      handleCommonReply(reply, _.bizCode, _.message, msg => println(msg.value))
+      val reply = grpcClient.getKey(GetKeyRequest(ByteString.copyFrom(key.getBytes), currentTxnId))
+      handleCommonReply(reply, _.bizCode, _.message, msg => println(new String(msg.value.toByteArray)))
     }
 
   def delete(key: String): Unit =
@@ -67,7 +68,7 @@ class CliContext(playgroundMode: Boolean,
         case None => playgroundLsm.get.delete(key)
       println("Done")
     } else {
-      val reply = grpcClient.deleteKey(DeleteKeyRequest(key, currentTxnId))
+      val reply = grpcClient.deleteKey(DeleteKeyRequest(ByteString.copyFrom(key.getBytes), currentTxnId))
       handleEmptyReply(reply, "Delete success")
     }
 
@@ -78,7 +79,7 @@ class CliContext(playgroundMode: Boolean,
         case None => playgroundLsm.get.put(key, value)
       println("Done")
     } else {
-      val reply = grpcClient.putKey(PutKeyRequest(key, value, currentTxnId))
+      val reply = grpcClient.putKey(PutKeyRequest(ByteString.copyFrom(key.getBytes), ByteString.copyFrom(value.getBytes), currentTxnId))
       handleEmptyReply(reply, "Put value success")
     }
 
@@ -108,10 +109,12 @@ class CliContext(playgroundMode: Boolean,
         case "excluded" => BoundType.EXCLUDED
         case "included" => BoundType.INCLUDED
 
-      val reply = grpcClient.scan(ScanRequest(toBoundType(fromType), fromKey, toBoundType(toType), toKey, currentTxnId))
+      val reply = grpcClient.scan(ScanRequest(
+        toBoundType(fromType), ByteString.copyFrom(fromKey.getBytes),
+        toBoundType(toType), ByteString.copyFrom(toKey.getBytes), currentTxnId))
       handleCommonReply(reply, _.bizCode, _.message, msg => for (kv <- msg.kvs) {
-        println(kv.key)
-        println(kv.value)
+        println(new String(kv.key.toByteArray))
+        println(new String(kv.value.toByteArray))
       })
     }
   }

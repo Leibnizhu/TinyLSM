@@ -30,7 +30,8 @@ class TinyLsmServer(storage: TinyLsm, host: String, httpPort: Int, rpcPort: Int)
   def start(): Unit = {
     //#server-bootstrapping
     val rootBehavior = Behaviors.setup[Nothing] { context =>
-      val tinyLsmActor = context.spawn(TinyLsmHttpRegistry(storage, transactions).registry(), "TinyLsmActor")
+      val httpRegistry = TinyLsmHttpRegistry(storage, transactions).registry()
+      val tinyLsmActor = context.spawn(httpRegistry, "TinyLsmActor")
       context.watch(tinyLsmActor)
       val routes = new TinyLsmHttpRoutes(tinyLsmActor)(context.system)
       startHttpServer(routes.routes)(context.system)

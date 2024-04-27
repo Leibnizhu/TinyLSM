@@ -19,18 +19,18 @@ service TinyLsmRpcService {
 message Empty {}
 
 message GetKeyRequest {
-  string key = 1;
+  bytes key = 1;
   optional int32 tid = 2;
 }
 
 message DeleteKeyRequest {
-  string key = 1;
+  bytes key = 1;
   optional int32 tid = 2;
 }
 
 message PutKeyRequest {
-  string key = 1;
-  string value = 2;
+  bytes key = 1;
+  bytes value = 2;
   optional int32 tid = 3;
 }
 
@@ -42,9 +42,9 @@ message ScanRequest {
   }
 
   BoundType fromType = 1;
-  string fromKey = 2;
+  bytes fromKey = 2;
   BoundType toType = 3;
-  string toKey = 4;
+  bytes toKey = 4;
   optional int32 tid = 5;
 }
 
@@ -58,15 +58,15 @@ message EmptySuccessReply {
 }
 
 message ValueReply {
-  string value = 1;
+  bytes value = 1;
   int32 bizCode = 2;
   optional string message = 3;
 }
 
 message ScanReply {
   message KeyValue {
-    string key = 1;
-    string value = 2;
+    bytes key = 1;
+    bytes value = 2;
   }
 
   repeated KeyValue kvs = 1;

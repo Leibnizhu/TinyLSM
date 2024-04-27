@@ -5,12 +5,14 @@ import akka.actor.typed.{ActorRef, ActorSystem}
 import akka.http.scaladsl.server.Directives.*
 import akka.http.scaladsl.server.Route
 import akka.util.Timeout
-import io.github.leibnizhu.tinylsm.app.TinyLsmHttpRegistry.*
+import io.github.leibnizhu.tinylsm.app.ApiCommands.*
+import io.github.leibnizhu.tinylsm.utils.Bound
+import io.github.leibnizhu.tinylsm.{Key, MemTableValue}
 
 import java.time.Duration
 import scala.concurrent.Future
 
-class TinyLsmHttpRoutes(registry: ActorRef[TinyLsmHttpRegistry.Command])
+class TinyLsmHttpRoutes(registry: ActorRef[ApiCommands.Command])
                        (implicit val system: ActorSystem[_]) {
 
   //#user-routes-class
@@ -20,17 +22,20 @@ class TinyLsmHttpRoutes(registry: ActorRef[TinyLsmHttpRegistry.Command])
 
 
   private def getByKey(key: String, tid: Option[Int]): Future[CommonResponse] =
-    registry.ask(GetByKey(key, tid, _))
+    registry.ask(GetByKey(key.getBytes, tid, _))
 
   private def deleteByKey(key: String, tid: Option[Int]): Future[CommonResponse] =
-    registry.ask(DeleteByKey(key, tid, _))
+    registry.ask(DeleteByKey(key.getBytes, tid, _))
 
   private def putValue(key: String, value: String, tid: Option[Int]): Future[CommonResponse] =
-    registry.ask(PutValue(key, value, tid, _))
+    registry.ask(PutValue(key.getBytes, value.getBytes, tid, _))
 
   private def scan(fromType: String, fromKey: String, toType: String, toKey: String,
-                   tid: Option[Int] = None): Future[CommonResponse] =
-    registry.ask(ScanRange(fromType, fromKey, toType, toKey, tid, _))
+                   tid: Option[Int] = None): Future[CommonResponse] = {
+    val lower = Bound(fromType, fromKey)
+    val upper = Bound(toType, toKey)
+    registry.ask(ScanRange(lower, upper, tid, _))
+  }
 
   private def dumpState(): Future[CommonResponse] = registry.ask(State.apply)
 

@@ -15,6 +15,12 @@ object Bound {
     case "included" => Included(boundKey)
     case _ => throw new IllegalArgumentException(s"Unsupported bound type: $boundType")
 
+  def apply(boundType: String, boundKey: Array[Byte]): Bound = boundType.toLowerCase match
+    case "unbounded" => Unbounded()
+    case "excluded" => Excluded(RawKey(boundKey))
+    case "included" => Included(RawKey(boundKey))
+    case _ => throw new IllegalArgumentException(s"Unsupported bound type: $boundType")
+
   //  def withBeginTs(bound: Bound): Bound = replaceTs(bound, MemTableKey.TS_RANGE_BEGIN)
   def withBeginTs(bound: Bound): Bound = bound match
     case Included(k: Key) => Included(MemTableKey.replaceTs(k, TS_RANGE_BEGIN))

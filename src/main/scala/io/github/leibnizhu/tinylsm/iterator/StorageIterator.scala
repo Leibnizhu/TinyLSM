@@ -3,6 +3,7 @@ package io.github.leibnizhu.tinylsm.iterator
 import io.github.leibnizhu.tinylsm.{DELETE_TOMBSTONE, Key, MemTableValue}
 
 import java.util.StringJoiner
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * LSM存储相关的迭代器trait
@@ -55,5 +56,17 @@ trait StorageIterator[K <: Comparable[K] with Key] {
       next()
     }
     sj
+  }
+
+  final def collectEntries(): List[(Key, MemTableValue)] = {
+    val buffer = new ArrayBuffer[(Key, MemTableValue)]
+    while (isValid) {
+      (key(), value()) match
+        case (curKey: Key, curValue: MemTableValue) =>
+          buffer += ((curKey, curValue))
+        case _ | null =>
+      next()
+    }
+    buffer.toList
   }
 }
