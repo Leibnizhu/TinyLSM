@@ -150,7 +150,7 @@ And edit `tinylsm/tinylsm.conf` by yourself. Then start Docker container:
 docker run --rm -d --name tinylsm -v $(pwd)/tinylsm:/etc/tinylsm -p 9527:9527 -p 9526:9526 leibniz007/tinylsm:latest
 ```
 
-### Cli
+### Command Line Tool(CLI)
 
 In the docker image, we provided `tinylsm-cli` for connecting TinyLSM: 
 
@@ -158,6 +158,7 @@ In the docker image, we provided `tinylsm-cli` for connecting TinyLSM:
 docker exec -it tinylsm bash
 
 # in container's bash
+tinylsm-cli --help
 tinylsm-cli
 
 # in tinylsm-cli
@@ -169,7 +170,7 @@ get key
 :quit
 ```
 
-_### gRPC
+### gRPC
 
 gRPC port is defined by enviroment `TINY_LSM_GRPC_PORT` or config property `grpc.port`, default port is `9526`.
 
@@ -184,16 +185,27 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.grpc.GrpcClientSettings
 import com.google.protobuf.ByteString
 import io.github.leibnizhu.tinylsm.grpc.*
+import org.scalatest.funsuite.AnyFunSuite
 
-implicit val sys: ActorSystem[Nothing] = ActorSystem[Nothing](Behaviors.empty[Nothing], "TinyLsmClient")
-implicit val ec: ExecutionContext = sys.executionContext
-private val grpcClient = TinyLsmRpcServiceClient(GrpcClientSettings.connectToServiceAt("localhost", 9527).withTls(false))
+import scala.concurrent.duration.*
+import scala.concurrent.{Await, ExecutionContext}
+import scala.util.{Failure, Success}
 
-val getKeyRequest = GetKeyRequest(ByteString.copyFromUtf8("key"))
-grpcClient.getKey(getKeyRequest) onComplete {
-   case Success(msg) => println(msg.value)
-   case Failure(e) => println(s">>> Server Error: $e")
+class GprcClientSample extends AnyFunSuite {
+   implicit val sys: ActorSystem[Nothing] = ActorSystem[Nothing](Behaviors.empty[Nothing], "TinyLsmClient")
+   implicit val ec: ExecutionContext = sys.executionContext
+   private val grpcClient = TinyLsmRpcServiceClient(GrpcClientSettings.connectToServiceAt("localhost", 9526).withTls(false))
+
+   test("getByKey") {
+      val reply = grpcClient.getKey(GetKeyRequest(ByteString.copyFromUtf8("key")))
+      reply onComplete {
+         case Success(msg) => println(msg.value.toStringUtf8)
+         case Failure(e) => println(s">>> Server Error: $e")
+      }
+      Await.result(reply, 5.second)
+   }
 }
+
 ```
 
 ### Http API
