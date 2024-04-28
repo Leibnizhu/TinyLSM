@@ -83,15 +83,20 @@ object Config {
   }
 
   private def loadConfigFile(): Properties = {
-    val configFileEnvName = "TINY_LSM_CONFIG_FILE"
-    val configFileSysPropName = toPropertyName("CONFIG_FILE")
-    val configFile = System.getProperty(configFileSysPropName,
-      System.getenv().getOrDefault(configFileEnvName, "/etc/tinylsm/tinylsm.conf"))
+    val configFile: String = configFilePath
     val prop = Properties()
     if (new File(configFile).exists()) {
       prop.load(new FileInputStream(configFile))
     }
     prop
+  }
+
+  def configFilePath = {
+    val configFileEnvName = "TINY_LSM_CONFIG_FILE"
+    val configFileSysPropName = toPropertyName("CONFIG_FILE")
+    val configFile = System.getProperty(configFileSysPropName,
+      System.getenv().getOrDefault(configFileEnvName, "/etc/tinylsm/tinylsm.conf"))
+    configFile
   }
 
   def print(): Unit = {

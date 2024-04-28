@@ -26,7 +26,7 @@ object LsmStorageInner {
     val nextSstId = AtomicInteger(0)
     val blockCache = BlockCache.apply(128)
     val compactionController = CompactionController(options.compactionOptions)
-    val manifestFile = new File(path, "MANIFEST")
+    val manifestFile = new File(path, Manifest.fileName)
     val manifest = new Manifest(manifestFile, options.targetManifestSize)
     var lastCommitTs = 0L;
     if (manifestFile.exists()) {
@@ -70,17 +70,27 @@ object LsmStorageInner {
       log.info("{} SST opened", sstCnt)
 
       val newMemtableId = nextSstId.incrementAndGet()
+
       if (options.enableWal) {
         // 从 wal 恢复Memtable,到了这里，memTables 里面是从Manifest恢复的、没flush的Memtable
         var walCnt = 0
         for (mtId <- memTables) {
-          val memTable = MemTable.recoverFromWal(mtId, fileOfWal(path, mtId))
-          if (memTable.nonEmpty) {
-            state.immutableMemTables = memTable :: state.immutableMemTables
-            val memTableMaxTs = memTable.map.keySet().asScala.map(_.ts).max
-            lastCommitTs = lastCommitTs.max(memTableMaxTs)
-            walCnt += 1
+          val walFile = fileOfWal(path, mtId)
+          if (walFile.exists()) {
+            val memTable = MemTable.recoverFromWal(mtId, walFile)
+            if (memTable.nonEmpty) {
+              state.immutableMemTables = memTable :: state.immutableMemTables
+              val memTableMaxTs = memTable.map.keySet().asScala.map(_.ts).max
+              lastCommitTs = lastCommitTs.max(memTableMaxTs)
+              walCnt += 1
+            } else {
+              // 如果wal为空，那么对应的memtable不会加入到immutableMemTables，在下次flush的时候也不会被处理，所以wal可以删除
+              // 一般来说wal为空有两种情况：1.最新的Memtable，没有数据  2.手动强制flush了，flush的时候Memtable里没有数据
+              val deletedWal = walFile.delete()
+              log.info("Deleted empty wal file {} success: {}", walFile, deletedWal)
+            }
           }
+          // 有manifest记录，但没有wal文件，一般是wal文件为空、在上一次启动恢复的时候删除了
         }
         log.info("{} MemTable recovered from wal", walCnt)
         state.memTable = MemTable(newMemtableId, Some(fileOfWal(path, newMemtableId)))
@@ -516,7 +526,10 @@ private[tinylsm] case class LsmStorageInner(
     println()
   }
 
-  def dumpState(): String = state.dumpState()
+  def dumpState(): String =
+    s"""Data dir:\t${path.getAbsolutePath}
+Config file path:\t${Config.configFilePath}
+${state.dumpState()}"""
 
   def triggerFlush(): Unit = {
     val (memtableNum, numLimit) = state.read(st => (st.immutableMemTables.length, options.numMemTableLimit))

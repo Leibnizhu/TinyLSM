@@ -5,10 +5,9 @@ import akka.actor.typed.{ActorRef, Behavior}
 import akka.http.scaladsl.server.Directives.complete
 import akka.http.scaladsl.server.StandardRoute
 import io.github.leibnizhu.tinylsm.app.BizCode.*
-import io.github.leibnizhu.tinylsm.iterator.StorageIterator
 import io.github.leibnizhu.tinylsm.mvcc.Transaction
 import io.github.leibnizhu.tinylsm.utils.Bound
-import io.github.leibnizhu.tinylsm.{Key, MemTableEntry, MemTableValue, RawKey, TinyLsm}
+import io.github.leibnizhu.tinylsm.{Key, MemTableValue, TinyLsm}
 
 import java.util.StringJoiner
 

@@ -33,7 +33,7 @@ class TinyLsmServer(storage: TinyLsm, host: String, httpPort: Int, rpcPort: Int)
       val httpRegistry = TinyLsmHttpRegistry(storage, transactions).registry()
       val tinyLsmActor = context.spawn(httpRegistry, "TinyLsmActor")
       context.watch(tinyLsmActor)
-      val routes = new TinyLsmHttpRoutes(tinyLsmActor)(context.system)
+      val routes = new HttpRoutes(tinyLsmActor)(context.system)
       startHttpServer(routes.routes)(context.system)
       startRpcServer()(context.system)
       Behaviors.empty
@@ -63,7 +63,7 @@ class TinyLsmServer(storage: TinyLsm, host: String, httpPort: Int, rpcPort: Int)
     implicit val ec: ExecutionContext = system.executionContext
 
     val service: HttpRequest => Future[HttpResponse] =
-      TinyLsmRpcServiceHandler(TinyLsmRpcServiceImpl(storage, transactions, system))
+      TinyLsmRpcServiceHandler(GrpcServiceImpl(storage, transactions, system))
 
     val bound: Future[Http.ServerBinding] = Http()
       .newServerAt(host, rpcPort)

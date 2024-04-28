@@ -3,18 +3,16 @@ package io.github.leibnizhu.tinylsm.app
 import akka.actor.typed.ActorSystem
 import com.google.protobuf.ByteString
 import io.github.leibnizhu.tinylsm.app.ApiCommands.*
-import io.github.leibnizhu.tinylsm.app.BizCode.{Success, TransactionInvalid, TransactionNotExists}
+import io.github.leibnizhu.tinylsm.app.BizCode.Success
 import io.github.leibnizhu.tinylsm.grpc.*
-import io.github.leibnizhu.tinylsm.iterator.StorageIterator
 import io.github.leibnizhu.tinylsm.mvcc.Transaction
 import io.github.leibnizhu.tinylsm.utils.Bound
-import io.github.leibnizhu.tinylsm.{Key, MemTableValue, RawKey, TinyLsm}
+import io.github.leibnizhu.tinylsm.{Key, MemTableValue, TinyLsm}
 
-import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 
-class TinyLsmRpcServiceImpl(state: ApiCommands.InnerState,
-                            system: ActorSystem[_]) extends TinyLsmRpcService {
+class GrpcServiceImpl(state: ApiCommands.InnerState,
+                      system: ActorSystem[_]) extends TinyLsmRpcService {
 
   override def getKey(in: GetKeyRequest): Future[ValueReply] = {
     val response = GetByKey(in.key.toByteArray, in.tid, null).wrapBehavior(state)
@@ -86,7 +84,7 @@ class TinyLsmRpcServiceImpl(state: ApiCommands.InnerState,
   }
 }
 
-object TinyLsmRpcServiceImpl {
-  def apply(storage: TinyLsm, transactions: java.util.Map[Int, Transaction], system: ActorSystem[_]): TinyLsmRpcServiceImpl =
-    new TinyLsmRpcServiceImpl(ApiCommands.InnerState(storage, transactions), system)
+object GrpcServiceImpl {
+  def apply(storage: TinyLsm, transactions: java.util.Map[Int, Transaction], system: ActorSystem[_]): GrpcServiceImpl =
+    new GrpcServiceImpl(ApiCommands.InnerState(storage, transactions), system)
 }

@@ -7,13 +7,12 @@ import akka.http.scaladsl.server.Route
 import akka.util.Timeout
 import io.github.leibnizhu.tinylsm.app.ApiCommands.*
 import io.github.leibnizhu.tinylsm.utils.Bound
-import io.github.leibnizhu.tinylsm.{Key, MemTableValue}
 
 import java.time.Duration
 import scala.concurrent.Future
 
-class TinyLsmHttpRoutes(registry: ActorRef[ApiCommands.Command])
-                       (implicit val system: ActorSystem[_]) {
+class HttpRoutes(registry: ActorRef[ApiCommands.Command])
+                (implicit val system: ActorSystem[_]) {
 
   //#user-routes-class
 

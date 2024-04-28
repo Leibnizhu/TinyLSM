@@ -64,7 +64,7 @@ object TinyLsmCli {
       case "commit" => cliContext.commitCurrentTxn()
       case "rollback" => cliContext.rollbackCurrentTxn()
       case "flush" => cliContext.flush()
-      case "status" => cliContext.status()
+      case "status" | "state" => cliContext.status()
       case _ => println(s"Unsupported command: '${words.head}', you can type :help for more information or <TAB> for auto complete")
   }
 
@@ -79,11 +79,11 @@ object TinyLsmCli {
       |  -p: TinyLSM port, default value is 9527.
       |Commands:
       |  get <key> : Get value by key.
-      |  delete <key> : Delete a key.
+      |  del|delete <key> : Delete a key.
       |  put <key> <value> : Put value by key.
       |  scan <Unbound|Excluded|Included> <fromKey> <Unbound|Excluded|Included> <toKey> : Scan by key range.
       |  flush : Force flush MemTable to SST.
-      |  status : Show TinyLSM status.
+      |  state|status : Show TinyLSM status.
       |  txn: Start a new transaction
       |  commit: Commit current transaction
       |  rollback: rollback current transaction

@@ -88,6 +88,10 @@ class Manifest(file: File, targetSize: Int = 1024) {
   }
 }
 
+object Manifest {
+  val fileName = "MANIFEST"
+}
+
 @JsonTypeInfo(
   use = JsonTypeInfo.Id.NAME,
   include = JsonTypeInfo.As.PROPERTY,
