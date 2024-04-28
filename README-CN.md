@@ -138,10 +138,25 @@ docker build . -f Dockerfile -t leibniz007/tinylsm:latest --network=host --targe
 
 ### 运行
 
+创建目录：
+
 ```shell
 mkdir tinylsm
-# 请自行编辑 tinylsm/tinylsm.conf 配置文件
+```
+
+参照前面章节编辑 tinylsm/tinylsm.conf 配置文件。然后启动Docker容器
+
+```bash
 docker run --rm -d --name tinylsm -v $(pwd)/tinylsm:/etc/tinylsm -p 9527:9527 -p 9526:9526 leibniz007/tinylsm:latest
+```
+
+此时可使用 9526 端口的gRPC服务，或 9527 端口的http服务。
+
+### Cli
+
+我们在镜像中提供了 `tinylsm-cli` 命令用于通过gRPC连接TinyLSM服务。
+
+```
 docker exec -it tinylsm bash
 
 # 以下是在Docker容器的 bash 中
@@ -170,15 +185,17 @@ gRPC的定义参见 [tinylsm.proto](src/main/protobuf/tinylsm.proto)。
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
 import akka.grpc.GrpcClientSettings
+import com.google.protobuf.ByteString
 import io.github.leibnizhu.tinylsm.grpc.*
 
 implicit val sys: ActorSystem[Nothing] = ActorSystem[Nothing](Behaviors.empty[Nothing], "TinyLsmClient")
 implicit val ec: ExecutionContext = sys.executionContext
 private val grpcClient = TinyLsmRpcServiceClient(GrpcClientSettings.connectToServiceAt("localhost", 9527).withTls(false))
 
-grpcClient.getKey(GetKeyRequest(key, None)) onComplete {
-  case Success(msg) => println(msg.value)
-  case Failure(e) => println(s">>> Server Error: $e")
+val getKeyRequest = GetKeyRequest(ByteString.copyFromUtf8("key"))
+grpcClient.getKey(getKeyRequest) onComplete {
+   case Success(msg) => println(msg.value.toStringUtf8)
+   case Failure(e) => println(s">>> Server Error: $e")
 }
 ```
 

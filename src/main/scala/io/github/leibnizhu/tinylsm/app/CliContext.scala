@@ -57,8 +57,8 @@ class CliContext(playgroundMode: Boolean,
         println(">>> Key does not exists: " + key)
       }
     } else {
-      val reply = grpcClient.getKey(GetKeyRequest(ByteString.copyFrom(key.getBytes), currentTxnId))
-      handleCommonReply(reply, _.bizCode, _.message, msg => println(new String(msg.value.toByteArray)))
+      val reply = grpcClient.getKey(GetKeyRequest(ByteString.copyFromUtf8(key), currentTxnId))
+      handleCommonReply(reply, _.bizCode, _.message, msg => println(msg.value.toStringUtf8))
     }
 
   def delete(key: String): Unit =
@@ -68,7 +68,7 @@ class CliContext(playgroundMode: Boolean,
         case None => playgroundLsm.get.delete(key)
       println("Done")
     } else {
-      val reply = grpcClient.deleteKey(DeleteKeyRequest(ByteString.copyFrom(key.getBytes), currentTxnId))
+      val reply = grpcClient.deleteKey(DeleteKeyRequest(ByteString.copyFromUtf8(key), currentTxnId))
       handleEmptyReply(reply, "Delete success")
     }
 
@@ -79,7 +79,7 @@ class CliContext(playgroundMode: Boolean,
         case None => playgroundLsm.get.put(key, value)
       println("Done")
     } else {
-      val reply = grpcClient.putKey(PutKeyRequest(ByteString.copyFrom(key.getBytes), ByteString.copyFrom(value.getBytes), currentTxnId))
+      val reply = grpcClient.putKey(PutKeyRequest(ByteString.copyFromUtf8(key), ByteString.copyFromUtf8(value), currentTxnId))
       handleEmptyReply(reply, "Put value success")
     }
 
@@ -110,8 +110,8 @@ class CliContext(playgroundMode: Boolean,
         case "included" => BoundType.INCLUDED
 
       val reply = grpcClient.scan(ScanRequest(
-        toBoundType(fromType), ByteString.copyFrom(fromKey.getBytes),
-        toBoundType(toType), ByteString.copyFrom(toKey.getBytes), currentTxnId))
+        toBoundType(fromType), ByteString.copyFromUtf8(fromKey),
+        toBoundType(toType), ByteString.copyFromUtf8(toKey), currentTxnId))
       handleCommonReply(reply, _.bizCode, _.message, msg => for (kv <- msg.kvs) {
         println(new String(kv.key.toByteArray))
         println(new String(kv.value.toByteArray))

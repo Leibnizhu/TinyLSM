@@ -138,10 +138,23 @@ docker build . -f Dockerfile -t leibniz007/tinylsm:latest --network=host --targe
 
 ### Run
 
+Create a dir for tinylsm first: 
+
 ```shell
 mkdir tinylsm
-# edit tinylsm/tinylsm.conf by yourself
+```
+
+And edit `tinylsm/tinylsm.conf` by yourself. Then start Docker container: 
+
+```bash
 docker run --rm -d --name tinylsm -v $(pwd)/tinylsm:/etc/tinylsm -p 9527:9527 -p 9526:9526 leibniz007/tinylsm:latest
+```
+
+### Cli
+
+In the docker image, we provided `tinylsm-cli` for connecting TinyLSM: 
+
+```
 docker exec -it tinylsm bash
 
 # in container's bash
@@ -156,7 +169,7 @@ get key
 :quit
 ```
 
-### gRPC
+_### gRPC
 
 gRPC port is defined by enviroment `TINY_LSM_GRPC_PORT` or config property `grpc.port`, default port is `9526`.
 
@@ -169,15 +182,17 @@ Sample code as below:
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
 import akka.grpc.GrpcClientSettings
+import com.google.protobuf.ByteString
 import io.github.leibnizhu.tinylsm.grpc.*
 
 implicit val sys: ActorSystem[Nothing] = ActorSystem[Nothing](Behaviors.empty[Nothing], "TinyLsmClient")
 implicit val ec: ExecutionContext = sys.executionContext
 private val grpcClient = TinyLsmRpcServiceClient(GrpcClientSettings.connectToServiceAt("localhost", 9527).withTls(false))
 
-grpcClient.getKey(GetKeyRequest(key, None)) onComplete {
-  case Success(msg) => println(msg.value)
-  case Failure(e) => println(s">>> Server Error: $e")
+val getKeyRequest = GetKeyRequest(ByteString.copyFromUtf8("key"))
+grpcClient.getKey(getKeyRequest) onComplete {
+   case Success(msg) => println(msg.value)
+   case Failure(e) => println(s">>> Server Error: $e")
 }
 ```
 
@@ -195,7 +210,7 @@ http port is defined by enviroment `TINY_LSM_HTTP_PORT` or config property `http
 | POST /sys/state         |                                                                                                | dump storage structure               |
 | POST /txn               |                                                                                                | start a new Transaction,return `tid` |
 | POST /txn/$tid/commit   |                                                                                                | commit a Transaction                 |
-| POST /txn/$tid/rollback |                                                                                                | rollback a new Transaction           |
+| POST /txn/$tid/rollback |                                                                                                | rollback a new Transaction           |_
 
 ## BenchMark
 
