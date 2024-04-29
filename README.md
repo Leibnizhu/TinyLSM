@@ -180,32 +180,42 @@ you can use gRPC clients like [evans](https://github.com/ktr0731/evans) or java/
 Sample code as below:
 
 ```scala
+package io.github.leibnizhu.tinylsm.grpc
+
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
 import akka.grpc.GrpcClientSettings
 import com.google.protobuf.ByteString
 import io.github.leibnizhu.tinylsm.grpc.*
-import org.scalatest.funsuite.AnyFunSuite
 
 import scala.concurrent.duration.*
 import scala.concurrent.{Await, ExecutionContext}
-import scala.util.{Failure, Success}
 
-class GprcClientSample extends AnyFunSuite {
+object GprcClientSample {
    implicit val sys: ActorSystem[Nothing] = ActorSystem[Nothing](Behaviors.empty[Nothing], "TinyLsmClient")
    implicit val ec: ExecutionContext = sys.executionContext
-   private val grpcClient = TinyLsmRpcServiceClient(GrpcClientSettings.connectToServiceAt("localhost", 9526).withTls(false))
+   private val grpcClient = TinyLsmRpcServiceClient(
+      GrpcClientSettings.connectToServiceAt("localhost", 9526).withTls(false))
 
-   test("getByKey") {
-      val reply = grpcClient.getKey(GetKeyRequest(ByteString.copyFromUtf8("key")))
-      reply onComplete {
-         case Success(msg) => println(msg.value.toStringUtf8)
-         case Failure(e) => println(s">>> Server Error: $e")
-      }
-      Await.result(reply, 5.second)
+   private def getByKeyTest(): Unit = {
+      val msg = Await.result(grpcClient.getKey(GetKeyRequest(ByteString.copyFromUtf8("testKey")))
+         , 5.second)
+      println("getKey result:" + msg.value.toStringUtf8)
+      assert("testValue" == msg.value.toStringUtf8)
+   }
+
+   private def putValueTest(): Unit = {
+      val reply = Await.result(grpcClient.putKey(PutKeyRequest(
+         ByteString.copyFromUtf8("testKey"),
+         ByteString.copyFromUtf8("testValue"))), 5.second)
+      println("putKey success")
+   }
+
+   def main(args: Array[String]): Unit = {
+      putValueTest()
+      getByKeyTest()
    }
 }
-
 ```
 
 ### Http API
