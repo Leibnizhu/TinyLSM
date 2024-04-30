@@ -214,6 +214,7 @@ object GprcClientSample {
    def main(args: Array[String]): Unit = {
       putValueTest()
       getByKeyTest()
+      sys.terminate()
    }
 }
 ```

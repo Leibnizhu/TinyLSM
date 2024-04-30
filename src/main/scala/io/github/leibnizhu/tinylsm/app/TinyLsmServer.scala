@@ -20,9 +20,13 @@ import scala.util.{Failure, Success}
 
 class TinyLsmServer(storage: TinyLsm, host: String, httpPort: Int, rpcPort: Int) {
   private val logger = LoggerFactory.getLogger(this.getClass)
+  private var actorSys: ActorSystem[Nothing] = _
   Runtime.getRuntime.addShutdownHook(new Thread(() => {
     logger.info("Start to close TinyLSM...")
     storage.close()
+    if (actorSys != null) {
+      actorSys.terminate()
+    }
     logger.info("Finish closing TinyLSM...")
   }))
   private val transactions = new ConcurrentHashMap[Int, Transaction]()
@@ -40,7 +44,7 @@ class TinyLsmServer(storage: TinyLsm, host: String, httpPort: Int, rpcPort: Int)
     }
     val conf = ConfigFactory.parseString("akka.http.server.enable-http2=on")
       .withFallback(ConfigFactory.defaultApplication())
-    val system = ActorSystem[Nothing](rootBehavior, "TinyLsmAkkaServer", conf)
+    actorSys = ActorSystem[Nothing](rootBehavior, "TinyLsmAkkaServer", conf)
     logger.info("===> TinyLSM Server Started")
   }
 

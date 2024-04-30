@@ -34,6 +34,7 @@ class CliContext(playgroundMode: Boolean,
 
   Runtime.getRuntime.addShutdownHook(new Thread(() => {
     rollbackCurrentTxn()
+    sys.terminate()
   }))
 
   def cliPrompt(): String = if (playgroundMode) {
