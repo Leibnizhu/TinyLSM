@@ -25,7 +25,7 @@ class GetBenchmark {
     storageDir = new File(tempDirPath)
     storageDir.mkdirs()
     val compactOption = CompactionOptions.LeveledCompactionOptions(2, 2, 4, 20)
-    val options = LsmStorageOptions(4096, 1 << 20, 1 << 20, 2, compactOption, CompressorOptions.None, false, false)
+    val options = LsmStorageOptions.defaultOption().copy(numMemTableLimit = 2, compactionOptions = compactOption)
     storage = TinyLsm(storageDir, options)
     for (i <- 1 until 10000) {
       storage.put(keyOf(i), valueOf(i))

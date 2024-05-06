@@ -51,4 +51,11 @@ class BloomTest extends AnyFunSuite {
       assert(bloom.mayContains(byteArrayHash(k.getBytes)))
     }
   }
+
+  test("empty_filter") {
+    val bloom = Bloom(Array())
+    for (i <- 0 until 100) {
+      assertResult(false)(bloom.mayContains(i))
+    }
+  }
 }

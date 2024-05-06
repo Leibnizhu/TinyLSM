@@ -42,29 +42,35 @@ enum Config(private val name: String, val defaultVal: String) {
    * 优先级：
    * SystemProperty > Environment > .env > ConfigFile
    */
-  def get(): String = {
-    val sysProp = System.getProperty(sysPropName)
-    if (sysProp != null && sysProp.nonEmpty) {
-      return sysProp
-    }
-    val envProp = System.getenv(envName)
-    if (envProp != null && envProp.nonEmpty) {
-      return sysProp
-    }
-    val envFileProp = Config.envFileProperties.getProperty(envName)
-    if (envFileProp != null && envFileProp.nonEmpty) {
-      return envFileProp
-    }
-    val configFileProp = Config.configFileProperties.getProperty(sysPropName)
-    if (configFileProp != null && configFileProp.nonEmpty) {
-      return configFileProp
-    }
-    defaultVal
-  }
+  def get(): String = getOption.getOrElse(defaultVal)
 
   def getInt: Int = get().toInt
 
   def getBoolean: Boolean = get().toBoolean
+
+  def isDefined: Boolean = getOption.isDefined
+
+  def unDefined: Boolean = getOption.isEmpty
+
+  private def getOption: Option[String] = {
+    val sysProp = System.getProperty(sysPropName)
+    if (sysProp != null && sysProp.nonEmpty) {
+      return Some(sysProp)
+    }
+    val envProp = System.getenv(envName)
+    if (envProp != null && envProp.nonEmpty) {
+      return Some(sysProp)
+    }
+    val envFileProp = Config.envFileProperties.getProperty(envName)
+    if (envFileProp != null && envFileProp.nonEmpty) {
+      return Some(envFileProp)
+    }
+    val configFileProp = Config.configFileProperties.getProperty(sysPropName)
+    if (configFileProp != null && configFileProp.nonEmpty) {
+      return Some(configFileProp)
+    }
+    None
+  }
 }
 
 object Config {
@@ -83,7 +89,7 @@ object Config {
   }
 
   private def loadConfigFile(): Properties = {
-    val configFile: String = configFilePath
+    val configFile = configFilePath
     val prop = Properties()
     if (new File(configFile).exists()) {
       prop.load(new FileInputStream(configFile))
@@ -91,7 +97,7 @@ object Config {
     prop
   }
 
-  def configFilePath = {
+  def configFilePath: String = {
     val configFileEnvName = "TINY_LSM_CONFIG_FILE"
     val configFileSysPropName = toPropertyName("CONFIG_FILE")
     val configFile = System.getProperty(configFileSysPropName,

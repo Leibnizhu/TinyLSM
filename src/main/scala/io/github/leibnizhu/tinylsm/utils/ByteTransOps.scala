@@ -1,5 +1,7 @@
 package io.github.leibnizhu.tinylsm.utils
 
+import scala.collection.mutable.ArrayBuffer
+
 object ByteTransOps {
 
   /**
@@ -60,5 +62,9 @@ object ByteTransOps {
     val safeB1: Long = if (b1 < 0) b1 + 256 else b1
     val safeB0: Long = if (b0 < 0) b0 + 256 else b0
     (safeB7 << 56) + (safeB6 << 48) + (safeB5 << 40) + (safeB4 << 32) + (safeB3 << 24) + (safeB2 << 16) + (safeB1 << 8) + safeB0
+  }
+
+  def arrayPrefixes(arr: Array[Byte], delimiter: Byte): Array[Array[Byte]] = {
+    arr.indices.filter(arr(_) == delimiter).map(arr.slice(0, _)).toArray
   }
 }

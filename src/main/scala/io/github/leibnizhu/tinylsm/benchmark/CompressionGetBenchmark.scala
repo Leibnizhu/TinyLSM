@@ -26,7 +26,8 @@ class CompressionGetBenchmark {
       .mkString(File.separator))
     zstdStorageDir.mkdirs()
     val compactOption = CompactionOptions.LeveledCompactionOptions(2, 2, 4, 20)
-    val zstdOptions = LsmStorageOptions(4096, 1 << 20, 1 << 20, 2, compactOption, CompressorOptions.Zstd(), false, false)
+    val zstdOptions = LsmStorageOptions.defaultOption().copy(numMemTableLimit = 2,
+      compactionOptions = compactOption, compressorOptions = CompressorOptions.Zstd())
     zstdStorage = TinyLsm(zstdStorageDir, zstdOptions)
     for (i <- 1 until 10000) {
       zstdStorage.put(keyOf(i), valueOf(i))
@@ -35,7 +36,8 @@ class CompressionGetBenchmark {
     zlibStorageDir = new File(List(System.getProperty("java.io.tmpdir"), "LsmBenchmark-Zlib", System.currentTimeMillis().toString)
       .mkString(File.separator))
     zlibStorageDir.mkdirs()
-    val zlibOptions = LsmStorageOptions(4096, 1 << 20, 1 << 20, 2, compactOption, CompressorOptions.Zlib(), false, false)
+    val zlibOptions = LsmStorageOptions.defaultOption().copy(numMemTableLimit = 2,
+      compactionOptions = compactOption, compressorOptions = CompressorOptions.Zlib())
     zlibStorage = TinyLsm(zlibStorageDir, zlibOptions)
     for (i <- 1 until 10000) {
       zlibStorage.put(keyOf(i), valueOf(i))

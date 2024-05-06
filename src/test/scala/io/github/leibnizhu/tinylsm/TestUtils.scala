@@ -108,15 +108,8 @@ object TestUtils {
     MergeIterator(iters.toList)
   }
 
-  def compactionOption(compactOpt: CompactionOptions): LsmStorageOptions = LsmStorageOptions(
-    4096,
-    1 << 20,
-    1 << 20,
-    2,
-    compactOpt,
-    CompressorOptions.None,
-    false,
-    false)
+  def compactionOption(compactOpt: CompactionOptions): LsmStorageOptions = LsmStorageOptions.defaultOption()
+    .copy(targetSstSize = 1 << 20, numMemTableLimit = 2, compactionOptions = compactOpt)
 
   def compactionBench(storage: TinyLsm): Unit = {
     // 10B

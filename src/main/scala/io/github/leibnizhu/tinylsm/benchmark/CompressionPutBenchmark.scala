@@ -21,7 +21,8 @@ class CompressionPutBenchmark {
     storageDir = new File(tempDirPath)
     storageDir.mkdirs()
     val compactOption = CompactionOptions.LeveledCompactionOptions(2, 2, 4, 20)
-    val options = LsmStorageOptions(4096, 1 << 20, 1 << 20, 2, compactOption, CompressorOptions.Zstd(), false, false)
+    val options = LsmStorageOptions.defaultOption().copy(numMemTableLimit = 2,
+      compactionOptions = compactOption, compressorOptions = CompressorOptions.Zstd())
     storage = TinyLsm(storageDir, options)
   }
 

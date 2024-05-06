@@ -15,6 +15,14 @@ trait Key {
   def length: Int = bytes.length
 
   def keyHash(): Int = MurmurHash3.seqHash(this.bytes)
+
+  protected def nextKeyBytes(): Array[Byte] = if (bytes.last == Byte.MaxValue) {
+    Array()
+  } else {
+    val newBytes = bytes.clone()
+    newBytes(newBytes.length - 1) = (newBytes.last + 1).toByte
+    newBytes
+  }
 }
 
 case class RawKey(bytes: Array[Byte]) extends Comparable[RawKey] with Key {

@@ -1,9 +1,12 @@
 package io.github.leibnizhu.tinylsm
 
 import io.github.leibnizhu.tinylsm.utils.{Excluded, Included, Unbounded}
+import io.github.leibnizhu.tinylsm.TestUtils.{dumpIterator, checkIterator, entry}
 import org.scalatest.funsuite.AnyFunSuite
+import org.slf4j.LoggerFactory
 
 class MemTableTest extends AnyFunSuite {
+  private val log = LoggerFactory.getLogger(this.getClass)
 
   test("week1_day1_task1_memtable_get") {
     val memTable = MemTable(0)
@@ -94,5 +97,17 @@ class MemTableTest extends AnyFunSuite {
       val iter = memTable.scan(Unbounded(), Unbounded())
       assert(!iter.isValid)
     }
+  }
+
+  test("scan_test") {
+    val memTable = MemTable(0)
+    memTable.put(MemTableKey.applyForTest("kez:"), "value4".getBytes)
+    memTable.put(MemTableKey.applyForTest("key:2"), "value2".getBytes)
+    memTable.put(MemTableKey.applyForTest("key"), "value1".getBytes)
+    memTable.put(MemTableKey.applyForTest("key:3"), "value3".getBytes)
+    checkIterator(
+      List(entry("key", "value1"), entry("key:2", "value2"), entry("key:3", "value3"), entry("kez:", "value4")),
+      memTable.scan(Unbounded(), Unbounded())
+    )
   }
 }

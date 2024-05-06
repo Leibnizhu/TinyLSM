@@ -21,7 +21,11 @@ case class LsmStorageOptions
   // 是否启用WAL
   enableWal: Boolean,
   // Transaction 是否可序列化
-  serializable: Boolean
+  serializable: Boolean,
+  // 前缀bloom过滤器（可选）的前缀长度
+  prefixBloomLength: Option[Int] = None,
+  // 前缀bloom过滤器（可选）的分隔符
+  prefixBloomDelimiter: Option[Byte] = None,
 )
 
 object LsmStorageOptions {
@@ -33,7 +37,9 @@ object LsmStorageOptions {
     CompactionOptions.NoCompaction,
     CompressorOptions.None,
     false,
-    false)
+    false,
+    None,
+    None)
 
   def fromConfig(): LsmStorageOptions = LsmStorageOptions(
     Config.BlockSize.getInt,

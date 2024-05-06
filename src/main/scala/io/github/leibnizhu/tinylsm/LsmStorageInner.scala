@@ -132,6 +132,7 @@ private[tinylsm] case class LsmStorageInner(
                                              val compactionFilters: ConcurrentLinkedDeque[CompactionFilter] = new ConcurrentLinkedDeque()
                                            ) {
   private val log = LoggerFactory.getLogger(this.getClass)
+  private val prefixBloom = PrefixBloom.fromConfig(this.options)
 
   /**
    * 按key获取
@@ -314,7 +315,7 @@ private[tinylsm] case class LsmStorageInner(
       // 倒序，从早到新遍历所有已冻结的memtable进行flush操作
       for (flushMemTable <- state.immutableMemTables.reverse) {
         // 构建SST、写入SST文件
-        val builder = SsTableBuilder(options.blockSize, SsTableCompressor.create(options.compressorOptions))
+        val builder = SsTableBuilder(options.blockSize, SsTableCompressor.create(options.compressorOptions), prefixBloom)
         flushMemTable.flush(builder)
         val sstId = flushMemTable.id
         val sst = builder.build(sstId, Some(blockCache), fileOfSst(sstId))
@@ -354,7 +355,7 @@ private[tinylsm] case class LsmStorageInner(
     // L0 SST 部分的迭代器
     val ssTableIters = snapshot.l0SsTables.map(snapshot.ssTables(_))
       // 过滤key范围可能包含当前scan范围的sst，减少IO
-      .filter(sst => rangeOverlap(lower, upper, sst.firstKey, sst.lastKey))
+      .filter(sst => sst.containsRange(lower, upper))
       .map(sst => SsTableIterator.createByLowerBound(sst, lower))
     val l0ssTablesIter = MergeIterator(ssTableIters)
 
@@ -362,7 +363,7 @@ private[tinylsm] case class LsmStorageInner(
     val levelIters = snapshot.levels.map((_, levelSstIds) => {
       val levelSsts = levelSstIds
         .map(snapshot.ssTables(_))
-        .filter(sst => rangeOverlap(lower, upper, sst.firstKey, sst.lastKey))
+        .filter(sst => sst.containsRange(lower, upper))
       SstConcatIterator.createByLowerBound(levelSsts, lower)
     })
     val levelTablesIter = MergeIterator(levelIters)
@@ -420,7 +421,7 @@ private[tinylsm] case class LsmStorageInner(
     val compactionFilters = this.compactionFilters.asScala.toList
     while (iter.isValid) breakable {
       if (builder.isEmpty) {
-        builder = Some(SsTableBuilder(options.blockSize, SsTableCompressor.create(options.compressorOptions)))
+        builder = Some(SsTableBuilder(options.blockSize, SsTableCompressor.create(options.compressorOptions), prefixBloom))
       }
 
       val sameAsLastKey = iter.key().rawKey().equals(lastKey)
@@ -468,7 +469,7 @@ private[tinylsm] case class LsmStorageInner(
         val sstId = nextSstId.incrementAndGet()
         val sst = innerBuilder.build(sstId, Some(blockCache), fileOfSst(sstId))
         newSstList += sst
-        innerBuilder = SsTableBuilder(options.blockSize, SsTableCompressor.create(options.compressorOptions))
+        innerBuilder = SsTableBuilder(options.blockSize, SsTableCompressor.create(options.compressorOptions), prefixBloom)
         builder = Some(innerBuilder)
       }
       innerBuilder.add(iter.key(), iter.value())
@@ -491,30 +492,6 @@ private[tinylsm] case class LsmStorageInner(
   }
 
   override def clone(): LsmStorageInner = this.copy(state = state.copy())
-
-  /**
-   * sst的范围是否包含用户指定的scan范围
-   *
-   * @param userBegin scan指定的左边界
-   * @param userEnd   scan指定的右边界
-   * @param sstBegin  sst的左边，第一个key
-   * @param sstEnd    sst的右边，最后一个key
-   * @return sst是否满足scan范围
-   */
-  private def rangeOverlap(userBegin: Bound, userEnd: Bound,
-                           sstBegin: MemTableKey, sstEnd: MemTableKey): Boolean = {
-    // 判断scan的右边界如果小于SST的最左边第一个key，那么这个sst肯定不包含这个scan范围
-    userEnd match
-      case Excluded(right: Key) if right.rawKey() <= sstBegin.rawKey() => return false
-      case Included(right: Key) if right.rawKey() < sstBegin.rawKey() => return false
-      case _ =>
-    // 判断scan的左边界如果大于SST的最右边最后一个key，那么这个sst肯定不包含这个scan范围
-    userBegin match
-      case Excluded(left: Key) if left.rawKey() >= sstEnd.rawKey() => return false
-      case Included(left: Key) if left.rawKey() > sstEnd.rawKey() => return false
-      case _ =>
-    true
-  }
 
   def dumpStorage(): Unit = {
     val itr = scan(Unbounded(), Unbounded())
