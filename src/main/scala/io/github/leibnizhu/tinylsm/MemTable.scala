@@ -67,6 +67,17 @@ case class MemTable(
       new MemTableIterator(map.subMap(l, il, r, ir).entrySet().iterator().asScala, id)
     case (_, _) => null
 
+  def prefix(prefix: Key): MemTableIterator = {
+    val lower = MemTableKey.withBeginTs(prefix)
+    val upper = prefix.prefixUpperEdge()
+    upper match
+      case Unbounded() =>
+        new MemTableIterator(map.tailMap(lower, true).entrySet().iterator().asScala, id)
+      case Bounded(r: MemTableKey, ir: Boolean) =>
+        new MemTableIterator(map.subMap(lower, true, r, ir).entrySet().iterator().asScala, id)
+      case _ => null
+  }
+
   def flush(builder: SsTableBuilder): Unit = {
     map.forEach((k, v) => builder.add(k, v))
   }

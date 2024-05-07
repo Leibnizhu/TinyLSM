@@ -4,8 +4,8 @@ import io.github.leibnizhu.tinylsm.block.{Block, BlockBuilder, BlockCache, Block
 import io.github.leibnizhu.tinylsm.compress.CompressState.Decompress
 import io.github.leibnizhu.tinylsm.compress.SsTableCompressor
 import io.github.leibnizhu.tinylsm.iterator.*
+import io.github.leibnizhu.tinylsm.utils.*
 import io.github.leibnizhu.tinylsm.utils.ByteTransOps.bytesToInt
-import io.github.leibnizhu.tinylsm.utils.{Bloom, Bound, ByteArrayReader, ByteArrayWriter, Excluded, FileObject, Included, PrefixBloom}
 import org.slf4j.LoggerFactory
 
 import java.io.*
@@ -36,7 +36,7 @@ class SsTable(val file: FileObject,
               val firstKey: MemTableKey,
               val lastKey: MemTableKey,
               val bloom: Option[Bloom],
-              val prefixBloom: Option[Bloom],
+              val prefixBloomFilter: Option[PrefixBloom],
               // SST存储的最大时间戳
               val maxTimestamp: Long = 0,
               val compressor: SsTableCompressor) {
@@ -107,12 +107,27 @@ class SsTable(val file: FileObject,
   }
 
   /**
+   * 当前sst里面是否可能包含指定前缀的key
    *
    * @param prefix 要判断的前缀
    * @return 当前sst里面是否可能包含指定前缀的key
    */
-  def mayContainsPrefix(prefix: Array[Byte]): Boolean = {
-    // TODO 根据： 1.firstKey lastKey 2.bloom如果刚好有这个key（prefix就是key） 3.按前缀bloom 切割前缀判定
+  def mayContainsPrefix(prefix: Key): Boolean = {
+    // prefix 超过当前sst的 lastkey，不可能包含这个前缀的key
+    if (prefix.rawKey() > lastKey.rawKey()) {
+      return false
+    }
+    // prefix 的下个值不到当前sst的 firstKey，不可能包含这个前缀的key
+    prefix.prefixUpperEdge() match
+      case Excluded(right: Key) if right.rawKey() <= firstKey.rawKey() => return false
+      case _ =>
+
+    // 3.按前缀bloom 切割前缀判定
+    if (prefixBloomFilter.isDefined) {
+      if (prefixBloomFilter.get.notContainsPrefix(prefix)) {
+        return false
+      }
+    }
     true
   }
 
@@ -158,7 +173,7 @@ object SsTable {
 
     val prefixBloomOffset = bytesToInt(file.read(dictOffset - 4, 4))
     val rawPrefixBloom = file.read(prefixBloomOffset, dictOffset - 4 - prefixBloomOffset)
-    val prefixBloomFilter = Bloom.decode(rawPrefixBloom)
+    val prefixBloomFilter = PrefixBloom.decode(rawPrefixBloom)
 
     val bloomOffset = bytesToInt(file.read(prefixBloomOffset - 4, 4))
     val rawBloom = file.read(bloomOffset, prefixBloomOffset - 4 - bloomOffset)
@@ -179,7 +194,7 @@ object SsTable {
       firstKey = blockMeta.head.firstKey.copy(),
       lastKey = blockMeta.last.lastKey.copy(),
       bloom = Some(bloomFilter),
-      prefixBloom = Some(prefixBloomFilter),
+      prefixBloomFilter = Some(prefixBloomFilter),
       maxTimestamp = maxTs,
       compressor = compressor
     )
@@ -195,7 +210,7 @@ object SsTable {
       firstKey = firstKey,
       lastKey = lastKey,
       bloom = None,
-      prefixBloom = None,
+      prefixBloomFilter = None,
       maxTimestamp = 0,
       compressor = SsTableCompressor.none()
     )
@@ -208,7 +223,7 @@ object SsTable {
  * @param blockSize Block大小
  */
 class SsTableBuilder(val blockSize: Int, val compressor: SsTableCompressor,
-                     val prefixBloom: PrefixBloom = PrefixBloom.empty()) {
+                     val prefixBloomBuilder: PrefixBloomBuilder = PrefixBloomBuilder.empty()) {
   private val log = LoggerFactory.getLogger(this.getClass)
   // 当前Block的builder
   private var builder = BlockBuilder(blockSize, compressor)
@@ -235,7 +250,7 @@ class SsTableBuilder(val blockSize: Int, val compressor: SsTableCompressor,
       maxTs = key.ts
     }
     keyHashes.addOne(key.keyHash())
-    this.prefixBloom.addKey(key)
+    this.prefixBloomBuilder.addKey(key)
     // value字典采样
     if (compressor.needTrainDict()) {
       compressor.addDictSample(value)
@@ -284,7 +299,7 @@ class SsTableBuilder(val blockSize: Int, val compressor: SsTableCompressor,
 
     // 生成压缩字典、对value执行压缩
     val dict = compressor.generateDict()
-    val (buffer, finalMatas) = compressor.compressSsTable(blockSize, data, blocks, meta.toArray, prefixBloom)
+    val (buffer, finalMatas) = compressor.compressSsTable(blockSize, data, blocks, meta.toArray, prefixBloomBuilder)
 
     // meta写入buffer
     val metaOffset = buffer.length
@@ -298,9 +313,9 @@ class SsTableBuilder(val blockSize: Int, val compressor: SsTableCompressor,
     buffer.putUint32(bloomOffset)
 
     // 前缀bloom 写入buffer
-    val prefixBloomFilter = prefixBloom.bloom()
     val prefixBloomOffset = buffer.length
-    prefixBloomFilter.encode(buffer)
+    val prefixBloom = prefixBloomBuilder.build()
+    prefixBloom.encode(buffer)
     buffer.putUint32(prefixBloomOffset)
 
     // 压缩字典写入buffer
@@ -322,7 +337,7 @@ class SsTableBuilder(val blockSize: Int, val compressor: SsTableCompressor,
       firstKey = finalMatas.head.firstKey.copy(),
       lastKey = finalMatas.last.lastKey.copy(),
       bloom = Some(bloomFilter),
-      prefixBloom = Some(prefixBloomFilter),
+      prefixBloomFilter = Some(prefixBloom),
       maxTimestamp = maxTs,
       compressor = compressor
     )

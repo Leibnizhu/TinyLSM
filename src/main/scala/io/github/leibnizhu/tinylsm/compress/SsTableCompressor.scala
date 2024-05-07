@@ -6,7 +6,7 @@ import io.github.leibnizhu.tinylsm.compress.CompressState.{Compress, Decompress,
 import io.github.leibnizhu.tinylsm.compress.CompressorOptions.{Lz4, Zlib, Zstd}
 import io.github.leibnizhu.tinylsm.compress.SsTableCompressor.none
 import io.github.leibnizhu.tinylsm.iterator.SsTableIterator
-import io.github.leibnizhu.tinylsm.utils.{ByteArrayWriter, PrefixBloom}
+import io.github.leibnizhu.tinylsm.utils.{ByteArrayWriter, PrefixBloomBuilder}
 import io.github.leibnizhu.tinylsm.{MemTableValue, SsTable, SsTableBuilder}
 import org.slf4j.LoggerFactory
 
@@ -57,7 +57,7 @@ trait SsTableCompressor extends AutoCloseable {
    */
   def compressSsTable(blockSize: Int, blockData: ByteArrayWriter,
                       blocks: ArrayBuffer[Block], meta: Array[BlockMeta],
-                      prefixBloom: PrefixBloom): (ByteArrayWriter, Array[BlockMeta]) =
+                      prefixBloom: PrefixBloomBuilder): (ByteArrayWriter, Array[BlockMeta]) =
     if (needTrainDict()) {
       // 如果需要训练字典，那么之前生成的sst是没压缩的，需要重新遍历这个未完成的sst的数据，重新压缩生成新的block和meta数据
       val sstId = -1
@@ -75,7 +75,7 @@ trait SsTableCompressor extends AutoCloseable {
         firstKey = meta.head.firstKey.copy(),
         lastKey = meta.last.lastKey.copy(),
         bloom = None,
-        prefixBloom = None,
+        prefixBloomFilter = None,
         maxTimestamp = 0,
         // 前面没压缩，可以直接读
         compressor = none(Decompress)

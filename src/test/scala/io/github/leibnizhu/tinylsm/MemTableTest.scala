@@ -1,7 +1,7 @@
 package io.github.leibnizhu.tinylsm
 
+import io.github.leibnizhu.tinylsm.TestUtils.{checkIterator, entry}
 import io.github.leibnizhu.tinylsm.utils.{Excluded, Included, Unbounded}
-import io.github.leibnizhu.tinylsm.TestUtils.{dumpIterator, checkIterator, entry}
 import org.scalatest.funsuite.AnyFunSuite
 import org.slf4j.LoggerFactory
 
@@ -108,6 +108,34 @@ class MemTableTest extends AnyFunSuite {
     checkIterator(
       List(entry("key", "value1"), entry("key:2", "value2"), entry("key:3", "value3"), entry("kez:", "value4")),
       memTable.scan(Unbounded(), Unbounded())
+    )
+  }
+
+  test("prefix_test") {
+    val memTable = MemTable(0)
+    memTable.put(MemTableKey.applyForTest("kez:"), "value4".getBytes)
+    memTable.put(MemTableKey.applyForTest("key:2"), "value2".getBytes)
+    memTable.put(MemTableKey.applyForTest("key"), "value1".getBytes)
+    memTable.put(MemTableKey.applyForTest("key:3"), "value3".getBytes)
+    checkIterator(
+      List(entry("key", "value1"), entry("key:2", "value2"), entry("key:3", "value3"), entry("kez:", "value4")),
+      memTable.prefix(RawKey.fromString("ke"))
+    )
+    checkIterator(
+      List(entry("key", "value1"), entry("key:2", "value2"), entry("key:3", "value3")),
+      memTable.prefix(RawKey.fromString("key"))
+    )
+    checkIterator(
+      List(entry("key:2", "value2"), entry("key:3", "value3")),
+      memTable.prefix(RawKey.fromString("key:"))
+    )
+    checkIterator(
+      List(entry("key:2", "value2")),
+      memTable.prefix(RawKey.fromString("key:2"))
+    )
+    checkIterator(
+      List(),
+      memTable.prefix(RawKey.fromString("key:23"))
     )
   }
 }

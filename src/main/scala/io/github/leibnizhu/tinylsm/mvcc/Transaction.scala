@@ -1,8 +1,8 @@
 package io.github.leibnizhu.tinylsm.mvcc
 
 import io.github.leibnizhu.tinylsm.iterator.TwoMergeIterator
-import io.github.leibnizhu.tinylsm.utils.{Bound, Mutex}
-import io.github.leibnizhu.tinylsm.{DELETE_TOMBSTONE, LsmStorageInner, RawKey, WriteBatchRecord}
+import io.github.leibnizhu.tinylsm.utils.{Bound, Included, Mutex}
+import io.github.leibnizhu.tinylsm.{DELETE_TOMBSTONE, Key, LsmStorageInner, MemTableKey, RawKey, WriteBatchRecord}
 import org.slf4j.LoggerFactory
 
 import java.util
@@ -63,6 +63,20 @@ case class Transaction(
       throw new IllegalStateException(s"cannot operate on committed Transaction(ID=$tid)!")
     }
     val fuseIter = inner.scanWithTs(lower, upper, readTs)
+    val localIter = TxnLocalIterator(localStorage, lower, upper)
+    val iterator = TxnIterator(this.copy(), TwoMergeIterator(localIter, fuseIter))
+    if (readOnce) {
+      rollback()
+    }
+    iterator
+  }
+
+  def prefix(prefix: Key): TxnIterator = {
+    if (committed.get()) {
+      throw new IllegalStateException(s"cannot operate on committed Transaction(ID=$tid)!")
+    }
+    val fuseIter = inner.prefixWithTs(prefix, readTs)
+    val (lower, upper) = prefix.prefixRange()
     val localIter = TxnLocalIterator(localStorage, lower, upper)
     val iterator = TxnIterator(this.copy(), TwoMergeIterator(localIter, fuseIter))
     if (readOnce) {

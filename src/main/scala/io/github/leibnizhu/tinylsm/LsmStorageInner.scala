@@ -132,7 +132,6 @@ private[tinylsm] case class LsmStorageInner(
                                              val compactionFilters: ConcurrentLinkedDeque[CompactionFilter] = new ConcurrentLinkedDeque()
                                            ) {
   private val log = LoggerFactory.getLogger(this.getClass)
-  private val prefixBloom = PrefixBloom.fromConfig(this.options)
 
   /**
    * 按key获取
@@ -315,7 +314,8 @@ private[tinylsm] case class LsmStorageInner(
       // 倒序，从早到新遍历所有已冻结的memtable进行flush操作
       for (flushMemTable <- state.immutableMemTables.reverse) {
         // 构建SST、写入SST文件
-        val builder = SsTableBuilder(options.blockSize, SsTableCompressor.create(options.compressorOptions), prefixBloom)
+        val builder = SsTableBuilder(options.blockSize, SsTableCompressor.create(options.compressorOptions),
+          PrefixBloomBuilder.fromConfig(options))
         flushMemTable.flush(builder)
         val sstId = flushMemTable.id
         val sst = builder.build(sstId, Some(blockCache), fileOfSst(sstId))
@@ -349,21 +349,21 @@ private[tinylsm] case class LsmStorageInner(
     val snapshot = state.read(_.copy())
     // MemTable 部分的迭代器
     val memTableIters = (snapshot.memTable :: snapshot.immutableMemTables)
-      .map(mt => mt.scan(Bound.withBeginTs(lower), Bound.withEndTs(upper)))
+      .map(_.scan(Bound.withBeginTs(lower), Bound.withEndTs(upper)))
     val memTablesIter = MergeIterator(memTableIters)
 
     // L0 SST 部分的迭代器
     val ssTableIters = snapshot.l0SsTables.map(snapshot.ssTables(_))
       // 过滤key范围可能包含当前scan范围的sst，减少IO
-      .filter(sst => sst.containsRange(lower, upper))
-      .map(sst => SsTableIterator.createByLowerBound(sst, lower))
+      .filter(_.containsRange(lower, upper))
+      .map(SsTableIterator.createByLowerBound(_, lower))
     val l0ssTablesIter = MergeIterator(ssTableIters)
 
     // levels SST 部分的迭代器
     val levelIters = snapshot.levels.map((_, levelSstIds) => {
       val levelSsts = levelSstIds
         .map(snapshot.ssTables(_))
-        .filter(sst => sst.containsRange(lower, upper))
+        .filter(_.containsRange(lower, upper))
       SstConcatIterator.createByLowerBound(levelSsts, lower)
     })
     val levelTablesIter = MergeIterator(levelIters)
@@ -376,6 +376,41 @@ private[tinylsm] case class LsmStorageInner(
      * TwoMergeIterator ->|
      *                    |-> MergeIterator(L1及以上各个Level的 SstConcatIterator )
      */
+    val mergedIter = TwoMergeIterator(TwoMergeIterator(memTablesIter, l0ssTablesIter), levelTablesIter)
+    // 再包两层，分别做熔断（异常处理）和 多版本控制+删除墓碑处理
+    FusedIterator(LsmIterator(mergedIter, upper, readTs))
+  }
+
+
+
+  def prefix(prefix: Key): StorageIterator[RawKey] = this.mvcc match
+    case None => prefixWithTs(prefix, TS_RANGE_END)
+    case Some(mvcc) => mvcc.newTxn(this.clone(), options.serializable, true).prefix(prefix)
+
+  def prefixWithTs(prefix: Key, readTs: Long): FusedIterator[RawKey] = {
+    val snapshot = state.read(_.copy())
+    // MemTable 部分的迭代器
+    val memTableIters = (snapshot.memTable :: snapshot.immutableMemTables).map(_.prefix(prefix))
+    val memTablesIter = MergeIterator(memTableIters)
+
+    val (lower, upper) = prefix.prefixRange()
+    // L0 SST 部分的迭代器
+    val ssTableIters = snapshot.l0SsTables.map(snapshot.ssTables(_))
+      // 过滤key范围可能包含当前scan范围的sst，减少IO
+      .filter(_.mayContainsPrefix(prefix))
+      .map(SsTableIterator.createByLowerBound(_, lower))
+    val l0ssTablesIter = MergeIterator(ssTableIters)
+
+    // levels SST 部分的迭代器
+    val levelIters = snapshot.levels.map((_, levelSstIds) => {
+      val levelSsts = levelSstIds
+        .map(snapshot.ssTables(_))
+        .filter(_.mayContainsPrefix(prefix))
+      SstConcatIterator.createByLowerBound(levelSsts, lower)
+    })
+    val levelTablesIter = MergeIterator(levelIters)
+
+    log.debug("{}, {}, {}", memTablesIter.numActiveIterators(), l0ssTablesIter.numActiveIterators(), levelTablesIter.numActiveIterators())
     val mergedIter = TwoMergeIterator(TwoMergeIterator(memTablesIter, l0ssTablesIter), levelTablesIter)
     // 再包两层，分别做熔断（异常处理）和 多版本控制+删除墓碑处理
     FusedIterator(LsmIterator(mergedIter, upper, readTs))
@@ -421,7 +456,8 @@ private[tinylsm] case class LsmStorageInner(
     val compactionFilters = this.compactionFilters.asScala.toList
     while (iter.isValid) breakable {
       if (builder.isEmpty) {
-        builder = Some(SsTableBuilder(options.blockSize, SsTableCompressor.create(options.compressorOptions), prefixBloom))
+        builder = Some(SsTableBuilder(options.blockSize, SsTableCompressor.create(options.compressorOptions),
+          PrefixBloomBuilder.fromConfig(options)))
       }
 
       val sameAsLastKey = iter.key().rawKey().equals(lastKey)
@@ -469,7 +505,8 @@ private[tinylsm] case class LsmStorageInner(
         val sstId = nextSstId.incrementAndGet()
         val sst = innerBuilder.build(sstId, Some(blockCache), fileOfSst(sstId))
         newSstList += sst
-        innerBuilder = SsTableBuilder(options.blockSize, SsTableCompressor.create(options.compressorOptions), prefixBloom)
+        innerBuilder = SsTableBuilder(options.blockSize, SsTableCompressor.create(options.compressorOptions),
+          PrefixBloomBuilder.fromConfig(options))
         builder = Some(innerBuilder)
       }
       innerBuilder.add(iter.key(), iter.value())

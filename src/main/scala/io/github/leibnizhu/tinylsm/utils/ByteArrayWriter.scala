@@ -50,6 +50,15 @@ class ByteArrayWriter {
     this
   }
 
+  def putBoolean(b: Boolean): ByteArrayWriter = {
+    if (b) {
+      buffer.append(1.toByte)
+    } else {
+      buffer.append(0.toByte)
+    }
+    this
+  }
+
 }
 
 
