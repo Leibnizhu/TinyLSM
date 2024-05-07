@@ -34,7 +34,12 @@ jobs:
         cache: 'sbt'
 
     - name: Run tests
-      run: sbt test
+      run: sbt coverage test coverageReport
+
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v4.0.1
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
 
       # Optional: This step uploads information to the GitHub dependency graph and unblocking Dependabot alerts for the repository
     - name: Upload dependency graph
