@@ -72,7 +72,7 @@ class PrefixBloomBuilder(prefixLen: Option[Int], delimiter: Option[Byte]) {
   def build(): PrefixBloom = {
     val bitsPerKey = Bloom.bloomBitsPerKey(keyHashes.length, PrefixBloomBuilder.bloomFPRate)
     val bloomFilter = Bloom(keyHashes.toArray, bitsPerKey)
-    new PrefixBloom(prefixLen, delimiter, bloom = bloomFilter)
+    new PrefixBloom(prefixLen, delimiter, bloomFilter)
   }
 }
 
