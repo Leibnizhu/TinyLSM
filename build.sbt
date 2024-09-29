@@ -20,25 +20,31 @@ libraryDependencies ++= Seq(
   "org.apache.logging.log4j" % "log4j-api" % "2.23.1",
   "org.apache.logging.log4j" % "log4j-core" % "2.23.1",
   // cli解析命令
-  "org.jline" % "jline" % "3.25.1",
+  "org.jline" % "jline" % "3.26.2",
   // 压缩相关
-  "com.github.luben" % "zstd-jni" % "1.5.6-2",
+  "com.github.luben" % "zstd-jni" % "1.5.6-4",
   "org.lz4" % "lz4-java" % "1.8.0",
   // jackson
-  "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.17.0",
+  "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.17.2",
   // caffeine 缓存
-  "com.github.blemale" %% "scaffeine" % "5.2.1",
+  "com.github.blemale" %% "scaffeine" % "5.3.0",
   // akka 相关
   "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
   "com.typesafe.akka" %% "akka-actor-typed" % akkaVersion,
+  "com.typesafe.akka" %% "akka-serialization-jackson" % akkaVersion,
+  "com.typesafe.akka" %% "akka-cluster-typed" % akkaVersion,
+  "com.typesafe.akka" %% "akka-persistence-typed" % akkaVersion,
   //  "com.typesafe.akka" %% "akka-http-spray-json" % akkaHttpVersion,
   //  "com.typesafe.akka" %% "akka-stream" % akkaVersion,
   //  "com.typesafe.akka" %% "akka-pki" % akkaVersion,
 
+  // akka 测试相关
   "com.typesafe.akka" %% "akka-http-testkit" % akkaHttpVersion % Test,
   "com.typesafe.akka" %% "akka-stream-testkit" % akkaVersion % Test,
   "com.typesafe.akka" %% "akka-actor-testkit-typed" % akkaVersion % Test,
-  "org.scalatest" %% "scalatest" % "3.2.18" % Test,
+
+  // 其他测试相关
+  "org.scalatest" %% "scalatest" % "3.2.19" % Test,
   "org.mockito" % "mockito-core" % "5.11.0" % Test
 )
 
