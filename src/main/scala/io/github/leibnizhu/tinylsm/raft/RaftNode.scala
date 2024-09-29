@@ -190,7 +190,7 @@ object RaftNode {
     Behaviors.receive { (context, message) =>
       message match {
         case appendLog: AppendLogRequest =>
-          logger.info("{}: Received heartbeat, resetting election timer", state.name())
+          logger.debug("{}: Received heartbeat, resetting election timer", state.name())
           // 重置选举超时计时器
           timers.startSingleTimer(StartElection, StartElection, heartbeatTimeout + random.nextInt(electionRange).millis)
           //TODO 记录日志
@@ -231,7 +231,7 @@ object RaftNode {
           }
 
         case c: Command =>
-          logger.warn("Unsupported message: {}", c)
+          logger.warn("{} Unsupported message: {}", state.name(), c)
           Behaviors.same
       }
     }
@@ -263,6 +263,7 @@ object RaftNode {
           if (newGranted > state.nodes.length / 2) {
             // 足够票数，成为 Leader
             logger.info("{}: Got {} vote response, totally got {} granted, becoming Leader", state.name(), newReceived, newGranted)
+            timers.cancel(ElectionTimeout)
             raftBehavior(state.copy(role = Leader), timers)
           } else if (newReceived == state.nodes.length) {
             // 全部票收回，但未达到leader要求
@@ -280,12 +281,13 @@ object RaftNode {
         case appendLog: AppendLogRequest =>
           logger.info("{}: Received heartbeat from Leader Node{}, stepping down to Follower", state.name(), appendLog.leaderId)
           // 收到 Leader 的心跳，成为 Follower
-          raftBehavior(state.copy(role = Follower, votedFor = None), timers)
+          timers.cancel(ElectionTimeout)
           raftBehavior(state.copy(role = Follower, votedFor = None), timers)
 
         case vote: VoteRequest =>
           if (vote.term > state.currentTerm) {
             vote.replyTo ! VoteResponse(state.currentTerm, true)
+            timers.cancel(ElectionTimeout)
             raftBehavior(state.copy(role = Follower, currentTerm = vote.term), timers)
           } else {
             vote.replyTo ! VoteResponse(state.currentTerm, false)
@@ -293,7 +295,7 @@ object RaftNode {
           }
 
         case c: Command =>
-          logger.warn("Unsupported message: {}", c)
+          logger.warn("{} Unsupported message: {}", state.name(), c)
           Behaviors.same
       }
     }
@@ -337,7 +339,7 @@ object RaftNode {
           Behaviors.same
 
         case c: Command =>
-          logger.warn("Unsupported message: {}", c)
+          logger.warn("{} Unsupported message: {}", state.name(), c)
           Behaviors.same
       }
     }
