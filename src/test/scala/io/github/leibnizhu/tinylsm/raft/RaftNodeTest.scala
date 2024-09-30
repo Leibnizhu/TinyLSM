@@ -57,7 +57,8 @@ class RaftNodeTest extends AnyFunSuite {
   }
 
   private def getLeader(nodes: Array[RaftNodeWrapper]): RaftNodeWrapper = {
-    nodes.find(_.getState.role == Leader).getOrElse(throw new IllegalStateException("No Leader Found!!!"))
+    nodes.find(n => !n.stopped && n.getState.role == Leader)
+      .getOrElse(throw new IllegalStateException("No Leader Found!!!"))
 
   }
 
@@ -142,5 +143,35 @@ class RaftNodeTest extends AnyFunSuite {
     assert(leaderCount == 1, "有且只能有一个Leader")
     assert(allTerms.forall(_ == allTerms.head), "所有人都是同一个Term")
     assert(allTerms.head < 50, "应该在50轮任期内完成3次Leader选举")
+  }
+
+  test("normal_3_nodes_append_log") {
+    val clusterName = "TinyLsmCluster"
+    val hosts = "localhost:2550,localhost:2551,localhost:2552".split(",")
+    val configs = clusterConfigs(hosts, clusterName)
+
+    // 启动所有节点，等待选举结束
+    val nodeArr = startNodes(clusterName, configs)
+    Thread.sleep(5000)
+    val oldLeader = getLeader(nodeArr)
+    oldLeader.system ! ClientRequest("ping")
+    Thread.sleep(3000)
+
+    val oldLeaderState = oldLeader.getState
+    logger.info("==> Current Leader is {}, matchIndex: {}, nextIndex: {}, stopping",
+      oldLeaderState.name(), oldLeaderState.nextIndex.mkString(","), oldLeaderState.matchIndex.mkString(","))
+    oldLeader.stop()
+    Thread.sleep(3000)
+    oldLeader.start()
+    Thread.sleep(5000)
+
+    val states = nodeArr.map(n => n.getState)
+    for (state <- states) {
+      println(state)
+    }
+    val newLeader = getLeader(nodeArr)
+    val newLeaderState = newLeader.getState
+    assert(oldLeaderState.matchIndex.sameElements(newLeaderState.matchIndex))
+    assert(oldLeaderState.nextIndex.sameElements(newLeaderState.nextIndex))
   }
 }
