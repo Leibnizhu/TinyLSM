@@ -17,9 +17,7 @@ object RaftNode {
   //太长了会超过测试的时间限制（过了checkOneLeader的时间还没超时并重新选举），太短了会增加rpc总调用次数
   private val heartbeatTimeout = 2000.millis
   //选举超时的随机范围 从0ms到这个常量ms之间变化
-  private val electionRange = 700
-
-  var log: List[LogEntry] = List()
+  private val electionRange = 1000
 
   def apply(role: RaftRole, clusterName: String, nodes: Array[String], curIdx: Int): Behavior[Command] = Behaviors.withTimers { timers =>
     //TODO 恢复已持久化的状态
@@ -39,7 +37,12 @@ object RaftNode {
     raftBehavior(initialState, timers)
   }
 
-  // 定义处理状态和消息的行为
+  /**
+   * 定义处理状态和消息的行为
+   * 所有角色：
+   * 1. 如果commitIndex > lastApplied，那么就lastApplied加一，并把log[lastApplied]应用到状态机中（5.3节）
+   * 2. 如果接收到的 RPC 请求或响应中，任期号T > currentTerm，那么就令currentTerm等于 T，并切换状态为跟随者（5.1节）
+   */
   private def raftBehavior(state: RaftState, timers: TimerScheduler[Command]): Behavior[Command] = state.role match {
     case Follower => follower(state, timers)
     case Candidate => candidate(state, timers)
@@ -274,5 +277,17 @@ object RaftNode {
       vote.replyTo ! VoteResponse(state.currentTerm, false)
       newState
     }
+  }
+
+  /**
+   * AppendLogRequest 接收者的实现：
+   * 1. 返回假如果领导者的任期小于接收者的当前任期（译者注：这里的接收者是指跟随者或者候选者）（5.1节）
+   * 2. 返回假如果接收者日志中没有包含这样一个条目即该条目的任期在prevLogIndex上能和prevLogTerm匹配上（译者注：在接收者日志中如果能找到一个和prevLogIndex以及prevLogTerm一样的索引和任期的日志条目则继续执行下面的步骤否则返回假）（5.3节）
+   * 3. 如果一个已经存在的条目和新条目（译者注：即刚刚接收到的日志条目）发生了冲突（因为索引相同，任期不同），那么就删除这个已经存在的条目以及它之后的所有条目（5.3节）
+   * 4. 追加日志中尚未存在的任何新条目
+   * 5. 如果领导者的已知已经提交的最高的日志条目的索引leaderCommit大于接收者的已知已经提交的最高的日志条目的索引commitIndex则把接收者的已知已经提交的最高的日志条目的索引commitIndex重置为领导者的已知已经提交的最高的日志条目的索引leaderCommit或者是上一个新条目的索引取两者的最小值
+   */
+  private def handleAppendLogRequest(state:RaftState, appendLog:AppendLogRequest):RaftState = {
+    state
   }
 }
