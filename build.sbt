@@ -4,44 +4,42 @@ name := "ScalaTinyLsm"
 version := "0.4-SNAPSHOT"
 Test / parallelExecution := false
 
-lazy val akkaVersion = "2.9.2"
-lazy val akkaGrpcVersion = "2.4.1"
-lazy val akkaHttpVersion = "10.6.2"
+val pekkoVersion = "1.1.0-M1"
+val log4j2Version = "2.24.1"
 
-enablePlugins(AkkaGrpcPlugin)
+resolvers += Resolver.url("typesafe", url("https://repo.typesafe.com/typesafe/ivy-releases/"))(Resolver.ivyStylePatterns)
+unmanagedResourceDirectories in Compile += baseDirectory.value / "src" / "main" / "resources"
 
-resolvers += "Akka library repository".at("https://repo.akka.io/maven")
-
-//scalacOptions := Seq("-unchecked", "-deprecation")
+enablePlugins(PekkoGrpcPlugin)
 
 libraryDependencies ++= Seq(
   // 日志相关
-  "org.jboss.slf4j" % "slf4j-jboss-logging" % "1.2.1.Final",
-  "org.apache.logging.log4j" % "log4j-api" % "2.23.1",
-  "org.apache.logging.log4j" % "log4j-core" % "2.23.1",
-  // cli解析命令
+//  "org.jboss.slf4j" % "slf4j-jboss-logging" % "1.2.1.Final",
+  "org.apache.logging.log4j" % "log4j-api" % log4j2Version,
+  "org.apache.logging.log4j" % "log4j-core" % log4j2Version,
+  "org.apache.logging.log4j" % "log4j-slf4j2-impl" % log4j2Version,
+  "org.slf4j" % "slf4j-api" % "2.0.13",
+// cli解析命令
   "org.jline" % "jline" % "3.26.2",
   // 压缩相关
   "com.github.luben" % "zstd-jni" % "1.5.6-4",
   "org.lz4" % "lz4-java" % "1.8.0",
   // jackson
-  "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.17.2",
+  "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.18.0",
   // caffeine 缓存
   "com.github.blemale" %% "scaffeine" % "5.3.0",
-  // akka 相关
-  "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
-  "com.typesafe.akka" %% "akka-actor-typed" % akkaVersion,
-  "com.typesafe.akka" %% "akka-serialization-jackson" % akkaVersion,
-  "com.typesafe.akka" %% "akka-cluster-typed" % akkaVersion,
-  "com.typesafe.akka" %% "akka-persistence-typed" % akkaVersion,
-  //  "com.typesafe.akka" %% "akka-http-spray-json" % akkaHttpVersion,
-  //  "com.typesafe.akka" %% "akka-stream" % akkaVersion,
-  //  "com.typesafe.akka" %% "akka-pki" % akkaVersion,
+  // pekko 相关
+  "org.apache.pekko" %% "pekko-http" % pekkoVersion,
+  "org.apache.pekko" %% "pekko-actor-typed" % pekkoVersion,
+  "org.apache.pekko" %% "pekko-grpc-runtime" % pekkoVersion,
+  "org.apache.pekko" %% "pekko-serialization-jackson" % pekkoVersion,
+  "org.apache.pekko" %% "pekko-cluster-typed" % pekkoVersion,
+  "org.apache.pekko" %% "pekko-persistence-typed" % pekkoVersion,
 
-  // akka 测试相关
-  "com.typesafe.akka" %% "akka-http-testkit" % akkaHttpVersion % Test,
-  "com.typesafe.akka" %% "akka-stream-testkit" % akkaVersion % Test,
-  "com.typesafe.akka" %% "akka-actor-testkit-typed" % akkaVersion % Test,
+  // pekko 测试相关
+  "org.apache.pekko" %% "pekko-http-testkit" % pekkoVersion % Test,
+  "org.apache.pekko" %% "pekko-stream-testkit" % pekkoVersion % Test,
+  "org.apache.pekko" %% "pekko-actor-testkit-typed" % pekkoVersion % Test,
 
   // 其他测试相关
   "org.scalatest" %% "scalatest" % "3.2.19" % Test,

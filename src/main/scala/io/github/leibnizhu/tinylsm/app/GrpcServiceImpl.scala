@@ -1,6 +1,6 @@
 package io.github.leibnizhu.tinylsm.app
 
-import akka.actor.typed.ActorSystem
+import org.apache.pekko.actor.typed.ActorSystem
 import com.google.protobuf.ByteString
 import io.github.leibnizhu.tinylsm.app.ApiCommands.*
 import io.github.leibnizhu.tinylsm.app.BizCode.Success

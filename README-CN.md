@@ -185,9 +185,9 @@ gRPC的定义参见 [tinylsm.proto](src/main/protobuf/tinylsm.proto)。
 ```scala
 package io.github.leibnizhu.tinylsm.grpc
 
-import akka.actor.typed.ActorSystem
-import akka.actor.typed.scaladsl.Behaviors
-import akka.grpc.GrpcClientSettings
+import org.apache.pekko.actor.typed.ActorSystem
+import org.apache.pekko.actor.typed.scaladsl.Behaviors
+import org.apache.pekko.grpc.GrpcClientSettings
 import com.google.protobuf.ByteString
 import io.github.leibnizhu.tinylsm.grpc.*
 

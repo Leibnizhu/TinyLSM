@@ -1,8 +1,8 @@
 package io.github.leibnizhu.tinylsm.raft
 
-import akka.actor.ActorSelection
-import akka.actor.typed.scaladsl.{ActorContext, Behaviors, TimerScheduler}
-import akka.actor.typed.{ActorRef, Behavior}
+import org.apache.pekko.actor.ActorSelection
+import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, TimerScheduler}
+import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.slf4j.LoggerFactory
 
 import java.util.concurrent.ThreadLocalRandom

@@ -1,9 +1,9 @@
 package io.github.leibnizhu.tinylsm.raft
 
-import akka.actor.typed.scaladsl.AskPattern.*
-import akka.actor.typed.scaladsl.{AskPattern, Behaviors}
-import akka.actor.typed.{ActorSystem, Scheduler}
-import akka.util.Timeout
+import org.apache.pekko.actor.typed.scaladsl.AskPattern.*
+import org.apache.pekko.actor.typed.scaladsl.{AskPattern, Behaviors}
+import org.apache.pekko.actor.typed.{ActorSystem, Scheduler}
+import org.apache.pekko.util.Timeout
 import com.typesafe.config.Config
 import org.slf4j.LoggerFactory
 
@@ -13,7 +13,7 @@ import scala.concurrent.duration.*
 
 case class RaftNodeWrapper(clusterName: String, configs: Array[Config], curInx: Int) {
   private val logger = LoggerFactory.getLogger(this.getClass)
-  val hosts: Array[String] = configs.map(c => c.getString("akka.remote.artery.canonical.hostname") + ":" + c.getString("akka.remote.artery.canonical.port"))
+  val hosts: Array[String] = configs.map(c => c.getString("pekko.remote.artery.canonical.hostname") + ":" + c.getString("pekko.remote.artery.canonical.port"))
   var system: ActorSystem[Command] = _
 
   implicit val timeout: Timeout = 3.seconds

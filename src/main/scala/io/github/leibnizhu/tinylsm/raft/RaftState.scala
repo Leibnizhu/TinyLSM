@@ -1,7 +1,7 @@
 package io.github.leibnizhu.tinylsm.raft
 
-import akka.actor.ActorSelection
-import akka.actor.typed.scaladsl.ActorContext
+import org.apache.pekko.actor.ActorSelection
+import org.apache.pekko.actor.typed.scaladsl.ActorContext
 
 
 // 定义状态数据结构
@@ -58,10 +58,10 @@ case class RaftState(
   }
 
   def actorOf(context: ActorContext[Command], index: Int): ActorSelection =
-    context.system.classicSystem.actorSelection(s"akka://$clusterName@${nodes(index)}/user")
+    context.system.classicSystem.actorSelection(s"pekko://$clusterName@${nodes(index)}/user")
 
   def selfLogApplier(context: ActorContext[Command]): ActorSelection =
-    context.system.classicSystem.actorSelection(s"akka://$clusterName@${nodes(curIdx)}/system/applyLog")
+    context.system.classicSystem.actorSelection(s"pekko://$clusterName@${nodes(curIdx)}/system/applyLog")
 
   def nodeAddress(): String = nodes(curIdx)
 

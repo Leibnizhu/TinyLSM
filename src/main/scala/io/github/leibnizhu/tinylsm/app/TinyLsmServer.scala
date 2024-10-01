@@ -1,10 +1,10 @@
 package io.github.leibnizhu.tinylsm.app
 
-import akka.actor.typed.ActorSystem
-import akka.actor.typed.scaladsl.Behaviors
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
-import akka.http.scaladsl.server.Route
+import org.apache.pekko.actor.typed.ActorSystem
+import org.apache.pekko.actor.typed.scaladsl.Behaviors
+import org.apache.pekko.http.scaladsl.Http
+import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse}
+import org.apache.pekko.http.scaladsl.server.Route
 import com.typesafe.config.ConfigFactory
 import io.github.leibnizhu.tinylsm.grpc.TinyLsmRpcServiceHandler
 import io.github.leibnizhu.tinylsm.mvcc.Transaction
@@ -42,7 +42,7 @@ class TinyLsmServer(storage: TinyLsm, host: String, httpPort: Int, rpcPort: Int)
       startRpcServer()(context.system)
       Behaviors.empty
     }
-    val conf = ConfigFactory.parseString("akka.http.server.enable-http2=on")
+    val conf = ConfigFactory.parseString("pekko.http.server.enable-http2=on")
       .withFallback(ConfigFactory.defaultApplication())
     actorSys = ActorSystem[Nothing](rootBehavior, "TinyLsmAkkaServer", conf)
     logger.info("===> TinyLSM Server Started")

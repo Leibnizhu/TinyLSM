@@ -1,7 +1,7 @@
 package io.github.leibnizhu.tinylsm.raft
 
-import akka.actor.typed.scaladsl.AskPattern
-import akka.actor.typed.scaladsl.AskPattern.*
+import org.apache.pekko.actor.typed.scaladsl.AskPattern
+import org.apache.pekko.actor.typed.scaladsl.AskPattern.*
 import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.funsuite.AnyFunSuite
 import org.slf4j.LoggerFactory
@@ -13,7 +13,7 @@ class RaftNodeTest extends AnyFunSuite {
 
   // 创建动态配置
   private def clusterConfigs(hosts: Array[String], clusterName: String): Array[Config] = {
-    val seedNodesStr = hosts.map(h => s"\"akka://${clusterName}@$h\"").mkString(",")
+    val seedNodesStr = hosts.map(h => s"\"pekko://${clusterName}@$h\"").mkString(",")
     hosts.map(h => {
       val hostAndPort = h.split(":")
       clusterConfig(seedNodesStr, hostAndPort(0), hostAndPort(1).toInt, clusterName)
@@ -23,11 +23,11 @@ class RaftNodeTest extends AnyFunSuite {
   private def clusterConfig(seedNodesStr: String, hostname: String, port: Int, clusterName: String): Config = {
     ConfigFactory.parseString(
       s"""
-      akka {
+      pekko {
         actor {
-          provider = "akka.remote.RemoteActorRefProvider"
+          provider = "org.apache.pekko.remote.RemoteActorRefProvider"
           serializers {
-            jackson-json = "akka.serialization.jackson.JacksonJsonSerializer"
+            jackson-json = "org.apache.pekko.serialization.jackson.JacksonJsonSerializer"
           }
           serialization-bindings {
             "io.github.leibnizhu.tinylsm.raft.Command" = jackson-json

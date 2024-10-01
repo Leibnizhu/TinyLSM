@@ -1,6 +1,6 @@
 package io.github.leibnizhu.tinylsm.raft
 
-import akka.actor.typed.ActorRef
+import org.apache.pekko.actor.typed.ActorRef
 
 
 sealed trait Command extends Serializable

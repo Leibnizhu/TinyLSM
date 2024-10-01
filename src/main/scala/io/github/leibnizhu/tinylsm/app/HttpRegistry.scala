@@ -1,7 +1,7 @@
 package io.github.leibnizhu.tinylsm.app
 
-import akka.actor.typed.Behavior
-import akka.actor.typed.scaladsl.Behaviors
+import org.apache.pekko.actor.typed.Behavior
+import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import io.github.leibnizhu.tinylsm.TinyLsm
 import io.github.leibnizhu.tinylsm.app.ApiCommands.{Command, InnerState}
 import io.github.leibnizhu.tinylsm.app.BizCode.*

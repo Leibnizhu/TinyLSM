@@ -12,7 +12,7 @@
     </Appenders>
 
     <Loggers>
-        <Logger name="akka" level="INFO" additivity="false">
+        <Logger name="org.apache.pekko" level="INFO" additivity="false">
             <AppenderRef ref="STDOUT" />
         </Logger>
 
