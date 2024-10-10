@@ -38,7 +38,7 @@ case class VoteResponse(
                          //Candidate赢得了此张选票时为真
                          voteGranted: Boolean) extends Command
 
-case class LogEntry(term: Int, index: Int, command: String)
+case class LogEntry(term: Int, index: Int, command: Array[Byte])
 
 case class AppendLogRequest(
                              //领导者的任期
@@ -74,11 +74,11 @@ case class AppendLogResponse(
  *
  * @param command 命令，对应日志记录的命令
  */
-case class ClientRequest(command: String) extends Command
+case class ClientRequest(command: Array[Byte]) extends Command
 
 case class ApplyLogRequest(
                             commandValid: Boolean = false,
-                            command: String = null,
+                            command: Array[Byte] = null,
                             commandIndex: Int = -1,
                             newLeader: Boolean = false) extends Command
 

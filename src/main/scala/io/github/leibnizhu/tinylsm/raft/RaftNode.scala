@@ -20,7 +20,7 @@ object RaftNode {
   //选举超时的随机范围 从0ms到这个常量ms之间变化
   private val electionRange = 1000
 
-  def apply(role: RaftRole, clusterName: String, nodes: Array[String], curIdx: Int): Behavior[Command] = Behaviors.withTimers { timers =>
+  def apply(role: RaftRole, clusterName: String, nodes: Array[String], curIdx: Int, persistorOption: Option[Persistor] = None): Behavior[Command] = Behaviors.withTimers { timers =>
     //TODO 恢复已持久化的状态
     val initialState = RaftState(
       role = Follower,
@@ -34,7 +34,8 @@ object RaftNode {
       lastApplied = -1,
       nextIndex = Array.fill(nodes.length)(0),
       matchIndex = Array.fill(nodes.length)(0),
-    )
+      persistorOption = persistorOption,
+    ).readPersist()
     raftBehavior(initialState, timers)
   }
 
@@ -185,7 +186,7 @@ object RaftNode {
           Behaviors.same
 
         case ClientRequest(command) =>
-          logger.info("{}: Received client request, appending command ''{}'' to log", state.name(), command)
+          logger.info("{}: Received client request, appending command ''{}'' to log", state.name(), new String(command))
           val newLogIndex = state.lastLogIndex() + 1
           // 追加日志
           val newLog = state.log :+ LogEntry(state.currentTerm, newLogIndex, command)

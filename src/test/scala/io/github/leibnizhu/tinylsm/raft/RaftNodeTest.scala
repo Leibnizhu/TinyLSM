@@ -154,7 +154,7 @@ class RaftNodeTest extends AnyFunSuite {
     val nodeArr = startNodes(clusterName, configs)
     Thread.sleep(5000)
     val oldLeader = getLeader(nodeArr)
-    oldLeader.system ! ClientRequest("ping")
+    oldLeader.system ! ClientRequest("ping".getBytes)
     Thread.sleep(3000)
 
     val oldLeaderState = oldLeader.getState
@@ -173,5 +173,50 @@ class RaftNodeTest extends AnyFunSuite {
     val newLeaderState = newLeader.getState
     assert(oldLeaderState.matchIndex.sameElements(newLeaderState.matchIndex))
     assert(oldLeaderState.nextIndex.sameElements(newLeaderState.nextIndex))
+  }
+
+
+  test("leader_stop_and_recover_3_nodes_election") {
+    val clusterName = "TinyLsmCluster"
+    val hosts = "localhost:2550,localhost:2551,localhost:2552".split(",")
+    val configs = clusterConfigs(hosts, clusterName)
+    System.setProperty("raft.persistor", PersistorFactory.MEMORY)
+
+    // 启动所有节点，等待选举结束
+    val nodeArr = startNodes(clusterName, configs)
+    Thread.sleep(5000)
+
+    // 停止两次leader
+    val leader1 = getLeader(nodeArr)
+    val leaderState1 = leader1.getState
+    val leaderPersistor1 = Some(leaderState1.persistor)
+    logger.info("==> Current Leader is {}, stopping", leaderState1.name())
+    leader1.stop()
+    Thread.sleep(5000)
+    val leader2 = getLeader(nodeArr)
+    val leaderState2 = leader2.getState
+    val leaderPersistor2 = Some(leaderState2.persistor)
+    logger.info("==> Current Leader is {}, stopping", leaderState2.name())
+    leader2.stop()
+    Thread.sleep(5000)
+
+    // 启动停止的节点
+    logger.info("==> Node {} is starting", leaderState1.name())
+    leader1.start(leaderPersistor1)
+    Thread.sleep(5000)
+    logger.info("==> Node {} is starting", leaderState2.name())
+    leader2.start(leaderPersistor2)
+    Thread.sleep(5000)
+
+    val states = nodeArr.map(n => n.getState)
+    val leaderCount = states.map(_.role).count(_ == Leader)
+    val allTerms = states.map(_.currentTerm)
+    for (state <- states) {
+      println(state)
+    }
+    logger.info("Leader Count={}, all nodes' terms: {}", leaderCount, allTerms)
+    assert(leaderCount == 1, "有且只能有一个Leader")
+    assert(allTerms.forall(_ == allTerms.head), "所有人都是同一个Term")
+    assert(allTerms.head < 50, "应该在50轮任期内完成3次Leader选举")
   }
 }

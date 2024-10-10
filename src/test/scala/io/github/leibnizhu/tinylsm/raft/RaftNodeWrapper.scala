@@ -18,8 +18,8 @@ case class RaftNodeWrapper(clusterName: String, configs: Array[Config], curInx: 
 
   implicit val timeout: Timeout = 3.seconds
 
-  def start(): Unit = {
-    system = ActorSystem(RaftNode(Follower, clusterName, hosts, curInx), clusterName, configs(curInx))
+  def start(persistorOption: Option[Persistor] = None): Unit = {
+    system = ActorSystem(RaftNode(Follower, clusterName, hosts, curInx, persistorOption), clusterName, configs(curInx))
     system.systemActorOf(Behaviors.receive { (context, message) => {
       message match {
         case ap: ApplyLogRequest =>

@@ -1,10 +1,14 @@
 package io.github.leibnizhu.tinylsm.raft
 
+import io.github.leibnizhu.tinylsm.utils.{ByteArrayReader, ByteArrayWriter}
 import org.apache.pekko.actor.ActorSelection
 import org.apache.pekko.actor.typed.scaladsl.ActorContext
+import org.slf4j.LoggerFactory
 
 
-// 定义状态数据结构
+/**
+ * 定义状态数据结构
+ */
 case class RaftState(
                       // 节点固定属性
                       clusterName: String,
@@ -43,7 +47,14 @@ case class RaftState(
                       snapshot: Array[Byte] = Array(),
                       snapshotLastIndex: Int = -2,
                       snapshotLastTerm: Int = -2,
+
+                      persistorOption: Option[Persistor] = None,
                     ) {
+  private val logger = LoggerFactory.getLogger(this.getClass)
+
+  // 持久化相关
+  val persistor: Persistor = persistorOption.getOrElse(PersistorFactory.byConfig(curIdx))
+
   def name(): String = s"[Raft ${role.shortName} Node$curIdx Term=$currentTerm]"
 
   override def toString: String = {
@@ -127,4 +138,52 @@ case class RaftState(
     votedFor = Some(curIdx),
     grantedVotes = 1,
     receivedVotes = 1)
+
+  def persist(): Unit = {
+    val buf = new ByteArrayWriter()
+    buf.putUint32(currentTerm).putUint32(votedFor.getOrElse(-1)).putUint32(log.length)
+    log.foreach(logEntry => buf.putUint32(logEntry.term).putUint32(logEntry.index)
+      .putUint32(logEntry.command.length).putBytes(logEntry.command))
+    // 记录snapshot
+    buf.putUint32(snapshotLastTerm).putUint32(snapshotLastIndex)
+    persistor.persist(buf.toArray)
+  }
+
+  def readPersist(): RaftState = {
+    val bytes = persistor.readPersist()
+    if (bytes == null) {
+      return this
+    }
+    val buf = new ByteArrayReader(bytes)
+    if (buf.remaining <= 0) {
+      return this
+    }
+    val currentTerm = buf.readUint32()
+    val votedFor = {
+      val v = buf.readUint32()
+      if (v == -1) None else Some(v)
+    }
+    // 读日志
+    val logLength = buf.readUint32()
+    val log = new Array[LogEntry](logLength)
+    for (i <- 0 until logLength) {
+      val logTerm = buf.readUint32()
+      val logIndex = buf.readUint32()
+      val commandLength = buf.readUint32()
+      val command = buf.readBytes(commandLength)
+      log(i) = LogEntry(logTerm, logTerm, command)
+    }
+
+    val snapshotLastTerm = buf.readUint32()
+    val snapshotLastIndex = buf.readUint32()
+    logger.info("Read persisted raft state from {}, recovered: term={}, votedFor={}, {} log entities, snapshot {}@{}",
+      persistor, currentTerm, votedFor, log.length, snapshotLastIndex, snapshotLastTerm)
+    this.copy(
+      currentTerm = currentTerm,
+      votedFor = votedFor,
+      log = log,
+      snapshotLastTerm = snapshotLastTerm,
+      snapshotLastIndex = snapshotLastIndex,
+    )
+  }
 }
