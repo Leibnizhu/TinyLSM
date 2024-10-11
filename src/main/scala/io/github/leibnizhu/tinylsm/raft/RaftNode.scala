@@ -20,8 +20,7 @@ object RaftNode {
   //选举超时的随机范围 从0ms到这个常量ms之间变化
   private val electionRange = 1000
 
-  def apply(role: RaftRole, clusterName: String, nodes: Array[String], curIdx: Int): Behavior[Command] = Behaviors.withTimers { timers =>
-    //TODO 恢复已持久化的状态
+  def apply(role: RaftRole, clusterName: String, nodes: Array[String], curIdx: Int, persistor: Persistor): Behavior[Command] = Behaviors.withTimers { timers =>
     val initialState = RaftState(
       role = Follower,
       clusterName = clusterName,
@@ -34,7 +33,8 @@ object RaftNode {
       lastApplied = -1,
       nextIndex = Array.fill(nodes.length)(0),
       matchIndex = Array.fill(nodes.length)(0),
-    )
+      persistor = persistor,
+    ).readPersist() // 恢复已持久化的状态
     raftBehavior(initialState, timers)
   }
 
@@ -69,7 +69,7 @@ object RaftNode {
         case StartElection =>
           logger.info("{}: Election timeout, becoming Candidate", state.name())
           // 进入 Candidate 状态，增加任期
-          raftBehavior(state.newCandidateElection(), timers)
+          raftBehavior(state.newCandidateElection().persist(), timers)
 
         case vote: VoteRequest =>
           val newState = handleVoteRequest(state, vote)
@@ -114,11 +114,12 @@ object RaftNode {
             // 足够票数，成为 Leader
             logger.info("{}: ==> Got {}/{} votes granted, win the election for Term{}, becoming Leader",
               state.name(), newGranted, newReceived, state.currentTerm)
+            state.persist()
             timers.cancel(ElectionTimeout)
             // 成为leader前更新 nextIndex
             val nextIndex = state.lastLogIndex() + 1
             val newNextIndex = Array.fill(state.nodes.length)(nextIndex)
-            logger.info("{}: Update nextIndex to: {}", state.name(), newNextIndex.mkString(","))
+            logger.info("{}: Update nextIndex to: [{}]", state.name(), newNextIndex.mkString(","))
             // raft选举后假如当前term没有新start的entry，那么之前term遗留下的entry永远不会commit。这样会导致之前的请求一直等待，无法返回。所以每次raft选举后，发送一个消息，提醒server主动start一个新的entry
             state.selfLogApplier(context) ! ApplyLogRequest(newLeader = true)
             raftBehavior(state.copy(role = Leader, nextIndex = newNextIndex), timers)
@@ -140,7 +141,8 @@ object RaftNode {
           logger.info("{}: Received heartbeat from Leader Node{}, stepping down to Follower", state.name(), appendLog.leaderId)
           // 收到 Leader 的心跳，成为 Follower
           timers.cancel(ElectionTimeout)
-          raftBehavior(handleAppendLogRequest(state, appendLog, context), timers)
+          val newState = handleAppendLogRequest(state, appendLog, context).persist()
+          raftBehavior(newState, timers)
 
         case vote: VoteRequest =>
           if (vote.term > state.currentTerm) {
@@ -185,7 +187,7 @@ object RaftNode {
           Behaviors.same
 
         case ClientRequest(command) =>
-          logger.info("{}: Received client request, appending command ''{}'' to log", state.name(), command)
+          logger.info("{}: Received client request, appending command ''{}'' to log", state.name(), new String(command))
           val newLogIndex = state.lastLogIndex() + 1
           // 追加日志
           val newLog = state.log :+ LogEntry(state.currentTerm, newLogIndex, command)
@@ -193,7 +195,8 @@ object RaftNode {
           newMatchIndex(state.curIdx) = newLogIndex
           val newNextIndex = state.nextIndex.clone()
           newNextIndex(state.curIdx) = newLogIndex + 1
-          raftBehavior(state.copy(log = newLog, matchIndex = newMatchIndex, nextIndex = newNextIndex), timers)
+          val newState = state.copy(log = newLog, matchIndex = newMatchIndex, nextIndex = newNextIndex).persist()
+          raftBehavior(newState, timers)
 
         case logResp: AppendLogResponse =>
           val newState = handleAppendLogResponse(state, logResp, context)
@@ -247,7 +250,7 @@ object RaftNode {
     // 按需更新任期
     if (logResp.term > state.currentTerm) {
       logger.info("{}: ==> Receive AppendLogResponse and get new Term{}, becoming Follower", state.name(), logResp.term)
-      return state.copy(role = Follower, currentTerm = logResp.term, votedFor = None)
+      return state.copy(role = Follower, currentTerm = logResp.term, votedFor = None).persist()
     }
 
     val newMatchIndex = state.matchIndex.clone()
@@ -300,7 +303,7 @@ object RaftNode {
       logger.info("{}: reject vote because vote term {} < current term",
         state.name(), vote.term, state.currentTerm)
       vote.replyTo ! VoteResponse(state.currentTerm, false)
-      return state
+      return state.persist()
     }
 
     // 如果当前任期更小，需要更新
@@ -316,17 +319,17 @@ object RaftNode {
       logger.info("{}: Reject Node{}''s vote because has voted for Node{}",
         newState.name(), vote.candidateId, newState.votedFor.get)
       vote.replyTo ! VoteResponse(state.currentTerm, false)
-      newState
+      newState.persist()
     } else if (vote.lastLogTerm > lastLogTerm || (vote.lastLogTerm == lastLogTerm && vote.lastLogIndex >= lastLogIndex)) {
       // Candidate的日志至少和自己一样新
       vote.replyTo ! VoteResponse(newState.currentTerm, true)
       logger.info("{}: Voted to Node{} for term {}", newState.name(), vote.candidateId, vote.term)
-      newState.copy(role = Follower, currentTerm = vote.term, votedFor = Some(vote.candidateId))
+      newState.copy(role = Follower, currentTerm = vote.term, votedFor = Some(vote.candidateId)).persist()
     } else {
       logger.info("{}: Reject Node{}''s vote because current node''s last log is {}@{}, candidate''s last log is {}@{}",
         newState.name(), vote.candidateId, lastLogIndex, lastLogTerm, vote.lastLogIndex, vote.lastLogTerm)
       vote.replyTo ! VoteResponse(state.currentTerm, false)
-      newState
+      newState.persist()
     }
   }
 
@@ -349,7 +352,7 @@ object RaftNode {
       logger.info("{}: Reject AppendLogRequest because term {} is smaller than current node''s Term {}",
         state.name(), appendLog.term, state.currentTerm)
       appendLog.replyTo ! AppendLogResponse(state.currentTerm, state.curIdx, maxLogIndex, false, curLastLogIndex)
-      return state.copy(role = Follower, votedFor = None)
+      return state.copy(role = Follower, votedFor = None).persist()
     }
 
     //如果当前没有包含 PrevLogIndex 和 PrevLogTerm 能匹配上的日志条目则返回false
@@ -358,7 +361,7 @@ object RaftNode {
         logger.info("{}: Reject AppendLogRequest because prevLogIndex {} is larger than last log index: {}",
           state.name(), appendLog.prevLogIndex, curLastLogIndex)
         appendLog.replyTo ! AppendLogResponse(state.currentTerm, state.curIdx, maxLogIndex, false, curLastLogIndex)
-        return state.copy(role = Follower, votedFor = None, currentTerm = appendLog.term)
+        return state.copy(role = Follower, votedFor = None, currentTerm = appendLog.term).persist()
       }
       val rpcPrevLogEntry = state.getLogEntry(appendLog.prevLogIndex)
       if (rpcPrevLogEntry != null && rpcPrevLogEntry.term != appendLog.prevLogTerm) {
@@ -366,7 +369,7 @@ object RaftNode {
           state.name(), appendLog.prevLogTerm, rpcPrevLogEntry.term)
         val nextTryLogIndex = state.calNextTryLogIndex(appendLog, rpcPrevLogEntry)
         appendLog.replyTo ! AppendLogResponse(state.currentTerm, state.curIdx, maxLogIndex, false, nextTryLogIndex)
-        return state.copy(role = Follower, votedFor = None, currentTerm = appendLog.term)
+        return state.copy(role = Follower, votedFor = None, currentTerm = appendLog.term).persist()
       }
     }
 
@@ -403,7 +406,7 @@ object RaftNode {
     val lastApplied = applyLogEntries(state, context, commitIndex)
     appendLog.replyTo ! AppendLogResponse(state.currentTerm, state.curIdx, maxLogIndex, true, 0)
     state.copy(role = Follower, votedFor = None, currentTerm = appendLog.term,
-      log = newLog.toArray, commitIndex = commitIndex, lastApplied = lastApplied)
+      log = newLog.toArray, commitIndex = commitIndex, lastApplied = lastApplied).persist()
   }
 
   private def applyLogEntries(state: RaftState, context: ActorContext[Command], commitIndex: Int): Int = {

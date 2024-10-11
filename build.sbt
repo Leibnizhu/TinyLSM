@@ -10,7 +10,7 @@ val log4j2Version = "2.24.1"
 resolvers += Resolver.url("typesafe", url("https://repo.typesafe.com/typesafe/ivy-releases/"))(Resolver.ivyStylePatterns)
 unmanagedResourceDirectories in Compile += baseDirectory.value / "src" / "main" / "resources"
 
-enablePlugins(PekkoGrpcPlugin)
+enablePlugins(PekkoGrpcPlugin, JmhPlugin)
 
 libraryDependencies ++= Seq(
   // 日志相关
@@ -58,5 +58,3 @@ assembly / assemblyMergeStrategy := {
     val oldStrategy = (assembly / assemblyMergeStrategy).value
     oldStrategy(x)
 }
-
-enablePlugins(JmhPlugin)
