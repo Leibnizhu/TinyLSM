@@ -1,8 +1,8 @@
 package io.github.leibnizhu.tinylsm.raft
 
+import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.pekko.actor.typed.scaladsl.AskPattern
 import org.apache.pekko.actor.typed.scaladsl.AskPattern.*
-import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.funsuite.AnyFunSuite
 import org.slf4j.LoggerFactory
 
@@ -56,6 +56,10 @@ class RaftNodeTest extends AnyFunSuite {
     })
   }
 
+  private def stopNodes(nodes: Array[RaftNodeWrapper]): Unit = {
+    nodes.foreach(_.stop())
+  }
+
   private def getLeader(nodes: Array[RaftNodeWrapper]): RaftNodeWrapper = {
     nodes.find(n => !n.stopped && n.getState.role == Leader)
       .getOrElse(throw new IllegalStateException("No Leader Found!!!"))
@@ -81,6 +85,7 @@ class RaftNodeTest extends AnyFunSuite {
     assert(leaderCount == 1, "有且只能有一个Leader")
     assert(allTerms.forall(_ == allTerms.head), "所有人都是同一个Term")
     assert(allTerms.head < 20, "应该在20轮任期内完成Leader选举")
+    stopNodes(nodeArr)
   }
 
   test("normal_5_nodes_election") {
@@ -102,6 +107,7 @@ class RaftNodeTest extends AnyFunSuite {
     assert(leaderCount == 1, "有且只能有一个Leader")
     assert(allTerms.forall(_ == allTerms.head), "所有人都是同一个Term")
     assert(allTerms.head < 20, "应该在20轮任期内完成Leader选举")
+    stopNodes(nodeArr)
   }
 
   test("leader_stop_3_nodes_election") {
@@ -143,6 +149,7 @@ class RaftNodeTest extends AnyFunSuite {
     assert(leaderCount == 1, "有且只能有一个Leader")
     assert(allTerms.forall(_ == allTerms.head), "所有人都是同一个Term")
     assert(allTerms.head < 50, "应该在50轮任期内完成3次Leader选举")
+    stopNodes(nodeArr)
   }
 
   test("normal_3_nodes_append_log") {
@@ -173,6 +180,7 @@ class RaftNodeTest extends AnyFunSuite {
     val newLeaderState = newLeader.getState
     assert(oldLeaderState.matchIndex.sameElements(newLeaderState.matchIndex))
     assert(oldLeaderState.nextIndex.sameElements(newLeaderState.nextIndex))
+    stopNodes(nodeArr)
   }
 
 
@@ -218,5 +226,9 @@ class RaftNodeTest extends AnyFunSuite {
     assert(leaderCount == 1, "有且只能有一个Leader")
     assert(allTerms.forall(_ == allTerms.head), "所有人都是同一个Term")
     assert(allTerms.head < 50, "应该在50轮任期内完成3次Leader选举")
+    // persist不为空
+    assert(leaderPersistor1.get.readPersist().nonEmpty)
+    assert(leaderPersistor2.get.readPersist().nonEmpty)
+    stopNodes(nodeArr)
   }
 }

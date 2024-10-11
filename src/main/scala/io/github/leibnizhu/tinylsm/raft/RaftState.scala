@@ -48,12 +48,10 @@ case class RaftState(
                       snapshotLastIndex: Int = -2,
                       snapshotLastTerm: Int = -2,
 
-                      persistorOption: Option[Persistor] = None,
+                      persistor: Persistor,
                     ) {
   private val logger = LoggerFactory.getLogger(this.getClass)
 
-  // 持久化相关
-  val persistor: Persistor = persistorOption.getOrElse(PersistorFactory.byConfig(curIdx))
 
   def name(): String = s"[Raft ${role.shortName} Node$curIdx Term=$currentTerm]"
 
@@ -139,14 +137,16 @@ case class RaftState(
     grantedVotes = 1,
     receivedVotes = 1)
 
-  def persist(): Unit = {
+  def persist(snapshot: Array[Byte] = Array()): RaftState = {
     val buf = new ByteArrayWriter()
     buf.putUint32(currentTerm).putUint32(votedFor.getOrElse(-1)).putUint32(log.length)
     log.foreach(logEntry => buf.putUint32(logEntry.term).putUint32(logEntry.index)
       .putUint32(logEntry.command.length).putBytes(logEntry.command))
+
     // 记录snapshot
-    buf.putUint32(snapshotLastTerm).putUint32(snapshotLastIndex)
+    buf.putUint32(snapshotLastTerm).putUint32(snapshotLastIndex).putUint32(snapshot.length).putBytes(snapshot)
     persistor.persist(buf.toArray)
+    this
   }
 
   def readPersist(): RaftState = {
@@ -176,12 +176,18 @@ case class RaftState(
 
     val snapshotLastTerm = buf.readUint32()
     val snapshotLastIndex = buf.readUint32()
-    logger.info("Read persisted raft state from {}, recovered: term={}, votedFor={}, {} log entities, snapshot {}@{}",
-      persistor, currentTerm, votedFor, log.length, snapshotLastIndex, snapshotLastTerm)
+    val snapshotLen = buf.readUint32()
+    val snapshot = if (snapshotLen > 0) {
+      buf.readBytes(snapshotLen)
+    } else Array[Byte]()
+
+    logger.info("{} Read persisted raft state from {}, recovered: term={}, votedFor={}, {} log entities, snapshot {}@{}, snapshot's length={}",
+      name(), persistor, currentTerm, votedFor, log.length, snapshotLastIndex, snapshotLastTerm, snapshotLen)
     this.copy(
       currentTerm = currentTerm,
       votedFor = votedFor,
       log = log,
+      snapshot = snapshot,
       snapshotLastTerm = snapshotLastTerm,
       snapshotLastIndex = snapshotLastIndex,
     )

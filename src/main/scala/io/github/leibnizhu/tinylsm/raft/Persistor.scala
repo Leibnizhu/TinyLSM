@@ -23,7 +23,7 @@ object PersistorFactory {
 
   def byConfig(nodeIndex: Int): Persistor = Config.RaftPersistorType.get().toLowerCase match
     case MEMORY => MemoryPersistor(nodeIndex)
-    case FILE => new FilePersistor(new File(Config.DataDir.get() + File.separator + "raft-" + nodeIndex + ".state"))
+    case FILE => FilePersistor(new File(Config.DataDir.get() + File.separator + "raft-" + nodeIndex + ".state"))
 }
 
 case class MemoryPersistor(nodeIdx: Int) extends Persistor {
@@ -44,7 +44,7 @@ case class MemoryPersistor(nodeIdx: Int) extends Persistor {
   }
 }
 
-class FilePersistor(val file: File) extends Persistor {
+case class FilePersistor(file: File) extends Persistor {
 
   if (!file.getParentFile.exists()) {
     file.getParentFile.mkdirs()
