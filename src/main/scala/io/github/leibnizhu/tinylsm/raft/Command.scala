@@ -2,8 +2,15 @@ package io.github.leibnizhu.tinylsm.raft
 
 import org.apache.pekko.actor.typed.ActorRef
 
+import scala.reflect.ClassTag
+
 
 sealed trait Command extends Serializable
+
+sealed trait ResponsibleCommand[Resp <: Command] extends Command {
+  val replyTo: ActorRef[Resp]
+  def responseType(implicit ct: ClassTag[Resp]): ClassTag[Resp] = ct
+}
 
 /**
  * 让 Leader 发送心跳的事件
@@ -29,7 +36,7 @@ case class VoteRequest(
                         lastLogIndex: Int,
                         //Candidate最后日志条目的任期号
                         lastLogTerm: Int,
-                        replyTo: ActorRef[Command],
+                        replyTo: ActorRef[VoteResponse],
                       ) extends Command
 
 case class VoteResponse(
@@ -53,7 +60,7 @@ case class AppendLogRequest(
                              entries: Array[LogEntry],
                              // Leader的已知已提交的最高的日志条目的索引
                              leaderCommit: Int,
-                             replyTo: ActorRef[Command],
+                             replyTo: ActorRef[AppendLogResponse],
                            ) extends Command
 
 case class AppendLogResponse(
@@ -70,18 +77,29 @@ case class AppendLogResponse(
                             ) extends Command
 
 /**
- * 客户端的命令
+ * 客户端发送的命令
  *
  * @param command 命令，对应日志记录的命令
  */
-case class ClientRequest(command: Array[Byte]) extends Command
+case class CommandRequest(command: Array[Byte], replyTo: ActorRef[CommandResponse]) extends ResponsibleCommand[CommandResponse]
 
+case class CommandResponse(index: Int, term: Int, isLeader: Boolean) extends Command
+
+/**
+ * 发送给客户端，让客户端应用日志的命令
+ *
+ * @param commandValid 命令是否可用
+ * @param command      命令，对应日志记录的命令
+ * @param commandIndex 命令索引
+ * @param newLeader    是否产生了新leader
+ */
 case class ApplyLogRequest(
                             commandValid: Boolean = false,
                             command: Array[Byte] = null,
                             commandIndex: Int = -1,
                             newLeader: Boolean = false) extends Command
 
-case class QueryStateRequest(replyTo: ActorRef[Command]) extends Command
+case class QueryStateRequest(replyTo: ActorRef[QueryStateResponse]) extends ResponsibleCommand[QueryStateResponse]
 
 case class QueryStateResponse(state: RaftState) extends Command
+

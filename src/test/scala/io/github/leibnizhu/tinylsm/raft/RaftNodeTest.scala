@@ -1,8 +1,5 @@
 package io.github.leibnizhu.tinylsm.raft
 
-import com.typesafe.config.{Config, ConfigFactory}
-import org.apache.pekko.actor.typed.scaladsl.AskPattern
-import org.apache.pekko.actor.typed.scaladsl.AskPattern.*
 import org.scalatest.funsuite.AnyFunSuite
 import org.slf4j.LoggerFactory
 
@@ -10,40 +7,35 @@ import _root_.scala.runtime.stdLibPatches.Predef.assert
 
 class RaftNodeTest extends AnyFunSuite {
   private val logger = LoggerFactory.getLogger(this.getClass)
+  private val clusterName = "TinyLsmClusterTest"
 
   test("normal_3_nodes_election") {
-    val clusterName = "TinyLsmCluster"
-    val hosts = "localhost:2550,localhost:2551,localhost:2552".split(",")
-    val cluster = RaftCluster(clusterName, hosts)
+    val cluster = RaftCluster(clusterName, 3)
 
     // 启动所有节点，等待选举结束
-    cluster.startAll()
+    cluster.start()
     Thread.sleep(10000)
     val curTerm = cluster.currentLeader()._2
     assert(curTerm < 20, "应该在20轮任期内完成Leader选举")
-    cluster.stopAll()
+    cluster.stop()
   }
 
   test("normal_5_nodes_election") {
-    val clusterName = "TinyLsmCluster"
-    val hosts = "localhost:2550,localhost:2551,localhost:2552,localhost:2553,localhost:2554".split(",")
-    val cluster = RaftCluster(clusterName, hosts)
+    val cluster = RaftCluster(clusterName, 5)
 
     // 启动所有节点，等待选举结束
-    cluster.startAll()
+    cluster.start()
     Thread.sleep(10000)
     val curTerm = cluster.currentLeader()._2
     assert(curTerm < 20, "应该在20轮任期内完成Leader选举")
-    cluster.stopAll()
+    cluster.stop()
   }
 
   test("leader_stop_3_nodes_election") {
-    val clusterName = "TinyLsmCluster"
-    val hosts = "localhost:2550,localhost:2551,localhost:2552".split(",")
-    val cluster = RaftCluster(clusterName, hosts)
+    val cluster = RaftCluster(clusterName, 3)
 
     // 启动所有节点，等待选举结束
-    cluster.startAll()
+    cluster.start()
     Thread.sleep(5000)
 
     // 停止两次leader
@@ -62,20 +54,18 @@ class RaftNodeTest extends AnyFunSuite {
 
     val curTerm = cluster.currentLeader()._2
     assert(curTerm < 50, "应该在50轮任期内完成3次Leader选举")
-    cluster.stopAll()
+    cluster.stop()
   }
 
   test("normal_3_nodes_append_log") {
-    val clusterName = "TinyLsmCluster"
-    val hosts = "localhost:2550,localhost:2551,localhost:2552".split(",")
-    val cluster = RaftCluster(clusterName, hosts)
+    val cluster = RaftCluster(clusterName, 3)
 
     // 启动所有节点，等待选举结束
-    cluster.startAll()
+    cluster.start()
     Thread.sleep(5000)
 
     val oldLeader = cluster.currentLeader()._1
-    oldLeader.system ! ClientRequest("ping".getBytes)
+    oldLeader.ask[CommandResponse](ref => CommandRequest("ping".getBytes, ref))
     Thread.sleep(3000)
 
     val oldLeaderState = oldLeader.getState
@@ -90,18 +80,30 @@ class RaftNodeTest extends AnyFunSuite {
     val newLeaderState = newLeader.getState
     assert(oldLeaderState.matchIndex.sameElements(newLeaderState.matchIndex))
     assert(oldLeaderState.nextIndex.sameElements(newLeaderState.nextIndex))
-    cluster.stopAll()
+    cluster.stop()
+  }
+
+  test("3_nodes_basic_agree") {
+    val cluster = RaftCluster(clusterName, 3)
+    // 启动所有节点，等待选举结束
+    cluster.start()
+    Thread.sleep(5000)
+    for (index <- 0 until 10) {
+      val (nd, _) = cluster.nCommitted(index)
+      assert(nd <= 0, "some have committed before Start()")
+      val xindex = cluster.sendOneCommand(s"${index * 100}".getBytes, 3, false)
+      assert(xindex == index, s"got index $xindex but expected $index")
+    }
+    cluster.stop()
   }
 
 
   test("leader_stop_and_recover_3_nodes_election") {
-    val clusterName = "TinyLsmCluster"
-    val hosts = "localhost:2550,localhost:2551,localhost:2552".split(",")
     System.setProperty("raft.persistor", PersistorFactory.MEMORY)
-    val cluster = RaftCluster(clusterName, hosts)
+    val cluster = RaftCluster(clusterName, 3)
 
     // 启动所有节点，等待选举结束
-    cluster.startAll()
+    cluster.start()
     Thread.sleep(5000)
 
     // 停止两次leader
@@ -124,7 +126,7 @@ class RaftNodeTest extends AnyFunSuite {
     // persist不为空
     assert(leaderState1.persistor.readPersist().nonEmpty)
     assert(leaderState2.persistor.readPersist().nonEmpty)
-    cluster.stopAll()
+    cluster.stop()
     System.clearProperty("raft.persistor")
   }
 }

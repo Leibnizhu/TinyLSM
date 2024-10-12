@@ -77,6 +77,8 @@ object RaftNode {
 
         // 状态查询
         case qs: QueryStateRequest => handleQueryState(state, qs)
+        // 客户端命令
+        case c: CommandRequest => handleCommandRequestNotLeader(state, c)
 
         // 忽略的信息
         case v: VoteResponse => handleNoLongerCandidate(state, v)
@@ -153,6 +155,8 @@ object RaftNode {
 
         // 状态查询
         case qs: QueryStateRequest => handleQueryState(state, qs)
+        // 客户端命令
+        case c: CommandRequest => handleCommandRequestNotLeader(state, c)
 
         // 忽略的消息
         case c: Command => handleUnsupportedMsg(state, c)
@@ -186,7 +190,7 @@ object RaftNode {
           timers.startSingleTimer(SendHeartbeat, SendHeartbeat, sendHeartbeatInterval)
           Behaviors.same
 
-        case ClientRequest(command) =>
+        case CommandRequest(command, replyTo) =>
           logger.info("{}: Received client request, appending command ''{}'' to log", state.name(), new String(command))
           val newLogIndex = state.lastLogIndex() + 1
           // 追加日志
@@ -196,6 +200,7 @@ object RaftNode {
           val newNextIndex = state.nextIndex.clone()
           newNextIndex(state.curIdx) = newLogIndex + 1
           val newState = state.copy(log = newLog, matchIndex = newMatchIndex, nextIndex = newNextIndex).persist()
+          replyTo ! CommandResponse(newLogIndex, state.currentTerm, true)
           raftBehavior(newState, timers)
 
         case logResp: AppendLogResponse =>
@@ -424,6 +429,11 @@ object RaftNode {
 
   private def randomElectionTimeout = {
     heartbeatTimeout + ThreadLocalRandom.current().nextInt(electionRange).millis
+  }
+
+  private def handleCommandRequestNotLeader(state: RaftState, c: CommandRequest): Behavior[Command] = {
+    c.replyTo ! CommandResponse(-1, state.currentTerm, false)
+    Behaviors.same
   }
 
   private def handleNoLongerCandidate(state: RaftState, c: Command): Behavior[Command] = {
