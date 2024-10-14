@@ -76,16 +76,22 @@ case class RaftState(
 
   def lastLogTerm(): Int =
     if (log.isEmpty) {
-      //TODO snapshot判断
-      -1
+      if (snapshot != null && snapshot.nonEmpty) {
+        snapshotLastTerm
+      } else {
+        -1
+      }
     } else {
       log.last.term
     }
 
   def lastLogIndex(): Int =
     if (log.isEmpty) {
-      //TODO snapshot判断
-      -1
+      if (snapshot != null && snapshot.nonEmpty) {
+        snapshotLastIndex
+      } else {
+        -1
+      }
     } else {
       log.last.index
     }
@@ -137,7 +143,7 @@ case class RaftState(
     grantedVotes = 1,
     receivedVotes = 1)
 
-  def persist(snapshot: Array[Byte] = Array()): RaftState = {
+  def persist(): RaftState = {
     val buf = new ByteArrayWriter()
     buf.putUint32(currentTerm).putUint32(votedFor.getOrElse(-1)).putUint32(log.length)
     log.foreach(logEntry => buf.putUint32(logEntry.term).putUint32(logEntry.index)

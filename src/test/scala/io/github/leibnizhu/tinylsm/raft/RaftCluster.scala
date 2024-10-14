@@ -3,7 +3,6 @@ package io.github.leibnizhu.tinylsm.raft
 import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.pekko.actor.typed.Scheduler
 import org.apache.pekko.actor.typed.scaladsl.AskPattern
-import org.apache.pekko.actor.typed.scaladsl.AskPattern.*
 import org.apache.pekko.util.Timeout
 import org.slf4j.LoggerFactory
 

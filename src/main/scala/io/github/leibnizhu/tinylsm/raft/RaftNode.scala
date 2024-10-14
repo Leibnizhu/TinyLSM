@@ -20,7 +20,13 @@ object RaftNode {
   //选举超时的随机范围 从0ms到这个常量ms之间变化
   private val electionRange = 1000
 
-  def apply(role: RaftRole, clusterName: String, nodes: Array[String], curIdx: Int, persistor: Persistor): Behavior[Command] = Behaviors.withTimers { timers =>
+  def apply(
+             role: RaftRole,
+             clusterName: String,
+             nodes: Array[String],
+             curIdx: Int,
+             persistor: Persistor
+           ): Behavior[Command] = Behaviors.withTimers { timers =>
     val initialState = RaftState(
       role = Follower,
       clusterName = clusterName,
@@ -77,8 +83,17 @@ object RaftNode {
 
         // 状态查询
         case qs: QueryStateRequest => handleQueryState(state, qs)
-        // 客户端命令
-        case c: CommandRequest => handleCommandRequestNotLeader(state, c)
+        // 上层应用命令
+        case command: CommandRequest => handleCommandRequestNotLeader(state, command)
+
+        // 上层应用要求快照
+        case snapshot: Snapshot => handleSnapshot(state, snapshot, timers)
+        // 按Leader要求安装快照
+        case req: InstallSnapshotRequest => handleSnapshotInstallRequest(state, req, context, timers)
+        // 安装快照的响应
+        case resp: InstallSnapshotResponse => handleInstallSnapshotResponse(state, resp, timers)
+        // 上层应用询问是否可以安装快照
+        case req: CondInstallSnapshotRequest => handleCondInstallSnapshotRequest(state, req, timers)
 
         // 忽略的信息
         case v: VoteResponse => handleNoLongerCandidate(state, v)
@@ -123,7 +138,7 @@ object RaftNode {
             val newNextIndex = Array.fill(state.nodes.length)(nextIndex)
             logger.info("{}: Update nextIndex to: [{}]", state.name(), newNextIndex.mkString(","))
             // raft选举后假如当前term没有新start的entry，那么之前term遗留下的entry永远不会commit。这样会导致之前的请求一直等待，无法返回。所以每次raft选举后，发送一个消息，提醒server主动start一个新的entry
-            state.selfLogApplier(context) ! ApplyLogRequest(newLeader = true)
+            state.selfLogApplier(context) ! ApplyLogRequest.newLeader()
             raftBehavior(state.copy(role = Leader, nextIndex = newNextIndex), timers)
           } else if (newReceived == state.nodes.length) {
             // 全部票收回，但未达到leader要求
@@ -155,8 +170,17 @@ object RaftNode {
 
         // 状态查询
         case qs: QueryStateRequest => handleQueryState(state, qs)
-        // 客户端命令
+        // 上层应用命令
         case c: CommandRequest => handleCommandRequestNotLeader(state, c)
+
+        // 上层应用要求快照
+        case snapshot: Snapshot => handleSnapshot(state, snapshot, timers)
+        // 按Leader要求安装快照
+        case req: InstallSnapshotRequest => handleSnapshotInstallRequest(state, req, context, timers)
+        // 安装快照的响应
+        case resp: InstallSnapshotResponse => handleInstallSnapshotResponse(state, resp, timers)
+        // 上层应用询问是否可以安装快照
+        case req: CondInstallSnapshotRequest => handleCondInstallSnapshotRequest(state, req, timers)
 
         // 忽略的消息
         case c: Command => handleUnsupportedMsg(state, c)
@@ -167,7 +191,7 @@ object RaftNode {
   /**
    * Leader：
    * 1. 一旦成为Leader：发送空的附加日志 RPC（心跳）给其他所有的服务器；在一定的空余时间之后不停的重复发送，以阻止Follower超时（5.2节）
-   * 2. 如果接收到来自客户端的请求：附加条目到本地日志中，在条目被应用到状态机后响应客户端（5.3节）
+   * 2. 如果接收到来自上层应用的请求：附加条目到本地日志中，在条目被应用到状态机后响应上层应用（5.3节）
    * 3. 如果对于一个Follower，最后日志条目的索引值大于等于nextIndex，那么：发送从nextIndex开始的所有日志条目：
    * - a) 如果成功：更新相应Follower的nextIndex和matchIndex
    * - b) 如果因为日志不一致而失败，减少nextIndex重试
@@ -181,10 +205,19 @@ object RaftNode {
         case SendHeartbeat =>
           for (i <- state.nodes.indices) {
             if (i != state.curIdx) {
-              val request: AppendLogRequest = generateAppendLogRequest(state, context, i)
+              val request = generateAppendLogOrInstallSnapshotRequest(state, context, i)
               state.actorOf(context, i) ! request
             } else {
-              //TODO snapshot存储
+              // snapshot存储
+              val nodeNextIndex = state.nextIndex(i)
+              if (nodeNextIndex > 0 && nodeNextIndex - 1 < state.snapshotLastIndex) {
+                state.selfLogApplier(context) ! ApplyLogRequest(
+                  snapshotValid = true,
+                  snapshot = state.snapshot,
+                  snapshotTerm = state.snapshotLastTerm,
+                  snapshotIndex = state.snapshotLastIndex
+                )
+              }
             }
           }
           timers.startSingleTimer(SendHeartbeat, SendHeartbeat, sendHeartbeatInterval)
@@ -210,6 +243,7 @@ object RaftNode {
           }
           raftBehavior(newState, timers)
 
+
         case vote: VoteRequest =>
           val newState = handleVoteRequest(state, vote)
           if (newState.role != Leader) {
@@ -219,79 +253,19 @@ object RaftNode {
 
         // 状态查询
         case qs: QueryStateRequest => handleQueryState(state, qs)
+
+        // 上层应用要求快照
+        case snapshot: Snapshot => handleSnapshot(state, snapshot, timers)
+        // 安装快照的响应
+        case resp: InstallSnapshotResponse => handleInstallSnapshotResponse(state, resp, timers)
+        // 上层应用询问是否可以安装快照
+        case req: CondInstallSnapshotRequest => handleCondInstallSnapshotRequest(state, req, timers)
+
         // 忽略的信息
         case v: VoteResponse => handleNoLongerCandidate(state, v)
         case c: Command => handleUnsupportedMsg(state, c)
       }
     }
-  }
-
-  private def generateAppendLogRequest(state: RaftState, context: ActorContext[Command], i: Int) = {
-    //当前要发送的节点的下一个同步日志索引(包含)
-    val nodeNextIndex = state.nextIndex(i)
-    val (prevLogIndex, prevLogTerm) = if (nodeNextIndex == 0) {
-      (-1, -1)
-    } else {
-      val prevLogIndex = nodeNextIndex - 1
-      if (prevLogIndex < state.snapshotLastIndex) {
-        //TODO 需要发snapshot安装请求
-        (-1, -1)
-      } else if (prevLogIndex == state.snapshotLastIndex) {
-        (prevLogIndex, state.snapshotLastTerm)
-      } else {
-        (prevLogIndex, state.getLogEntry(prevLogIndex).term)
-      }
-    }
-    logger.debug("{}: Collecting log entries for Node{}, nextIndex={}, nodeNextIndex={}, prevLogIndex={}, prevLogTerm={}",
-      state.name(), i, state.nextIndex.mkString(","), nodeNextIndex, prevLogIndex, prevLogTerm)
-    val entries = if (state.log.nonEmpty && state.lastLogIndex() >= nodeNextIndex && state.firstLogIndex() <= nodeNextIndex) {
-      val logLength = state.lastLogIndex() + 1 - nodeNextIndex
-      state.log.slice(nodeNextIndex - state.firstLogIndex(), state.log.length)
-    } else Array[LogEntry]()
-    AppendLogRequest(state.currentTerm, state.curIdx, prevLogIndex, prevLogTerm, entries, state.commitIndex, context.self)
-  }
-
-  private def handleAppendLogResponse(state: RaftState, logResp: AppendLogResponse, context: ActorContext[Command]): RaftState = {
-    // 按需更新任期
-    if (logResp.term > state.currentTerm) {
-      logger.info("{}: ==> Receive AppendLogResponse and get new Term{}, becoming Follower", state.name(), logResp.term)
-      return state.copy(role = Follower, currentTerm = logResp.term, votedFor = None).persist()
-    }
-
-    val newMatchIndex = state.matchIndex.clone()
-    val newNextIndex = state.nextIndex.clone()
-    if (logResp.success) {
-      if (logResp.maxLogIndex >= 0) {
-        newMatchIndex(logResp.nodeIdx) = logResp.maxLogIndex
-        newNextIndex(logResp.nodeIdx) = logResp.maxLogIndex + 1
-      }
-    } else {
-      // Follower的日志与Leader的prevLogIndex以及prevLogTerm不匹配 如果因为日志不一致而失败，减少 nextIndex 重试
-      // 当附加日志 RPC 的请求被拒绝的时候，Follower可以返回 冲突条目的任期号和该任期号对应的最小索引地址
-      // 确定日志不匹配时的操作
-      newNextIndex(logResp.nodeIdx) = Math.max(0, Math.min(logResp.nextTryLogIndex, state.lastLogIndex() - 1))
-    }
-    if (!state.matchIndex.sameElements(newMatchIndex) || !state.nextIndex.sameElements(newNextIndex)) {
-      logger.info("{}: Receive AppendLogResponse, matchIndex: {} => {}, nextIndex: {} => {}",
-        state.name(), state.matchIndex, newMatchIndex, state.nextIndex, newNextIndex)
-    }
-
-    // 假设存在大于 commitIndex 的 N，使得大多数的 matchIndex[i] ≥ N 成立，且 log[N].term == currentTerm 成立，则令 commitIndex 等于 N (§5.3, §5.4).
-    var newCommitIndex = state.commitIndex
-    var newLastApplied = state.lastApplied
-    if (state.log.nonEmpty) {
-      val baseLogIndex = state.firstLogIndex()
-      val maybeN = (state.lastLogIndex() to Math.max(newCommitIndex, baseLogIndex) by -1)
-        .filter(N => state.log(N - baseLogIndex).term == state.currentTerm)
-        .find(N => newMatchIndex.count(_ >= N) >= state.nodes.length / 2 + 1)
-      if (maybeN.isDefined) {
-        newCommitIndex = maybeN.get
-        // 应用命令
-        newLastApplied = applyLogEntries(state, context, newCommitIndex)
-      }
-    }
-
-    state.copy(matchIndex = newMatchIndex, nextIndex = newNextIndex, commitIndex = newCommitIndex, lastApplied = newLastApplied)
   }
 
   /**
@@ -336,6 +310,32 @@ object RaftNode {
       vote.replyTo ! VoteResponse(state.currentTerm, false)
       newState.persist()
     }
+  }
+
+  private def generateAppendLogOrInstallSnapshotRequest(state: RaftState, context: ActorContext[Command], i: Int): Command = {
+    //当前要发送的节点的下一个同步日志索引(包含)
+    val nodeNextIndex = state.nextIndex(i)
+    val (prevLogIndex, prevLogTerm) = if (nodeNextIndex == 0) {
+      (-1, -1)
+    } else {
+      val prevLogIndex = nodeNextIndex - 1
+      if (prevLogIndex < state.snapshotLastIndex) {
+        // 需要发snapshot安装请求
+        val installSnapshot = InstallSnapshotRequest(state.currentTerm, state.curIdx, state.snapshotLastIndex, state.snapshotLastTerm, state.snapshot, context.self)
+        return installSnapshot
+      } else if (prevLogIndex == state.snapshotLastIndex) {
+        (prevLogIndex, state.snapshotLastTerm)
+      } else {
+        (prevLogIndex, state.getLogEntry(prevLogIndex).term)
+      }
+    }
+    logger.debug("{}: Collecting log entries for Node{}, nextIndex={}, nodeNextIndex={}, prevLogIndex={}, prevLogTerm={}",
+      state.name(), i, state.nextIndex.mkString(","), nodeNextIndex, prevLogIndex, prevLogTerm)
+    val entries = if (state.log.nonEmpty && state.lastLogIndex() >= nodeNextIndex && state.firstLogIndex() <= nodeNextIndex) {
+      val logLength = state.lastLogIndex() + 1 - nodeNextIndex
+      state.log.slice(nodeNextIndex - state.firstLogIndex(), state.log.length)
+    } else Array[LogEntry]()
+    AppendLogRequest(state.currentTerm, state.curIdx, prevLogIndex, prevLogTerm, entries, state.commitIndex, context.self)
   }
 
   /**
@@ -414,17 +414,146 @@ object RaftNode {
       log = newLog.toArray, commitIndex = commitIndex, lastApplied = lastApplied).persist()
   }
 
+  private def handleAppendLogResponse(state: RaftState, logResp: AppendLogResponse, context: ActorContext[Command]): RaftState = {
+    // 按需更新任期
+    if (logResp.term > state.currentTerm) {
+      logger.info("{}: ==> Receive AppendLogResponse and get new Term{}, becoming Follower", state.name(), logResp.term)
+      return state.copy(role = Follower, currentTerm = logResp.term, votedFor = None).persist()
+    }
+
+    val newMatchIndex = state.matchIndex.clone()
+    val newNextIndex = state.nextIndex.clone()
+    if (logResp.success) {
+      if (logResp.maxLogIndex >= 0) {
+        newMatchIndex(logResp.nodeIdx) = logResp.maxLogIndex
+        newNextIndex(logResp.nodeIdx) = logResp.maxLogIndex + 1
+      }
+    } else {
+      // Follower的日志与Leader的prevLogIndex以及prevLogTerm不匹配 如果因为日志不一致而失败，减少 nextIndex 重试
+      // 当附加日志 RPC 的请求被拒绝的时候，Follower可以返回 冲突条目的任期号和该任期号对应的最小索引地址
+      // 确定日志不匹配时的操作
+      newNextIndex(logResp.nodeIdx) = Math.max(0, Math.min(logResp.nextTryLogIndex, state.lastLogIndex() - 1))
+    }
+    if (!state.matchIndex.sameElements(newMatchIndex) || !state.nextIndex.sameElements(newNextIndex)) {
+      logger.info("{}: Receive AppendLogResponse, matchIndex: {} => {}, nextIndex: {} => {}",
+        state.name(), state.matchIndex, newMatchIndex, state.nextIndex, newNextIndex)
+    }
+
+    // 假设存在大于 commitIndex 的 N，使得大多数的 matchIndex[i] ≥ N 成立，且 log[N].term == currentTerm 成立，则令 commitIndex 等于 N (§5.3, §5.4).
+    var newCommitIndex = state.commitIndex
+    var newLastApplied = state.lastApplied
+    if (state.log.nonEmpty) {
+      val baseLogIndex = state.firstLogIndex()
+      val maybeN = (state.lastLogIndex() to Math.max(newCommitIndex, baseLogIndex) by -1)
+        .filter(N => state.log(N - baseLogIndex).term == state.currentTerm)
+        .find(N => newMatchIndex.count(_ >= N) >= state.nodes.length / 2 + 1)
+      if (maybeN.isDefined) {
+        newCommitIndex = maybeN.get
+        // 应用命令
+        newLastApplied = applyLogEntries(state, context, newCommitIndex)
+      }
+    }
+
+    state.copy(matchIndex = newMatchIndex, nextIndex = newNextIndex, commitIndex = newCommitIndex, lastApplied = newLastApplied)
+  }
+
   private def applyLogEntries(state: RaftState, context: ActorContext[Command], commitIndex: Int): Int = {
     var lastApplied = state.lastApplied
     if (commitIndex > lastApplied) {
       lastApplied += 1
       val entry = state.getLogEntry(lastApplied)
       if (entry != null) {
-        state.selfLogApplier(context) ! ApplyLogRequest(commandValid = true, command = entry.command, commandIndex = entry.index)
+        state.selfLogApplier(context) ! ApplyLogRequest.logEntry(entry)
         logger.info("{}: Applied 1 log, lastApplied={}", state.name(), lastApplied)
       }
     }
     lastApplied
+  }
+
+  private def handleSnapshot(state: RaftState, snapshot: Snapshot, timers: TimerScheduler[Command]): Behavior[Command] =
+    if (snapshot.index < state.snapshotLastIndex) {
+      logger.info("{} called Snapshot(), last index:{} is smaller than received snapshot index({}), skip handling...",
+        state.name(), snapshot.index, state.snapshotLastIndex)
+      Behaviors.same
+    } else {
+      //压缩日志
+      val newLogFirstIndex = snapshot.index - state.firstLogIndex()
+      //这里要先拿到当前日志里index对应的任期，否则修改snapshot的term/index后拿出来可能不对
+      val term = state.getLogEntry(snapshot.index).term
+      logger.info("{} 被调用Snapshot(),快照的最后索引:%d@%d,开始压缩日志",
+        state.name(), snapshot.index, term)
+      raftBehavior(state.copy(
+        snapshot = snapshot.snapshot,
+        snapshotLastIndex = snapshot.index,
+        snapshotLastTerm = term,
+        log = state.log.slice(newLogFirstIndex, state.log.length),
+        newElection = false,
+      ).persist(), timers)
+    }
+
+  private def handleSnapshotInstallRequest(state: RaftState, snapshotRequest: InstallSnapshotRequest,
+                                           context: ActorContext[Command], timers: TimerScheduler[Command]): Behavior[Command] = {
+    if (snapshotRequest.term < state.currentTerm) {
+      //过期的请求
+      logger.info("{} receive expired InstallSnapshotRequest from Leader Node{} with term={}",
+        state.name(), snapshotRequest.leaderId, snapshotRequest.term)
+      return Behaviors.same
+    }
+
+    logger.info("{} receive InstallSnapshotRequest from Leader Node{}", state.name(), snapshotRequest.leaderId)
+    if (snapshotRequest.lastIncludedIndex <= state.snapshotLastIndex) {
+      //请求的快照更老
+      logger.info("{} receive expired InstallSnapshotRequest, request's lastIncludedIndex {} <= current snapshotLastIndex {}",
+        state.name(), snapshotRequest.lastIncludedIndex, state.snapshotLastIndex)
+    } else {
+      state.selfLogApplier(context) ! ApplyLogRequest.snapshot(snapshotRequest)
+    }
+    // leader的term可能更大，需要更新
+    raftBehavior(state.copy(role = Follower, currentTerm = snapshotRequest.term, votedFor = None).persist(), timers)
+  }
+
+  private def handleInstallSnapshotResponse(state: RaftState, resp: InstallSnapshotResponse, timers: TimerScheduler[Command]) =
+    if (resp.reqTerm != state.currentTerm || state.role != Leader) {
+      Behaviors.same
+    } else if (resp.term > state.currentTerm) {
+      logger.info("{} send InstallSnapshotRequest is expired(remote node's term is {}), becoming Follower", state.name(), resp.term)
+      raftBehavior(state.copy(role = Follower, currentTerm = resp.term, votedFor = None).persist(), timers)
+    } else {
+      val newNextIndex = state.nextIndex.clone()
+      newNextIndex(resp.nodeIdx) = resp.lastIncludedIndex + 1
+      logger.info("{} node{} installed snapshot, nextIndex update to {}", state.name(), resp.nodeIdx, resp.lastIncludedIndex + 1)
+      raftBehavior(state.copy(nextIndex = newNextIndex), timers)
+    }
+
+  private def handleCondInstallSnapshotRequest(state: RaftState, req: CondInstallSnapshotRequest, timers: TimerScheduler[Command]) = {
+    if (req.lastIncludedIndex <= state.commitIndex) {
+      logger.info("{} received CondInstallSnapshotRequest, last log: {}@{}, <= current commited index={}, REJECT",
+        state.name(), req.lastIncludedIndex, req.lastIncludedTerm, state.commitIndex)
+      //快照较老，拒绝
+      req.replyTo ! CondInstallSnapshotResponse(false)
+      Behaviors.same
+    } else {
+      logger.info("{} received CondInstallSnapshotRequest, last log: {}@{}, compress log end: {}, {}",
+        state.name(), req.lastIncludedIndex, req.lastIncludedTerm, state.commitIndex, state.lastApplied)
+
+      val newLog = if (req.lastIncludedIndex <= state.lastLogIndex() && state.getLogEntry(req.lastIncludedIndex).term == req.lastIncludedTerm) {
+        //snapshot包含的日志比本地更旧，且对应的term能匹配上，则接受snapshot，压缩日志
+        state.log.slice(req.lastIncludedIndex - state.snapshotLastIndex, state.log.length)
+      } else {
+        //否则放弃老日志（snapshot包含更新了的）
+        Array[LogEntry]()
+      }
+      req.replyTo ! CondInstallSnapshotResponse(true)
+      raftBehavior(state.copy(
+        log = newLog,
+        snapshotLastIndex = req.lastIncludedIndex,
+        snapshotLastTerm = req.lastIncludedTerm,
+        snapshot = req.snapshot,
+        // IMPORTANT
+        commitIndex = req.lastIncludedIndex,
+        lastApplied = req.lastIncludedIndex,
+      ).persist(), timers)
+    }
   }
 
   private def randomElectionTimeout = {

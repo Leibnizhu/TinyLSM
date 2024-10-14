@@ -2,14 +2,11 @@ package io.github.leibnizhu.tinylsm.raft
 
 import org.apache.pekko.actor.typed.ActorRef
 
-import scala.reflect.ClassTag
-
 
 sealed trait Command extends Serializable
 
 sealed trait ResponsibleCommand[Resp <: Command] extends Command {
   val replyTo: ActorRef[Resp]
-  def responseType(implicit ct: ClassTag[Resp]): ClassTag[Resp] = ct
 }
 
 /**
@@ -43,9 +40,14 @@ case class VoteResponse(
                          //当前任期号，以便于Candidate去更新自己的任期号
                          term: Int,
                          //Candidate赢得了此张选票时为真
-                         voteGranted: Boolean) extends Command
+                         voteGranted: Boolean
+                       ) extends Command
 
-case class LogEntry(term: Int, index: Int, command: Array[Byte])
+case class LogEntry(
+                     term: Int,
+                     index: Int,
+                     command: Array[Byte]
+                   )
 
 case class AppendLogRequest(
                              //领导者的任期
@@ -77,16 +79,24 @@ case class AppendLogResponse(
                             ) extends Command
 
 /**
- * 客户端发送的命令
+ * 【上层应用发送】 的命令（日志操作）
  *
  * @param command 命令，对应日志记录的命令
+ * @param replyTo 响应给上层应用用
  */
-case class CommandRequest(command: Array[Byte], replyTo: ActorRef[CommandResponse]) extends ResponsibleCommand[CommandResponse]
+case class CommandRequest(
+                           command: Array[Byte],
+                           replyTo: ActorRef[CommandResponse]
+                         ) extends ResponsibleCommand[CommandResponse]
 
-case class CommandResponse(index: Int, term: Int, isLeader: Boolean) extends Command
+case class CommandResponse(
+                            index: Int,
+                            term: Int,
+                            isLeader: Boolean
+                          ) extends Command
 
 /**
- * 发送给客户端，让客户端应用日志的命令
+ * 发送给上层应用，让上层应用应用日志的命令
  *
  * @param commandValid 命令是否可用
  * @param command      命令，对应日志记录的命令
@@ -94,12 +104,99 @@ case class CommandResponse(index: Int, term: Int, isLeader: Boolean) extends Com
  * @param newLeader    是否产生了新leader
  */
 case class ApplyLogRequest(
+                            // 正常应用命令
                             commandValid: Boolean = false,
                             command: Array[Byte] = null,
                             commandIndex: Int = -1,
-                            newLeader: Boolean = false) extends Command
 
-case class QueryStateRequest(replyTo: ActorRef[QueryStateResponse]) extends ResponsibleCommand[QueryStateResponse]
+                            // snapshot相关
+                            snapshotValid: Boolean = false,
+                            snapshot: Array[Byte] = null,
+                            snapshotTerm: Int = -1,
+                            snapshotIndex: Int = -1,
+
+                            // 产生了新leader
+                            newLeader: Boolean = false
+                          ) extends Command
+
+object ApplyLogRequest {
+  def newLeader(): ApplyLogRequest = ApplyLogRequest(newLeader = true)
+
+  def logEntry(logEntry: LogEntry): ApplyLogRequest = ApplyLogRequest(
+    commandValid = true,
+    command = logEntry.command,
+    commandIndex = logEntry.index
+  )
+
+  def snapshot(snapshotRequest: InstallSnapshotRequest): ApplyLogRequest = ApplyLogRequest(
+    snapshotValid = true,
+    snapshot = snapshotRequest.data,
+    snapshotTerm = snapshotRequest.lastIncludedTerm,
+    snapshotIndex = snapshotRequest.lastIncludedIndex
+  )
+}
+
+case class QueryStateRequest(
+                              replyTo: ActorRef[QueryStateResponse]
+                            ) extends ResponsibleCommand[QueryStateResponse]
 
 case class QueryStateResponse(state: RaftState) extends Command
 
+/**
+ * 【上层应用发送】 的snapshot请求
+ *
+ * @param index    快照包含的最大日志index
+ * @param snapshot 快照内容
+ */
+case class Snapshot(index: Int, snapshot: Array[Byte]) extends Command
+
+/**
+ * Raft Leader 节点告诉滞后的 Follower 节点用快照替换其状态
+ *
+ * @param term              term
+ * @param leaderId          leader序号
+ * @param lastIncludedIndex 快照包含的最大index
+ * @param lastIncludedTerm  快照包含的最大term
+ * @param data              快照本照
+ * @param replyTo           leader地址
+ */
+case class InstallSnapshotRequest(
+                                   term: Int,
+                                   leaderId: Int,
+                                   lastIncludedIndex: Int,
+                                   lastIncludedTerm: Int,
+                                   data: Array[Byte],
+                                   replyTo: ActorRef[InstallSnapshotResponse]
+                                 ) extends Command
+
+/**
+ * 安装快照的响应
+ *
+ * @param nodeIdx           当前节点下标
+ * @param term              当前节点的Term
+ * @param reqTerm           InstallSnapshotRequest请求带过来的Term
+ * @param lastIncludedIndex 安装的快照的lastIncludedIndex
+ */
+case class InstallSnapshotResponse(
+                                    nodeIdx: Int,
+                                    term: Int,
+                                    reqTerm: Int,
+                                    lastIncludedIndex: Int
+                                  ) extends Command
+
+/**
+ * 【上层应用】收到快照的ApplyLogRequest后，调用这个判断是否快照是否最新、是否可以安装快照
+ *
+ * @param lastIncludedTerm  快照包含的最大日志term
+ * @param lastIncludedIndex 快照包含的最大日志index
+ * @param snapshot          快照内容
+ * @param replyTo           响应给上层应用用
+ */
+case class CondInstallSnapshotRequest(
+                                       lastIncludedTerm: Int,
+                                       lastIncludedIndex: Int,
+                                       snapshot: Array[Byte],
+                                       replyTo: ActorRef[CondInstallSnapshotResponse],
+                                     ) extends ResponsibleCommand[CondInstallSnapshotResponse]
+
+case class CondInstallSnapshotResponse(success: Boolean) extends Command
