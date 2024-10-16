@@ -5,7 +5,7 @@ import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, TimerSche
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.slf4j.LoggerFactory
 
-import java.util.concurrent.ThreadLocalRandom
+import java.util.concurrent.{BlockingQueue, ThreadLocalRandom}
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.*
 
@@ -25,6 +25,7 @@ object RaftNode {
              clusterName: String,
              nodes: Array[String],
              curIdx: Int,
+             applyQueue: BlockingQueue[ApplyLogRequest],
              persistor: Persistor
            ): Behavior[Command] = Behaviors.withTimers { timers =>
     val initialState = RaftState(
@@ -39,6 +40,7 @@ object RaftNode {
       lastApplied = -1,
       nextIndex = Array.fill(nodes.length)(0),
       matchIndex = Array.fill(nodes.length)(0),
+      applyQueue = applyQueue,
       persistor = persistor,
     ).readPersist() // 恢复已持久化的状态
     raftBehavior(initialState, timers)
@@ -138,7 +140,7 @@ object RaftNode {
             val newNextIndex = Array.fill(state.nodes.length)(nextIndex)
             logger.info("{}: Update nextIndex to: [{}]", state.name(), newNextIndex.mkString(","))
             // raft选举后假如当前term没有新start的entry，那么之前term遗留下的entry永远不会commit。这样会导致之前的请求一直等待，无法返回。所以每次raft选举后，发送一个消息，提醒server主动start一个新的entry
-            state.selfLogApplier(context) ! ApplyLogRequest.newLeader()
+            state.applyQueue.offer(ApplyLogRequest.newLeader())
             raftBehavior(state.copy(role = Leader, nextIndex = newNextIndex), timers)
           } else if (newReceived == state.nodes.length) {
             // 全部票收回，但未达到leader要求
@@ -211,12 +213,12 @@ object RaftNode {
               // snapshot存储
               val nodeNextIndex = state.nextIndex(i)
               if (nodeNextIndex > 0 && nodeNextIndex - 1 < state.snapshotLastIndex) {
-                state.selfLogApplier(context) ! ApplyLogRequest(
+                state.applyQueue.offer(ApplyLogRequest(
                   snapshotValid = true,
                   snapshot = state.snapshot,
                   snapshotTerm = state.snapshotLastTerm,
                   snapshotIndex = state.snapshotLastIndex
-                )
+                ))
               }
             }
           }
@@ -463,7 +465,7 @@ object RaftNode {
       lastApplied += 1
       val entry = state.getLogEntry(lastApplied)
       if (entry != null) {
-        state.selfLogApplier(context) ! ApplyLogRequest.logEntry(entry)
+        state.applyQueue.offer(ApplyLogRequest.logEntry(entry))
         logger.info("{}: Applied 1 log, lastApplied={}", state.name(), lastApplied)
       }
     }
@@ -506,7 +508,7 @@ object RaftNode {
       logger.info("{} receive expired InstallSnapshotRequest, request's lastIncludedIndex {} <= current snapshotLastIndex {}",
         state.name(), snapshotRequest.lastIncludedIndex, state.snapshotLastIndex)
     } else {
-      state.selfLogApplier(context) ! ApplyLogRequest.snapshot(snapshotRequest)
+      state.applyQueue.offer(ApplyLogRequest.snapshot(snapshotRequest))
     }
     // leader的term可能更大，需要更新
     raftBehavior(state.copy(role = Follower, currentTerm = snapshotRequest.term, votedFor = None).persist(), timers)

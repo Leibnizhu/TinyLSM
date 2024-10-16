@@ -117,7 +117,17 @@ case class ApplyLogRequest(
 
                             // 产生了新leader
                             newLeader: Boolean = false
-                          ) extends Command
+                          ) extends Command {
+  override def toString: String = if (commandValid) {
+    s"ApplyLogRequest: Command($commandIndex, ${new String(command)})"
+  } else if (snapshotValid) {
+    s"ApplyLogRequest: Snapshot($snapshotIndex@$snapshotTerm@, snapshot size: ${snapshot.length})"
+  } else if (newLeader) {
+    s"ApplyLogRequest: NewLeader()"
+  } else {
+    super.toString
+  }
+}
 
 object ApplyLogRequest {
   def newLeader(): ApplyLogRequest = ApplyLogRequest(newLeader = true)

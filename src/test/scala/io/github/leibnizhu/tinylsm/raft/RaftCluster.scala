@@ -1,8 +1,7 @@
 package io.github.leibnizhu.tinylsm.raft
 
-import com.typesafe.config.{Config, ConfigFactory}
+import com.typesafe.config.Config
 import org.apache.pekko.actor.typed.Scheduler
-import org.apache.pekko.actor.typed.scaladsl.AskPattern
 import org.apache.pekko.util.Timeout
 import org.slf4j.LoggerFactory
 
@@ -12,49 +11,13 @@ import scala.util.control.Breaks.*
 case class RaftCluster(clusterName: String, hostNum: Int) {
   private val logger = LoggerFactory.getLogger(this.getClass)
 
-  // 创建动态配置
-  private def clusterConfigs(hosts: Array[String], clusterName: String): Array[Config] = {
-    val seedNodesStr = hosts.map(h => s"\"pekko://$clusterName@$h\"").mkString(",")
-    hosts.map(h => {
-      val hostAndPort = h.split(":")
-      clusterConfig(seedNodesStr, hostAndPort(0), hostAndPort(1).toInt, clusterName)
-    })
-  }
-
-  private def clusterConfig(seedNodesStr: String, hostname: String, port: Int, clusterName: String): Config = {
-    ConfigFactory.parseString(
-      s"""
-      pekko {
-        actor {
-          provider = "org.apache.pekko.remote.RemoteActorRefProvider"
-          serializers {
-            jackson-json = "org.apache.pekko.serialization.jackson.JacksonJsonSerializer"
-          }
-          serialization-bindings {
-            "io.github.leibnizhu.tinylsm.raft.Command" = jackson-json
-          }
-        }
-        remote{
-          artery {
-            enabled = on
-            transport = tcp
-            canonical.hostname = "$hostname"
-            canonical.port = $port
-          }
-          warn-about-direct-use = false
-          use-unsafe-remote-features-outside-cluster = true
-        }
-      }
-    """).withFallback(ConfigFactory.load())
-  }
-
   val hosts: Array[String] = (0 until hostNum).map(i => s"localhost:${2550 + i}").toArray
-  val configs: Array[Config] = clusterConfigs(hosts, clusterName)
+  val configs: Array[Config] = RaftApp.clusterConfigs(hosts, clusterName)
   var nodes: Array[RaftNodeWrapper] = _
 
   def start(): Unit = {
     nodes = configs.indices.toArray.map(i => {
-      val wrapper = RaftNodeWrapper(clusterName, configs, i)
+      val wrapper = RaftNodeWrapper(clusterName, hosts.mkString(","), i)
       wrapper.start()
       Thread.sleep(100)
       wrapper
@@ -100,7 +63,7 @@ case class RaftCluster(clusterName: String, hostNum: Int) {
         if (rf != null && !rf.stopped) {
           implicit val timeout: Timeout = 3.seconds
           implicit val scheduler: Scheduler = rf.system.scheduler
-          val response = rf.ask[CommandResponse](ref => CommandRequest(cmd, ref))
+          val response = rf.askThisNode[CommandResponse](ref => CommandRequest(cmd, ref))
           if (response.isLeader) {
             index = response.index
             break

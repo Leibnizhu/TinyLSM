@@ -5,6 +5,8 @@ import org.apache.pekko.actor.ActorSelection
 import org.apache.pekko.actor.typed.scaladsl.ActorContext
 import org.slf4j.LoggerFactory
 
+import java.util.concurrent.BlockingQueue
+
 
 /**
  * 定义状态数据结构
@@ -48,6 +50,7 @@ case class RaftState(
                       snapshotLastIndex: Int = -2,
                       snapshotLastTerm: Int = -2,
 
+                      applyQueue: BlockingQueue[ApplyLogRequest],
                       persistor: Persistor,
                     ) {
   private val logger = LoggerFactory.getLogger(this.getClass)
@@ -68,9 +71,6 @@ case class RaftState(
 
   def actorOf(context: ActorContext[Command], index: Int): ActorSelection =
     context.system.classicSystem.actorSelection(s"pekko://$clusterName@${nodes(index)}/user")
-
-  def selfLogApplier(context: ActorContext[Command]): ActorSelection =
-    context.system.classicSystem.actorSelection(s"pekko://$clusterName@${nodes(curIdx)}/system/applyLog")
 
   def nodeAddress(): String = nodes(curIdx)
 
