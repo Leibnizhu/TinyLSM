@@ -1,10 +1,10 @@
 package io.github.leibnizhu.tinylsm.grpc
 
+import com.google.protobuf.ByteString
+import io.github.leibnizhu.tinylsm.grpc.*
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.grpc.GrpcClientSettings
-import com.google.protobuf.ByteString
-import io.github.leibnizhu.tinylsm.grpc.*
 
 import scala.concurrent.duration.*
 import scala.concurrent.{Await, ExecutionContext}

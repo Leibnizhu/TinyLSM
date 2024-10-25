@@ -1,14 +1,8 @@
 package io.github.leibnizhu.tinylsm.raft
 
-sealed trait RaftRole {
-  def shortName: String
-}
+import com.fasterxml.jackson.annotation.{JsonSubTypes, JsonTypeInfo}
 
-case object Follower extends RaftRole:
-  override def shortName = "F"
-
-case object Candidate extends RaftRole:
-  override def shortName = "C"
-
-case object Leader extends RaftRole:
-  override def shortName = "L"
+enum RaftRole(val shortName: String):
+  case Follower extends RaftRole("F")
+  case Candidate extends RaftRole("C")
+  case Leader extends RaftRole("L")

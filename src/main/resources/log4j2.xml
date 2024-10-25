@@ -9,11 +9,22 @@
             <PatternLayout pattern="${LOG_PATTERN}"/>
             <ThresholdFilter level="DEBUG"/>
         </Console>
+        <Console name="STDOUT_NO_THREAD" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{yyyy-MM-dd_HH:mm:ss.SSS} %p %c{1}:%L: %m%n"/>
+            <ThresholdFilter level="DEBUG"/>
+        </Console>
     </Appenders>
 
     <Loggers>
         <Logger name="org.apache.pekko" level="INFO" additivity="false">
-            <AppenderRef ref="STDOUT" />
+            <AppenderRef ref="STDOUT"/>
+        </Logger>
+
+        <Logger name="io.github.leibnizhu.tinylsm.raft.RaftNode$" level="INFO" additivity="false">
+            <AppenderRef ref="STDOUT_NO_THREAD"/>
+        </Logger>
+        <Logger name="io.github.leibnizhu.tinylsm.raft.RaftState" level="INFO" additivity="false">
+            <AppenderRef ref="STDOUT_NO_THREAD"/>
         </Logger>
 
         <!--<Root level="DEBUG">-->
