@@ -1,6 +1,7 @@
 package io.github.leibnizhu.tinylsm.raft
 
 import com.fasterxml.jackson.annotation.JsonIgnore
+import io.github.leibnizhu.tinylsm.raft.RaftRole.{Candidate, Follower, Leader}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, TimerScheduler}
 import org.apache.pekko.actor.{ActorRef, ActorSelection}
 import org.slf4j.LoggerFactory

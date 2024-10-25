@@ -1,5 +1,6 @@
 package io.github.leibnizhu.tinylsm.raft
 
+import io.github.leibnizhu.tinylsm.raft.RaftRole.{Candidate, Follower, Leader}
 import org.apache.pekko.actor.ActorSelection
 import org.apache.pekko.actor.typed.scaladsl.AskPattern.*
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, AskPattern, Behaviors, TimerScheduler}

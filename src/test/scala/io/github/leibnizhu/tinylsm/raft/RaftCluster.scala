@@ -1,6 +1,7 @@
 package io.github.leibnizhu.tinylsm.raft
 
 import com.typesafe.config.Config
+import io.github.leibnizhu.tinylsm.raft.RaftRole.Leader
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.duration.*
