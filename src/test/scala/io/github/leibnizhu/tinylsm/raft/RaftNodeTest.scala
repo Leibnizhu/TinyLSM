@@ -8,17 +8,16 @@ import java.util.concurrent.ThreadLocalRandom
 import _root_.scala.runtime.stdLibPatches.Predef.assert
 
 class RaftNodeTest extends AnyFunSuite with BeforeAndAfterEach {
+  private val logger = LoggerFactory.getLogger(this.getClass)
+  private val clusterName = "TinyLsmClusterTest"
+
+  private var cluster: RaftCluster = _
+  
   override def withFixture(test: NoArgTest) = {
     // 在 Github workflow 运行时经常绑定不了端口
     assume(!sys.env.get("GITHUB_ACTIONS").contains("true"), "Test ignored in GitHub Actions environment")
     test()
   }
-
-
-  private val logger = LoggerFactory.getLogger(this.getClass)
-  private val clusterName = "TinyLsmClusterTest"
-
-  private var cluster: RaftCluster = _
 
   override def afterEach(): Unit = {
     if (cluster != null) {
