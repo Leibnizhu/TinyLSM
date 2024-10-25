@@ -1,17 +1,19 @@
 package io.github.leibnizhu.tinylsm.raft
 
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.funsuite.AnyFunSuite
 import org.slf4j.LoggerFactory
 
 import java.util.concurrent.ThreadLocalRandom
 import _root_.scala.runtime.stdLibPatches.Predef.assert
 
-class RaftNodeTest extends AnyFunSuite with BeforeAndAfterEach with BeforeAndAfterAll {
-  override def beforeAll(): Unit = {
+class RaftNodeTest extends AnyFunSuite with BeforeAndAfterEach {
+  override def withFixture(test: NoArgTest) = {
     // 在 Github workflow 运行时经常绑定不了端口
     assume(!sys.env.get("GITHUB_ACTIONS").contains("true"), "Test ignored in GitHub Actions environment")
+    test()
   }
+
 
   private val logger = LoggerFactory.getLogger(this.getClass)
   private val clusterName = "TinyLsmClusterTest"
