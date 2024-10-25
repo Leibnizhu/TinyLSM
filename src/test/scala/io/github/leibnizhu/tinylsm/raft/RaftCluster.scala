@@ -9,8 +9,9 @@ import scala.util.control.Breaks.*
 
 case class RaftCluster(clusterName: String, hostNum: Int) {
   private val logger = LoggerFactory.getLogger(this.getClass)
+  private val startPort = 25550
 
-  val hosts: Array[String] = (0 until hostNum).map(i => s"localhost:${2550 + i}").toArray
+  val hosts: Array[String] = (0 until hostNum).map(i => s"localhost:${startPort + i}").toArray
   val configs: Array[Config] = RaftApp.clusterConfigs(hosts)
   var nodes: Array[RaftNodeWrapper] = _
   var persistors: Array[Persistor] = (0 until hostNum).map(i => MemoryPersistor(i)).toArray
