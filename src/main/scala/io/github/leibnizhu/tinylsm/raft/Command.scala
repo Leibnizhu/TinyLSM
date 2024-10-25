@@ -47,7 +47,9 @@ case class LogEntry(
                      term: Int,
                      index: Int,
                      command: Array[Byte]
-                   )
+                   ) {
+  override def toString: String = s"LogEntry($index@$term, '${new String(command)}')"
+}
 
 case class AppendLogRequest(
                              //领导者的任期
@@ -63,7 +65,7 @@ case class AppendLogRequest(
                              // Leader的已知已提交的最高的日志条目的索引
                              leaderCommit: Int,
                              replyTo: ActorRef[AppendLogResponse],
-                           ) extends Command
+                           ) extends ResponsibleCommand[AppendLogResponse]
 
 case class AppendLogResponse(
                               //当前任期,对于领导者而言它会更新自己的任期
@@ -210,3 +212,5 @@ case class CondInstallSnapshotRequest(
                                      ) extends ResponsibleCommand[CondInstallSnapshotResponse]
 
 case class CondInstallSnapshotResponse(success: Boolean) extends Command
+
+case class RenewState() extends Command

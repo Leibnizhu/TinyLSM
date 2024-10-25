@@ -16,19 +16,18 @@ trait RaftApp {
   val hostsStr: String
   val curIdx: Int
 
-
-  private val logger = LoggerFactory.getLogger(this.getClass)
+  private val logger = LoggerFactory.getLogger(classOf[RaftApp])
   private val hosts: Array[String] = hostsStr.split(",")
-  private val applyQueue: BlockingQueue[ApplyLogRequest] = new ArrayBlockingQueue[ApplyLogRequest](1)
+  private val applyQueue: ArrayBlockingQueue[ApplyLogRequest] = new ArrayBlockingQueue[ApplyLogRequest](1)
   private var threadPool: ExecutorService = _
   var system: ActorSystem[Command] = _
   private var lastLeader: Int = 0
 
-  def start(persistorOption: Option[Persistor] = None): Unit = {
-    val config = RaftApp.clusterConfig(hosts, curIdx, clusterName)
+  def start(persistorOption: Option[Persistor] = None): Unit = synchronized {
+    val config = RaftApp.clusterConfig(hosts, curIdx)
     val persistor = persistorOption.getOrElse(PersistorFactory.byConfig(curIdx))
-    val raftNode = RaftNode(Follower, clusterName, hosts, curIdx, applyQueue, persistor)
-    system = ActorSystem(raftNode, clusterName, config)
+    val raftNode = RaftNode(clusterName, hosts, curIdx, applyQueue, persistor)
+    system = ActorSystem(raftNode, s"$clusterName-$curIdx", config)
     threadPool = Executors.newFixedThreadPool(1)
     threadPool.submit(new Runnable {
       override def run(): Unit = {
@@ -49,7 +48,7 @@ trait RaftApp {
     })
   }
 
-  def stop(): Unit = {
+  def stop(): Unit = synchronized {
     system.terminate()
     Await.result(system.whenTerminated, Duration.Inf)
     system = null
@@ -58,9 +57,12 @@ trait RaftApp {
     threadPool = null
   }
 
-  def stopped: Boolean = system == null
+  def stopped: Boolean = system == null || threadPool == null
 
-  def askThisNode[Resp <: Command](makeReq: ActorRef[Resp] => ResponsibleCommand[Resp]): Resp = {
+  def ask[Resp <: Command](nodeIdx: Int, makeReq: ActorRef[Resp] => ResponsibleCommand[Resp]): Resp =
+    if (nodeIdx == curIdx) askSelf(makeReq) else askOtherNode(nodeIdx, makeReq)
+
+  def askSelf[Resp <: Command](makeReq: ActorRef[Resp] => ResponsibleCommand[Resp]): Resp = {
     implicit val timeout: Timeout = 3.seconds
     implicit val scheduler: Scheduler = system.scheduler
     Await.result(system.ask[Resp](makeReq), 3.seconds)
@@ -69,8 +71,28 @@ trait RaftApp {
   def askOtherNode[Resp <: Command](nodeIdx: Int, makeReq: ActorRef[Resp] => ResponsibleCommand[Resp]): Resp = {
     implicit val timeout: Timeout = 3.seconds
     implicit val scheduler: Scheduler = system.scheduler
-    val actor = system.classicSystem.actorSelection(s"pekko://$clusterName@${hosts(nodeIdx)}/user")
-    Await.result(system.ask[Resp](makeReq), 3.seconds)
+    val actorSelection = system.classicSystem.actorSelection(s"pekko://$clusterName-$nodeIdx@${hosts(nodeIdx)}/user")
+    val actor = Await.result(actorSelection.resolveOne(2.seconds), 2.seconds)
+    logger.warn("===> Node{} resolved actor for Node{} got: {}", curIdx, nodeIdx, actor)
+    import org.apache.pekko.pattern.ask
+    try {
+      // FIXME 应该是类似 typed Actor的ask模式，做一个临时的actor接收消息，而不是用当前的ActorSystem接收消息
+      //      actorSelection ? makeReq(system)
+      Await.result(actorSelection.ask(makeReq(system)).asInstanceOf[scala.concurrent.Future[Resp]], 3.seconds)
+      //      Await.result(actor.ask(makeReq(null)).asInstanceOf[scala.concurrent.Future[Resp]], 3.seconds)
+    } catch
+      case e: TimeoutException =>
+        logger.error("timeout")
+        throw e
+  }
+
+  def tellOtherNode(nodeIdx: Int, req: Command): Unit = {
+    val actorSelection = system.classicSystem.actorSelection(s"pekko://$clusterName-$nodeIdx@${hosts(nodeIdx)}/user")
+    actorSelection ! req
+  }
+
+  def tellSelf(req: Command): Unit = {
+    system.tell(req)
   }
 
   def addCommand(command: Array[Byte]): Unit = {
@@ -79,19 +101,24 @@ trait RaftApp {
     while (true) {
       val curTryLeader = (startLeader + i) % hosts.length
       try {
-        val response: CommandResponse =
-          if (curTryLeader == curIdx) askThisNode(ref => CommandRequest(command, ref)) else askOtherNode(curTryLeader, ref => CommandRequest(command, ref))
+        val response: CommandResponse = if (curTryLeader == curIdx) askSelf(ref => CommandRequest(command, ref)) else askOtherNode(curTryLeader, ref => CommandRequest(command, ref))
+        //        val response: CommandResponse = askOtherNode(curTryLeader, ref => CommandRequest(command, ref))
         if (response.isLeader) {
-          logger.info("Node{} successfully add command at log {}@{}", curIdx, response.index, response.term)
+          lastLeader = curTryLeader
+          logger.info("Current Node{} => Node{} successfully add command at log {}@{}", curIdx, curTryLeader, response.index, response.term)
           return
         } else {
+          logger.info("Current Node{} => Node{} response: {}. startLeader={},i={}", curIdx, curTryLeader, response, startLeader, i)
           checkForSleep(i)
           i += 1
         }
       } catch
         case e: TimeoutException =>
+          logger.info("Current Node{} => Node{} timeout: {}. startLeader={},i={}", curIdx, curTryLeader, e, startLeader, i)
           checkForSleep(i)
           i += 1
+        case e: Exception =>
+          throw e
     }
   }
 
@@ -104,6 +131,8 @@ trait RaftApp {
     }
   }
 
+  def snapshot(index: Int, snapshot: Array[Byte]): Unit = tellSelf(Snapshot(index, snapshot))
+
   def applyCommand(index: Int, command: Array[Byte]): Unit
 
   def applySnapshot(index: Int, term: Int, snapshot: Array[Byte]): Unit
@@ -112,26 +141,24 @@ trait RaftApp {
 object RaftApp {
 
   // 创建动态配置
-  def clusterConfigs(hosts: Array[String], clusterName: String): Array[Config] = {
-    val seedNodesStr = hosts.map(h => s"\"pekko://$clusterName@$h\"").mkString(",")
+  def clusterConfigs(hosts: Array[String]): Array[Config] = {
     hosts.map(h => {
       val hostAndPort = h.split(":")
-      clusterConfig(seedNodesStr, hostAndPort(0), hostAndPort(1).toInt, clusterName)
+      clusterConfig(hostAndPort(0), hostAndPort(1).toInt)
     })
   }
 
-  def clusterConfig(hosts: Array[String], curIdx: Int, clusterName: String): Config = {
-    val seedNodesStr = hosts.map(h => s"\"pekko://$clusterName@$h\"").mkString(",")
+  def clusterConfig(hosts: Array[String], curIdx: Int): Config = {
     val hostAndPort = hosts(curIdx).split(":")
-    clusterConfig(seedNodesStr, hostAndPort(0), hostAndPort(1).toInt, clusterName)
+    clusterConfig(hostAndPort(0), hostAndPort(1).toInt)
   }
 
-  def clusterConfig(seedNodesStr: String, hostname: String, port: Int, clusterName: String): Config = {
+  def clusterConfig(hostname: String, port: Int): Config = {
     ConfigFactory.parseString(
       s"""
       pekko {
         actor {
-          provider = "org.apache.pekko.remote.RemoteActorRefProvider"
+          provider = "remote"
           serializers {
             jackson-json = "org.apache.pekko.serialization.jackson.JacksonJsonSerializer"
           }
@@ -139,7 +166,7 @@ object RaftApp {
             "${classOf[Command].getName}" = jackson-json
           }
         }
-        remote{
+        remote {
           artery {
             enabled = on
             transport = tcp

@@ -4,6 +4,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.funsuite.AnyFunSuite
 import org.slf4j.LoggerFactory
 
+import java.util.concurrent.ThreadLocalRandom
 import _root_.scala.runtime.stdLibPatches.Predef.assert
 
 class RaftNodeTest extends AnyFunSuite with BeforeAndAfterEach {
@@ -13,7 +14,9 @@ class RaftNodeTest extends AnyFunSuite with BeforeAndAfterEach {
   private var cluster: RaftCluster = _
 
   override def afterEach(): Unit = {
-    cluster.stop()
+    if (cluster != null) {
+      cluster.stop()
+    }
   }
 
   test("normal_3_nodes_election") {
@@ -67,7 +70,7 @@ class RaftNodeTest extends AnyFunSuite with BeforeAndAfterEach {
     Thread.sleep(5000)
 
     val oldLeader = cluster.currentLeader()._1
-    oldLeader.askThisNode[CommandResponse](ref => CommandRequest("ping".getBytes, ref))
+    oldLeader.addCommand("ping".getBytes)
     Thread.sleep(3000)
 
     val oldLeaderState = oldLeader.getState
@@ -80,8 +83,8 @@ class RaftNodeTest extends AnyFunSuite with BeforeAndAfterEach {
 
     val newLeader = cluster.currentLeader()._1
     val newLeaderState = newLeader.getState
-    assert(oldLeaderState.matchIndex.sameElements(newLeaderState.matchIndex))
-    assert(oldLeaderState.nextIndex.sameElements(newLeaderState.nextIndex))
+    assertResult(oldLeaderState.matchIndex)(newLeaderState.matchIndex)
+    assertResult(oldLeaderState.nextIndex)(newLeaderState.nextIndex)
   }
 
   test("3_nodes_basic_agree") {
@@ -124,9 +127,53 @@ class RaftNodeTest extends AnyFunSuite with BeforeAndAfterEach {
     assert(curTerm < 50, "应该在50轮任期内完成3次Leader选举")
 
     // persist不为空
-    assert(leaderState1.persistor.readPersist().nonEmpty)
-    assert(leaderState2.persistor.readPersist().nonEmpty)
+    assert(leaderState1.persistor.doReadPersist().nonEmpty)
+    assert(leaderState2.persistor.doReadPersist().nonEmpty)
 
     System.clearProperty("raft.persistor")
   }
+
+
+  private def snapshot_commons_test(stop: Boolean): Unit = {
+    val servers = 3
+    cluster = RaftCluster(clusterName, servers)
+    cluster.start()
+    Thread.sleep(5000)
+    cluster.sendOneCommand(randomCommand(), servers, true)
+    var leaderIdx = cluster.currentLeader()._1.curIdx
+
+    for (i <- 0 until 15) {
+      val (victim, sender) =
+        if (i % 3 == 1) (leaderIdx, (leaderIdx + 1) % servers)
+        else ((leaderIdx + 1) % servers, leaderIdx)
+      if (stop) {
+        logger.info("==> {} iteration stop Node{}", i, victim)
+        cluster.stop(victim)
+        cluster.sendOneCommand(randomCommand(), servers - 1, true)
+      }
+      for (j <- 0 to RaftNodeWrapper.snapShotInterval) {
+        cluster.nodes(sender).addCommand(randomCommand())
+      }
+      cluster.sendOneCommand(randomCommand(), servers - 1, true)
+      val logSize = cluster.logSize()
+      assert(logSize <= 20000, "Log size too large")
+      if (stop) {
+        cluster.start(victim)
+        Thread.sleep(2000)
+        cluster.sendOneCommand(randomCommand(), servers, true)
+        leaderIdx = cluster.currentLeader()._1.curIdx
+      }
+    }
+  }
+
+  test("3_nodes_basic_snapshot") {
+    snapshot_commons_test(false)
+  }
+
+  test("3_nodes_stop_snapshot") {
+    snapshot_commons_test(true)
+  }
+
+  // 启动所有节点，等待选举结束
+  private def randomCommand() = ThreadLocalRandom.current().nextInt().toString.getBytes
 }

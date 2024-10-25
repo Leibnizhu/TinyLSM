@@ -1,11 +1,11 @@
 package io.github.leibnizhu.tinylsm.raft
 
-import io.github.leibnizhu.tinylsm.utils.{ByteArrayReader, ByteArrayWriter}
-import org.apache.pekko.actor.ActorSelection
-import org.apache.pekko.actor.typed.scaladsl.ActorContext
+import com.fasterxml.jackson.annotation.JsonIgnore
+import org.apache.pekko.actor.typed.scaladsl.{ActorContext, TimerScheduler}
+import org.apache.pekko.actor.{ActorRef, ActorSelection}
 import org.slf4j.LoggerFactory
 
-import java.util.concurrent.BlockingQueue
+import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue}
 
 
 /**
@@ -50,10 +50,11 @@ case class RaftState(
                       snapshotLastIndex: Int = -2,
                       snapshotLastTerm: Int = -2,
 
-                      applyQueue: BlockingQueue[ApplyLogRequest],
-                      persistor: Persistor,
+                      @JsonIgnore @transient applyQueue: ArrayBlockingQueue[ApplyLogRequest] = null,
+                      @JsonIgnore @transient persistor: Persistor = null,
+                      @JsonIgnore @transient timers: TimerScheduler[Command] = null,
                     ) {
-  private val logger = LoggerFactory.getLogger(this.getClass)
+  @transient private val logger = LoggerFactory.getLogger(this.getClass)
 
 
   def name(): String = s"[Raft ${role.shortName} Node$curIdx Term=$currentTerm]"
@@ -63,14 +64,15 @@ case class RaftState(
       // 针对 Array 类型处理
       case array: Array[_] => array.mkString("[", ", ", "]")
       // 其他类型保持默认 toString
-      case other => other.toString
+      case other => String.valueOf(other)
     }.mkString(", ")
 
     s"${this.productPrefix}($fields)"
   }
 
-  def actorOf(context: ActorContext[Command], index: Int): ActorSelection =
-    context.system.classicSystem.actorSelection(s"pekko://$clusterName@${nodes(index)}/user")
+
+  def actorSelectionOf(context: ActorContext[Command], index: Int): ActorSelection =
+    context.system.classicSystem.actorSelection(s"pekko://$clusterName-$index@${nodes(index)}/user")
 
   def nodeAddress(): String = nodes(curIdx)
 
@@ -132,7 +134,11 @@ case class RaftState(
     val term = conflictEntry.term
     val baseIndex = firstLogIndex()
     //遇到任期不相等的，返回下一个，下一个就是相等的任期
-    (appendLog.prevLogIndex - 1 to baseIndex by -1).find(i => getLogEntry(i).term != term).map(_ + 1).getOrElse(-1)
+    println(s"==> calNextTryLogIndex() conflict entry term=$term, appendLog.prevLogIndex=${appendLog.prevLogIndex}, baseIndex=$baseIndex")
+    (appendLog.prevLogIndex - 1 to baseIndex by -1).find(i => {
+      println(s"==> calNextTryLogIndex() cur index=$i, log term=${getLogEntry(i).term}")
+      getLogEntry(i).term != term
+    }).map(_ + 1).getOrElse(-1)
   }
 
   def newCandidateElection(): RaftState = this.copy(
@@ -144,58 +150,55 @@ case class RaftState(
     receivedVotes = 1)
 
   def persist(): RaftState = {
-    val buf = new ByteArrayWriter()
-    buf.putUint32(currentTerm).putUint32(votedFor.getOrElse(-1)).putUint32(log.length)
-    log.foreach(logEntry => buf.putUint32(logEntry.term).putUint32(logEntry.index)
-      .putUint32(logEntry.command.length).putBytes(logEntry.command))
-
-    // 记录snapshot
-    buf.putUint32(snapshotLastTerm).putUint32(snapshotLastIndex).putUint32(snapshot.length).putBytes(snapshot)
-    persistor.persist(buf.toArray)
-    this
-  }
-
-  def readPersist(): RaftState = {
-    val bytes = persistor.readPersist()
-    if (bytes == null) {
-      return this
+    if (logger.isDebugEnabled) {
+      logger.debug("{} Save persisted raft state to {}: term={}, votedFor={}, {} log entities, snapshot {}@{}, snapshot's length={}",
+        name(), persistor, currentTerm, votedFor, log.length, snapshotLastIndex, snapshotLastTerm, snapshot.length)
     }
-    val buf = new ByteArrayReader(bytes)
-    if (buf.remaining <= 0) {
-      return this
-    }
-    val currentTerm = buf.readUint32()
-    val votedFor = {
-      val v = buf.readUint32()
-      if (v == -1) None else Some(v)
-    }
-    // 读日志
-    val logLength = buf.readUint32()
-    val log = new Array[LogEntry](logLength)
-    for (i <- 0 until logLength) {
-      val logTerm = buf.readUint32()
-      val logIndex = buf.readUint32()
-      val commandLength = buf.readUint32()
-      val command = buf.readBytes(commandLength)
-      log(i) = LogEntry(logTerm, logTerm, command)
-    }
-
-    val snapshotLastTerm = buf.readUint32()
-    val snapshotLastIndex = buf.readUint32()
-    val snapshotLen = buf.readUint32()
-    val snapshot = if (snapshotLen > 0) {
-      buf.readBytes(snapshotLen)
-    } else Array[Byte]()
-
-    logger.info("{} Read persisted raft state from {}, recovered: term={}, votedFor={}, {} log entities, snapshot {}@{}, snapshot's length={}",
-      name(), persistor, currentTerm, votedFor, log.length, snapshotLastIndex, snapshotLastTerm, snapshotLen)
-    this.copy(
+    persistor.persist(RaftPersistState(
       currentTerm = currentTerm,
       votedFor = votedFor,
       log = log,
       snapshot = snapshot,
-      snapshotLastTerm = snapshotLastTerm,
       snapshotLastIndex = snapshotLastIndex,
-    )
+      snapshotLastTerm = snapshotLastTerm
+    ))
+    this
+  }
+
+  def readPersist(): RaftState = {
+    persistor.readPersist() match
+      case Some(RaftPersistState(currentTerm, votedFor, log, snapshot, snapshotLastIndex, snapshotLastTerm)) =>
+        logger.info("{} Read persisted raft state from {}, recovered: term={}, votedFor={}, {} log entities, snapshot {}@{}, snapshot's length={}",
+          name(), persistor, currentTerm, votedFor, log.length, snapshotLastIndex, snapshotLastTerm, snapshot.length)
+        this.copy(
+          currentTerm = currentTerm,
+          votedFor = votedFor,
+          log = log,
+          snapshot = snapshot,
+          snapshotLastTerm = snapshotLastTerm,
+          snapshotLastIndex = snapshotLastIndex,
+        )
+      case _ => this
+  }
+
+  def applyCurrentStateSnapshot(): Unit = {
+    applyQueue.offer(ApplyLogRequest(
+      snapshotValid = true,
+      snapshot = snapshot,
+      snapshotTerm = snapshotLastTerm,
+      snapshotIndex = snapshotLastIndex
+    ))
+  }
+
+  def applyInstallSnapshotRequest(snapshotRequest: InstallSnapshotRequest): Unit = {
+    applyQueue.offer(ApplyLogRequest.snapshot(snapshotRequest))
+  }
+
+  def applyLogEntry(entry: LogEntry): Unit = {
+    applyQueue.offer(ApplyLogRequest.logEntry(entry))
+  }
+
+  def applyNewLeader(): Unit = {
+    applyQueue.offer(ApplyLogRequest.newLeader())
   }
 }
